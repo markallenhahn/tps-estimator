@@ -21,7 +21,7 @@ const initialJob = () => ({
   address:"", city:"", state:"PA", zip:"",
   date: new Date().toLocaleDateString(),
   estimateNum: `EST-${Date.now().toString().slice(-5)}`,
-  notes:"", areas:[], photos:[], videos:[],
+  notes:"", areas:[], photos:[],
   status:"draft",
 });
 
@@ -273,14 +273,12 @@ function RatesView({ rates, setRates }) {
 
 // ─── Media View ───────────────────────────────────────────────────────────────
 function MediaView({ currentJob, updateJob }) {
-  const [lightbox, setLightbox] = useState(null); // {type:'photo'|'video', item}
+  const [lightbox, setLightbox] = useState(null);
 
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
-  const hasMedia = currentJob.photos.length > 0 || currentJob.videos.length > 0;
-
+  const hasMedia = currentJob.photos.length > 0;
   const removePhoto = (id) => updateJob(j => ({...j, photos: j.photos.filter(p => p.id !== id)}));
-  const removeVideo = (id) => updateJob(j => ({...j, videos: j.videos.filter(v => v.id !== id)}));
 
   return (
     <div style={S.page}>
@@ -290,7 +288,7 @@ function MediaView({ currentJob, updateJob }) {
       {!hasMedia && (
         <div style={S.empty}>
           <div style={S.emptyIcon}>🖼️</div>
-          <p style={S.emptyText}>No photos or videos yet. Use the Inspect tab to capture media.</p>
+          <p style={S.emptyText}>No photos yet. Use the Inspect tab to capture photos.</p>
         </div>
       )}
 
@@ -312,27 +310,6 @@ function MediaView({ currentJob, updateJob }) {
         </section>
       )}
 
-      {currentJob.videos.length > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Videos ({currentJob.videos.length})</h2>
-          <div style={S.mediaVideoList}>
-            {currentJob.videos.map(v => (
-              <div key={v.id} style={S.mediaVideoCard}>
-                <video src={v.dataUrl} controls style={S.mediaVideoPlayer} playsInline/>
-                <div style={S.mediaVideoMeta}>
-                  <div style={S.mediaVideoInfo}>
-                    <span style={S.mediaVideoLabel}>{v.label}</span>
-                    <span style={S.mediaVideoTime}>{v.ts}</span>
-                  </div>
-                  <button style={{...S.btnSmall, ...S.btnDanger}} onClick={() => removeVideo(v.id)}>Delete</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Lightbox */}
       {lightbox && lightbox.type === 'photo' && (
         <div style={S.lightboxOverlay} onClick={() => setLightbox(null)}>
           <div style={S.lightboxInner} onClick={e => e.stopPropagation()}>
@@ -350,10 +327,10 @@ function MediaView({ currentJob, updateJob }) {
 }
 
 // ─── Jobs List ────────────────────────────────────────────────────────────────
-function JobsView({ jobs, setJobs, setCurrentJob, setView }) {
+function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView }) {
   const create = () => { const j=initialJob(); setJobs(p=>[j,...p]); setCurrentJob(j); setView("inspect"); };
   const open   = (job) => { setCurrentJob(job); setView("inspect"); };
-  const remove = (id)  => { if(confirm("Delete this job?")) setJobs(p=>p.filter(j=>j.id!==id)); };
+  const remove = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
   return (
     <div style={S.page}>
       <div style={S.pageHeader}>
@@ -391,24 +368,21 @@ function JobsView({ jobs, setJobs, setCurrentJob, setView }) {
 // ─── Inspect View ─────────────────────────────────────────────────────────────
 function InspectView({ currentJob, updateJob }) {
   const [capturing, setCapturing] = useState(null);
-  const [recording, setRecording] = useState(false);
   const [stream,    setStream]    = useState(null);
-  const videoRef         = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef        = useRef([]);
-  const canvasRef        = useRef(null);
+  const videoRef  = useRef(null);
+  const canvasRef = useRef(null);
 
   const stopStream = useCallback(() => {
     if (stream) stream.getTracks().forEach(t => t.stop());
-    setStream(null); setCapturing(null); setRecording(false);
+    setStream(null); setCapturing(null);
   }, [stream]);
 
   useEffect(() => { return () => { if (stream) stream.getTracks().forEach(t => t.stop()); }; }, [stream]);
 
-  const startCamera = async (mode) => {
+  const startCamera = async () => {
     try {
-      const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:mode==="video"});
-      setStream(s); setCapturing(mode);
+      const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+      setStream(s); setCapturing("photo");
       setTimeout(() => { if (videoRef.current) videoRef.current.srcObject = s; }, 100);
     } catch { alert("Camera permission denied or not available."); }
   };
@@ -424,28 +398,7 @@ function InspectView({ currentJob, updateJob }) {
     stopStream();
   };
 
-  const startRecording = () => {
-    if (!stream) return;
-    chunksRef.current = [];
-    const mr = new MediaRecorder(stream);
-    mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    mr.onstop = () => {
-      const blob  = new Blob(chunksRef.current, {type:"video/webm"});
-      const label = prompt("Label for this video:", "") || "Site walkthrough";
-      // Convert to base64 so it persists in localStorage across sessions
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        updateJob(j => ({...j, videos:[...j.videos, {id:Date.now(), dataUrl:reader.result, label, ts:new Date().toLocaleTimeString()}]}));
-      };
-      reader.readAsDataURL(blob);
-      stopStream();
-    };
-    mediaRecorderRef.current = mr; mr.start(); setRecording(true);
-  };
-
-  const stopRecording = () => mediaRecorderRef.current?.stop();
-  const removePhoto   = (id) => updateJob(j => ({...j, photos:j.photos.filter(p => p.id!==id)}));
-  const removeVideo   = (id) => updateJob(j => ({...j, videos:j.videos.filter(v => v.id!==id)}));
+  const removePhoto = (id) => updateJob(j => ({...j, photos:j.photos.filter(p => p.id!==id)}));
 
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
@@ -496,27 +449,17 @@ function InspectView({ currentJob, updateJob }) {
       </section>
 
       <section style={S.section}>
-        <h2 style={S.h2}>Media Capture</h2>
+        <h2 style={S.h2}>Photos</h2>
         {!capturing ? (
-          <div style={S.btnRow}>
-            <button style={S.btnCapture} onClick={() => startCamera("photo")}>📷 Take Photo</button>
-            <button style={S.btnCapture} onClick={() => startCamera("video")}>🎥 Record Video</button>
-          </div>
+          <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}>📷 Take Photo</button>
         ) : (
           <div style={S.cameraBox}>
             <video ref={videoRef} autoPlay muted playsInline style={S.cameraPreview}/>
             <canvas ref={canvasRef} style={{display:"none"}}/>
             <div style={S.cameraControls}>
-              {capturing==="photo" ? (
-                <button style={S.btnShoot} onClick={takePhoto}>📸 Capture</button>
-              ) : !recording ? (
-                <button style={S.btnShoot} onClick={startRecording}>⏺ Start Recording</button>
-              ) : (
-                <button style={{...S.btnShoot, background:"#dc2626"}} onClick={stopRecording}>⏹ Stop</button>
-              )}
+              <button style={S.btnShoot} onClick={takePhoto}>📸 Capture</button>
               <button style={S.btnCancel} onClick={stopStream}>Cancel</button>
             </div>
-            {recording && <div style={S.recIndicator}>● REC</div>}
           </div>
         )}
       </section>
@@ -531,24 +474,6 @@ function InspectView({ currentJob, updateJob }) {
                 <div style={S.photoLabel}>{p.label}</div>
                 <div style={S.photoTime}>{p.ts}</div>
                 <button style={S.photoDelete} onClick={() => removePhoto(p.id)}>✕</button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {currentJob.videos.length > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Videos ({currentJob.videos.length})</h2>
-          <div style={S.videoList}>
-            {currentJob.videos.map(v => (
-              <div key={v.id} style={S.videoCard}>
-                <video src={v.dataUrl} controls style={S.videoPlayer}/>
-                <div style={S.videoMeta}>
-                  <span style={S.videoLabel}>{v.label}</span>
-                  <span style={S.videoTime}>{v.ts}</span>
-                  <button style={S.btnSmallDanger} onClick={() => removeVideo(v.id)}>Delete</button>
-                </div>
               </div>
             ))}
           </div>
@@ -1069,29 +994,149 @@ function EstimateView({ currentJob, updateJob, rates }) {
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDk3MDYsImV4cCI6MjA5NjA4NTcwNn0.rTr3e4739fJpbHXgBneRTr18utum5XxMWTf2E0DtOVQ";
+
+const sbFetch = (path, opts={}) => fetch(SUPABASE_URL + "/rest/v1/" + path, {
+  ...opts,
+  headers: {
+    "apikey": SUPABASE_KEY,
+    "Authorization": "Bearer " + SUPABASE_KEY,
+    "Content-Type": "application/json",
+    "Prefer": opts.prefer || "",
+    ...opts.headers,
+  },
+});
+
 export default function App() {
-  const [view,          setView]         = useState("jobs");
-  const [jobs,          setJobs]         = useState(() => { try { const s=localStorage.getItem("tpsJobs");  return s?JSON.parse(s):[]; } catch { return []; } });
-  const [rates,         setRates]        = useState(() => { try { const s=localStorage.getItem("tpsRates"); return s?JSON.parse(s):{...DEFAULT_RATES}; } catch { return {...DEFAULT_RATES}; } });
-  const [currentJobId,  setCurrentJobId] = useState(null);
+  const [view,         setView]        = useState("jobs");
+  const [jobs,         setJobs]        = useState([]);
+  const [rates,        setRates]       = useState({...DEFAULT_RATES});
+  const [currentJobId, setCurrentJobId]= useState(null);
+  const [loading,      setLoading]     = useState(true);
+  const [syncStatus,   setSyncStatus]  = useState("");
 
-  useEffect(() => { try { localStorage.setItem("tpsJobs",  JSON.stringify(jobs));  } catch {} }, [jobs]);
-  useEffect(() => { try { localStorage.setItem("tpsRates", JSON.stringify(rates)); } catch {} }, [rates]);
+  // ── Load all data on mount ──
+  useEffect(() => {
+    const load = async () => {
+      try {
+        // Load jobs
+        const jr = await sbFetch("jobs?select=id,data&order=id.desc");
+        const jd = await jr.json();
+        if (Array.isArray(jd)) setJobs(jd.map(row => ({...row.data, id: row.id})));
 
-  const currentJob    = jobs.find(j => j.id === currentJobId) || null;
-  const updateJob     = fn => setJobs(prev => prev.map(j => j.id===currentJobId ? fn(j) : j));
+        // Load rates
+        const rr = await sbFetch("rates?select=data&limit=1");
+        const rd = await rr.json();
+        if (Array.isArray(rd) && rd.length > 0) setRates(rd[0].data);
+      } catch(e) {
+        console.error("Load error:", e);
+        setSyncStatus("⚠️ Could not connect to database");
+      }
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  // ── Sync a single job to Supabase ──
+  const syncJob = async (job) => {
+    setSyncStatus("Saving...");
+    try {
+      await sbFetch("jobs?id=eq." + job.id, {
+        method: "PUT",
+        prefer: "resolution=merge-duplicates",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: job.id, data: job }),
+      });
+      setSyncStatus("✓ Saved");
+      setTimeout(() => setSyncStatus(""), 2000);
+    } catch(e) {
+      setSyncStatus("⚠️ Save failed");
+    }
+  };
+
+  // ── Sync rates to Supabase ──
+  const syncRates = async (r) => {
+    setSyncStatus("Saving...");
+    try {
+      await sbFetch("rates?id=eq.1", {
+        method: "PUT",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: 1, data: r }),
+      });
+      setSyncStatus("✓ Saved");
+      setTimeout(() => setSyncStatus(""), 2000);
+    } catch(e) {
+      setSyncStatus("⚠️ Save failed");
+    }
+  };
+
+  // ── Delete a job from Supabase ──
+  const deleteJob = async (id) => {
+    setJobs(prev => prev.filter(j => j.id !== id));
+    try { await sbFetch("jobs?id=eq." + id, { method: "DELETE" }); } catch(e) {}
+  };
+
+  const currentJob = jobs.find(j => j.id === currentJobId) || null;
+
+  const updateJob = fn => {
+    let updated;
+    setJobs(prev => prev.map(j => {
+      if (j.id !== currentJobId) return j;
+      updated = fn(j);
+      return updated;
+    }));
+    if (updated) syncJob(updated);
+  };
+
   const setCurrentJob = job => setCurrentJobId(job.id);
+
+  const handleSetRates = (r) => { setRates(r); syncRates(r); };
+
+  const handleSetJobs = (fnOrArr) => {
+    // Used by JobsView for create/delete
+    setJobs(prev => {
+      const next = typeof fnOrArr === "function" ? fnOrArr(prev) : fnOrArr;
+      // Detect new job (added to front)
+      if (next.length > prev.length) {
+        const newJob = next[0];
+        sbFetch("jobs", {
+          method: "POST",
+          headers: { "Prefer": "resolution=merge-duplicates" },
+          body: JSON.stringify({ id: newJob.id, data: newJob }),
+        });
+      }
+      return next;
+    });
+  };
+
+  if (loading) return (
+    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:32, marginBottom:12}}>⬛</div>
+        <div style={{color:C.accent, fontWeight:700, fontSize:16}}>TPS</div>
+        <div style={{color:C.textMuted, fontSize:13, marginTop:6}}>Loading...</div>
+      </div>
+    </div>
+  );
 
   return (
     <div style={S.app}>
       <TopNav view={view} setView={setView}/>
+      {syncStatus && (
+        <div style={{
+          background: syncStatus.startsWith("⚠️") ? "#2a1010" : "#1a2a1a",
+          color: syncStatus.startsWith("⚠️") ? C.danger : C.green,
+          fontSize:11, textAlign:"center", padding:"3px 0",
+        }}>{syncStatus}</div>
+      )}
       <div style={S.content}>
-        {view==="jobs"     && <JobsView    jobs={jobs} setJobs={setJobs} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="jobs"     && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="inspect"  && <InspectView currentJob={currentJob} updateJob={updateJob}/>}
         {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
         {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
         {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
-        {view==="rates"    && <RatesView   rates={rates} setRates={setRates}/>}
+        {view==="rates"    && <RatesView   rates={rates} setRates={handleSetRates}/>}
       </div>
     </div>
   );
