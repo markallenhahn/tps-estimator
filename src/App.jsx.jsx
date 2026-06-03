@@ -168,6 +168,28 @@ const S = {
   formulaTitle:{ fontWeight:700, fontSize:13, marginBottom:6, color:C.accent },
   formulaText:{ fontSize:13, color:C.textMuted, lineHeight:1.7 },
   formulaEx:{ color:C.text, fontSize:12 },
+  // Media view
+  mediaPhotoGrid:{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10 },
+  mediaPhotoCard:{ position:"relative", borderRadius:10, overflow:"hidden", cursor:"pointer", border:`1px solid ${C.border}`, aspectRatio:"4/3" },
+  mediaPhotoImg:{ width:"100%", height:"100%", objectFit:"cover", display:"block", transition:"transform .2s" },
+  mediaPhotoOverlay:{ position:"absolute", bottom:0, left:0, right:0, background:"linear-gradient(transparent,rgba(0,0,0,.75))", padding:"20px 8px 8px" },
+  mediaPhotoLabel:{ color:"#fff", fontSize:12, fontWeight:600 },
+  mediaPhotoTime:{ color:"rgba(255,255,255,.6)", fontSize:10, marginTop:1 },
+  mediaDeleteBtn:{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,.65)", color:"#fff", border:"none", borderRadius:"50%", width:24, height:24, cursor:"pointer", fontSize:13, lineHeight:"24px", textAlign:"center", padding:0 },
+  mediaVideoList:{ display:"flex", flexDirection:"column", gap:14 },
+  mediaVideoCard:{ background:C.surface2, borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}` },
+  mediaVideoPlayer:{ width:"100%", display:"block", maxHeight:260, background:"#000" },
+  mediaVideoMeta:{ padding:"10px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" },
+  mediaVideoInfo:{ display:"flex", flexDirection:"column", gap:2 },
+  mediaVideoLabel:{ fontWeight:600, fontSize:14 },
+  mediaVideoTime:{ fontSize:11, color:C.textMuted },
+  lightboxOverlay:{ position:"fixed", inset:0, background:"rgba(0,0,0,.92)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 },
+  lightboxInner:{ position:"relative", maxWidth:"90vw", maxHeight:"90vh", display:"flex", flexDirection:"column", alignItems:"center", gap:10 },
+  lightboxImg:{ maxWidth:"100%", maxHeight:"80vh", objectFit:"contain", borderRadius:8, border:`1px solid ${C.border}` },
+  lightboxCaption:{ display:"flex", gap:12, alignItems:"center" },
+  lightboxLabel:{ color:"#fff", fontWeight:600, fontSize:14 },
+  lightboxTime:{ color:"rgba(255,255,255,.5)", fontSize:12 },
+  lightboxClose:{ position:"absolute", top:-12, right:-12, background:C.surface2, color:"#fff", border:`1px solid ${C.border}`, borderRadius:"50%", width:30, height:30, cursor:"pointer", fontSize:16, lineHeight:"30px", textAlign:"center", padding:0 },
 };
 
 // ─── Top Nav ──────────────────────────────────────────────────────────────────
@@ -176,6 +198,7 @@ function TopNav({ view, setView }) {
     {key:"jobs",     label:"Jobs",     icon:"📋"},
     {key:"inspect",  label:"Inspect",  icon:"🔍"},
     {key:"measure",  label:"Measure",  icon:"📐"},
+    {key:"media",    label:"Media",    icon:"🖼️"},
     {key:"estimate", label:"Estimate", icon:"💰"},
     {key:"rates",    label:"Rates",    icon:"⚙️"},
   ];
@@ -244,6 +267,90 @@ function RatesView({ rates, setRates }) {
           <button style={S.btnSecondary} onClick={reset}>↩ Reset Defaults</button>
         </div>
       </section>
+    </div>
+  );
+}
+
+// ─── Media View ───────────────────────────────────────────────────────────────
+function MediaView({ currentJob, updateJob }) {
+  const [lightbox, setLightbox] = useState(null); // {type:'photo'|'video', item}
+
+  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+
+  const hasMedia = currentJob.photos.length > 0 || currentJob.videos.length > 0;
+
+  const removePhoto = (id) => updateJob(j => ({...j, photos: j.photos.filter(p => p.id !== id)}));
+  const removeVideo = (id) => {
+    updateJob(j => {
+      const vid = j.videos.find(v => v.id === id);
+      if (vid) URL.revokeObjectURL(vid.url);
+      return {...j, videos: j.videos.filter(v => v.id !== id)};
+    });
+  };
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Media</h1>
+      <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
+
+      {!hasMedia && (
+        <div style={S.empty}>
+          <div style={S.emptyIcon}>🖼️</div>
+          <p style={S.emptyText}>No photos or videos yet. Use the Inspect tab to capture media.</p>
+        </div>
+      )}
+
+      {currentJob.photos.length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Photos ({currentJob.photos.length})</h2>
+          <div style={S.mediaPhotoGrid}>
+            {currentJob.photos.map(p => (
+              <div key={p.id} style={S.mediaPhotoCard} onClick={() => setLightbox({type:'photo', item:p})}>
+                <img src={p.dataUrl} alt={p.label} style={S.mediaPhotoImg}/>
+                <div style={S.mediaPhotoOverlay}>
+                  <div style={S.mediaPhotoLabel}>{p.label}</div>
+                  <div style={S.mediaPhotoTime}>{p.ts}</div>
+                </div>
+                <button style={S.mediaDeleteBtn} onClick={e => { e.stopPropagation(); removePhoto(p.id); }}>✕</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {currentJob.videos.length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Videos ({currentJob.videos.length})</h2>
+          <div style={S.mediaVideoList}>
+            {currentJob.videos.map(v => (
+              <div key={v.id} style={S.mediaVideoCard}>
+                <video src={v.url} controls style={S.mediaVideoPlayer} playsInline/>
+                <div style={S.mediaVideoMeta}>
+                  <div style={S.mediaVideoInfo}>
+                    <span style={S.mediaVideoLabel}>{v.label}</span>
+                    <span style={S.mediaVideoTime}>{v.ts}</span>
+                  </div>
+                  <button style={{...S.btnSmall, ...S.btnDanger}} onClick={() => removeVideo(v.id)}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Lightbox */}
+      {lightbox && lightbox.type === 'photo' && (
+        <div style={S.lightboxOverlay} onClick={() => setLightbox(null)}>
+          <div style={S.lightboxInner} onClick={e => e.stopPropagation()}>
+            <img src={lightbox.item.dataUrl} alt={lightbox.item.label} style={S.lightboxImg}/>
+            <div style={S.lightboxCaption}>
+              <span style={S.lightboxLabel}>{lightbox.item.label}</span>
+              <span style={S.lightboxTime}>{lightbox.item.ts}</span>
+            </div>
+            <button style={S.lightboxClose} onClick={() => setLightbox(null)}>✕</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -994,6 +1101,7 @@ export default function App() {
         {view==="jobs"     && <JobsView    jobs={jobs} setJobs={setJobs} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="inspect"  && <InspectView currentJob={currentJob} updateJob={updateJob}/>}
         {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
+        {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
         {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
         {view==="rates"    && <RatesView   rates={rates} setRates={setRates}/>}
       </div>
