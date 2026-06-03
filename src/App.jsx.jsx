@@ -1003,8 +1003,7 @@ const sbFetch = (path, opts={}) => fetch(SUPABASE_URL + "/rest/v1/" + path, {
     "apikey": SUPABASE_KEY,
     "Authorization": "Bearer " + SUPABASE_KEY,
     "Content-Type": "application/json",
-    "Prefer": opts.prefer || "",
-    ...opts.headers,
+    ...(opts.headers || {}),
   },
 });
 
@@ -1020,12 +1019,10 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        // Load jobs
         const jr = await sbFetch("jobs?select=id,data&order=id.desc");
         const jd = await jr.json();
         if (Array.isArray(jd)) setJobs(jd.map(row => ({...row.data, id: row.id})));
 
-        // Load rates
         const rr = await sbFetch("rates?select=data&limit=1");
         const rd = await rr.json();
         if (Array.isArray(rd) && rd.length > 0) setRates(rd[0].data);
@@ -1038,43 +1035,48 @@ export default function App() {
     load();
   }, []);
 
-  // ── Sync a single job to Supabase ──
+  // ── Upsert a single job ──
   const syncJob = async (job) => {
     setSyncStatus("Saving...");
     try {
-      await sbFetch("jobs?id=eq." + job.id, {
-        method: "PUT",
-        prefer: "resolution=merge-duplicates",
+      const res = await sbFetch("jobs", {
+        method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: job.id, data: job }),
       });
+      if (!res.ok) throw new Error(await res.text());
       setSyncStatus("✓ Saved");
       setTimeout(() => setSyncStatus(""), 2000);
     } catch(e) {
+      console.error("syncJob error:", e);
       setSyncStatus("⚠️ Save failed");
     }
   };
 
-  // ── Sync rates to Supabase ──
+  // ── Upsert rates ──
   const syncRates = async (r) => {
     setSyncStatus("Saving...");
     try {
-      await sbFetch("rates?id=eq.1", {
-        method: "PUT",
+      const res = await sbFetch("rates", {
+        method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: r }),
       });
+      if (!res.ok) throw new Error(await res.text());
       setSyncStatus("✓ Saved");
       setTimeout(() => setSyncStatus(""), 2000);
     } catch(e) {
+      console.error("syncRates error:", e);
       setSyncStatus("⚠️ Save failed");
     }
   };
 
-  // ── Delete a job from Supabase ──
+  // ── Delete a job ──
   const deleteJob = async (id) => {
     setJobs(prev => prev.filter(j => j.id !== id));
-    try { await sbFetch("jobs?id=eq." + id, { method: "DELETE" }); } catch(e) {}
+    try {
+      await sbFetch("jobs?id=eq." + id, { method: "DELETE" });
+    } catch(e) { console.error("deleteJob error:", e); }
   };
 
   const currentJob = jobs.find(j => j.id === currentJobId) || null;
