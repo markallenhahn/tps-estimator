@@ -797,9 +797,9 @@ function EstimateView({ currentJob, updateJob, rates }) {
       y += blockH + 14;
 
       // ── Line items table ──
-      // cols must sum to usable (522): name=190, service=110, qty=100, rate=68, amt=54
-      const cols = [190, 110, 100, 68, 54];
-      const hdrs = ["Area / Zone", "Service", "Quantity", "Rate", "Amount"];
+      // cols must sum to usable (522): name=210, service=130, qty=110, amt=72
+      const cols = [210, 130, 110, 72];
+      const hdrs = ["Area / Zone", "Service", "Quantity", "Amount"];
       const hdrH = 24;
 
       doc.setFillColor(...HDRBLK);
@@ -821,7 +821,6 @@ function EstimateView({ currentJob, updateJob, rates }) {
         const qtyStr  = tons !== null
           ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
           : qty.toLocaleString() + (svc?.unit === "linft" ? " lin ft" : " sq ft");
-        const rateStr = tons !== null ? formatCurrency(svc?.rate||0) + "/ton" : formatCurrency(svc?.rate||0);
         const nameStr = a.name + (a.notes ? "\n" + a.notes : "");
         const nameArr = doc.splitTextToSize(nameStr, cols[0]-12);
         const qtyParts = qtyStr.split("\n");
@@ -847,11 +846,8 @@ function EstimateView({ currentJob, updateJob, rates }) {
         if (qtyParts[1]) { doc.setTextColor(...DGRAY); doc.text(qtyParts[1], cx+cols[2]-6, y+28, { align:"right" }); doc.setTextColor(...BLACK); }
         cx += cols[2];
 
-        doc.text(rateStr, cx+cols[3]-6, y+15, { align:"right" });
-        cx += cols[3];
-
         doc.setFont("helvetica","bold");
-        doc.text(formatCurrency(amt), cx+cols[4]-6, y+15, { align:"right" });
+        doc.text(formatCurrency(amt), cx+cols[3]-6, y+15, { align:"right" });
         y += rh;
       });
 
