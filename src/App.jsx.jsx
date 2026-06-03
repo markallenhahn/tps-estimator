@@ -280,13 +280,7 @@ function MediaView({ currentJob, updateJob }) {
   const hasMedia = currentJob.photos.length > 0 || currentJob.videos.length > 0;
 
   const removePhoto = (id) => updateJob(j => ({...j, photos: j.photos.filter(p => p.id !== id)}));
-  const removeVideo = (id) => {
-    updateJob(j => {
-      const vid = j.videos.find(v => v.id === id);
-      if (vid) URL.revokeObjectURL(vid.url);
-      return {...j, videos: j.videos.filter(v => v.id !== id)};
-    });
-  };
+  const removeVideo = (id) => updateJob(j => ({...j, videos: j.videos.filter(v => v.id !== id)}));
 
   return (
     <div style={S.page}>
@@ -324,7 +318,7 @@ function MediaView({ currentJob, updateJob }) {
           <div style={S.mediaVideoList}>
             {currentJob.videos.map(v => (
               <div key={v.id} style={S.mediaVideoCard}>
-                <video src={v.url} controls style={S.mediaVideoPlayer} playsInline/>
+                <video src={v.dataUrl} controls style={S.mediaVideoPlayer} playsInline/>
                 <div style={S.mediaVideoMeta}>
                   <div style={S.mediaVideoInfo}>
                     <span style={S.mediaVideoLabel}>{v.label}</span>
@@ -437,9 +431,13 @@ function InspectView({ currentJob, updateJob }) {
     mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
     mr.onstop = () => {
       const blob  = new Blob(chunksRef.current, {type:"video/webm"});
-      const url   = URL.createObjectURL(blob);
       const label = prompt("Label for this video:", "") || "Site walkthrough";
-      updateJob(j => ({...j, videos:[...j.videos, {id:Date.now(), url, label, ts:new Date().toLocaleTimeString()}]}));
+      // Convert to base64 so it persists in localStorage across sessions
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        updateJob(j => ({...j, videos:[...j.videos, {id:Date.now(), dataUrl:reader.result, label, ts:new Date().toLocaleTimeString()}]}));
+      };
+      reader.readAsDataURL(blob);
       stopStream();
     };
     mediaRecorderRef.current = mr; mr.start(); setRecording(true);
@@ -447,13 +445,7 @@ function InspectView({ currentJob, updateJob }) {
 
   const stopRecording = () => mediaRecorderRef.current?.stop();
   const removePhoto   = (id) => updateJob(j => ({...j, photos:j.photos.filter(p => p.id!==id)}));
-  const removeVideo   = (id) => {
-    updateJob(j => {
-      const vid = j.videos.find(v => v.id===id);
-      if (vid) URL.revokeObjectURL(vid.url);
-      return {...j, videos:j.videos.filter(v => v.id!==id)};
-    });
-  };
+  const removeVideo   = (id) => updateJob(j => ({...j, videos:j.videos.filter(v => v.id!==id)}));
 
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
@@ -551,7 +543,7 @@ function InspectView({ currentJob, updateJob }) {
           <div style={S.videoList}>
             {currentJob.videos.map(v => (
               <div key={v.id} style={S.videoCard}>
-                <video src={v.url} controls style={S.videoPlayer}/>
+                <video src={v.dataUrl} controls style={S.videoPlayer}/>
                 <div style={S.videoMeta}>
                   <span style={S.videoLabel}>{v.label}</span>
                   <span style={S.videoTime}>{v.ts}</span>
