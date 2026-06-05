@@ -222,7 +222,7 @@ if (typeof document !== "undefined" && !document.getElementById("tps-nav-css")) 
 }
 
 function TopNav({ view, setView }) {
-  const tabsRef = React.useRef(null);
+  const tabsRef = useRef(null);
   const tabs = [
     {key:"jobs",     label:"Jobs",     icon:"📋"},
     {key:"inspect",  label:"Inspect",  icon:"🔍"},
@@ -234,8 +234,7 @@ function TopNav({ view, setView }) {
     {key:"rates",    label:"Rates",    icon:"⚙️"},
   ];
 
-  // Scroll active tab into view when view changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (!tabsRef.current) return;
     const activeBtn = tabsRef.current.querySelector("[data-active='true']");
     if (activeBtn) activeBtn.scrollIntoView({behavior:"smooth", block:"nearest", inline:"center"});
