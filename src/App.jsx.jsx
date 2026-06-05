@@ -168,6 +168,26 @@ const S = {
   formulaTitle:{ fontWeight:700, fontSize:13, marginBottom:6, color:C.accent },
   formulaText:{ fontSize:13, color:C.textMuted, lineHeight:1.7 },
   formulaEx:{ color:C.text, fontSize:12 },
+  // Invoice
+  invoiceHeader:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, paddingBottom:16, borderBottom:`1px solid ${C.border}` },
+  paidBanner:{ background:"#14532d", border:"1px solid #16a34a", borderRadius:8, padding:"10px 16px", fontSize:14, fontWeight:700, color:"#4ade80", textAlign:"center", marginBottom:16 },
+  toggleBtn:{ flex:1, background:C.surface2, border:`1px solid ${C.border}`, color:C.textMuted, borderRadius:8, padding:"12px 0", fontSize:14, fontWeight:600, cursor:"pointer" },
+  toggleBtnActive:{ background:"#2a2a1a", border:`1px solid ${C.accent}`, color:C.accent },
+  toggleBtnPaid:{ background:"#14532d", border:"1px solid #16a34a", color:"#4ade80" },
+  // Calc
+  calcHeader:{ display:"flex", alignItems:"center", gap:6, marginBottom:6, paddingBottom:6, borderBottom:`1px solid ${C.border}` },
+  calcHeaderLabel:{ flex:1, fontSize:11, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.06em" },
+  calcHeaderX:{ fontSize:13, color:C.textDim, width:16, textAlign:"center" },
+  calcRow:{ display:"flex", alignItems:"center", gap:6, marginBottom:8 },
+  calcRowNum:{ fontSize:12, color:C.textDim, width:16, textAlign:"center", flexShrink:0 },
+  calcInput:{ flex:2, minWidth:0, textAlign:"right" },
+  calcX:{ fontSize:16, color:C.textMuted, width:16, textAlign:"center", flexShrink:0 },
+  calcResult:{ flex:2, textAlign:"right", fontWeight:700, fontSize:14, color:C.accent, minWidth:0 },
+  calcResultUnit:{ fontSize:11, color:C.textMuted, fontWeight:400 },
+  calcDeleteBtn:{ width:28, height:28, background:"none", border:"none", color:C.textDim, cursor:"pointer", fontSize:14, padding:0, flexShrink:0 },
+  calcTotalRow:{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"4px 0" },
+  calcTotalLabel:{ fontSize:13, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 },
+  calcTotalValue:{ fontSize:22, fontWeight:800, color:C.accent },
   // Media view
   mediaPhotoGrid:{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10 },
   mediaPhotoCard:{ position:"relative", borderRadius:10, overflow:"hidden", cursor:"pointer", border:`1px solid ${C.border}`, aspectRatio:"4/3" },
@@ -197,9 +217,11 @@ function TopNav({ view, setView }) {
   const tabs = [
     {key:"jobs",     label:"Jobs",     icon:"📋"},
     {key:"inspect",  label:"Inspect",  icon:"🔍"},
+    {key:"calc",     label:"Calc",     icon:"📏"},
     {key:"measure",  label:"Measure",  icon:"📐"},
     {key:"media",    label:"Media",    icon:"🖼️"},
     {key:"estimate", label:"Estimate", icon:"💰"},
+    {key:"invoice",  label:"Invoice",  icon:"🧾"},
     {key:"rates",    label:"Rates",    icon:"⚙️"},
   ];
   return (
@@ -322,6 +344,491 @@ function MediaView({ currentJob, updateJob }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Area Calculator View ──────────────────────────────────────────────────────
+function CalcView({ currentJob, updateJob, rates, setView }) {
+  const [rows,        setRows]        = useState([{id:1, l:"", w:""}]);
+  const [areaName,    setAreaName]    = useState("");
+  const [serviceType, setServiceType] = useState("sealcoat");
+  const [condition,   setCondition]   = useState("fair");
+  const [notes,       setNotes]       = useState("");
+
+  const addRow    = () => setRows(r => [...r, {id: Date.now(), l:"", w:""}]);
+  const removeRow = (id) => setRows(r => r.filter(x => x.id !== id));
+  const updateRow = (id, field, val) => setRows(r => r.map(x => x.id===id ? {...x,[field]:val} : x));
+
+  const areas     = rows.map(r => ({...r, area: Number(r.l||0) * Number(r.w||0)}));
+  const totalSqFt = areas.reduce((sum, r) => sum + r.area, 0);
+
+  const sendToMeasure = () => {
+    if (!currentJob) { alert("Please open a job first."); return; }
+    if (!areaName)   { alert("Please enter an area name."); return; }
+    if (totalSqFt === 0) { alert("Total area is 0 — check your measurements."); return; }
+    const newArea = {
+      id: Date.now(),
+      name: areaName,
+      serviceType,
+      measurement: String(Math.round(totalSqFt)),
+      condition,
+      notes,
+    };
+    updateJob(j => ({...j, areas:[...(j.areas||[]), newArea]}));
+    // reset
+    setRows([{id:1, l:"", w:""}]);
+    setAreaName("");
+    setNotes("");
+    setView("measure");
+  };
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Area Calculator</h1>
+      <p style={S.subhead}>Enter L × W for each rectangle — totals auto-calculate</p>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Rectangles</h2>
+
+        {/* Column headers */}
+        <div style={S.calcHeader}>
+          <span style={S.calcHeaderLabel}>#</span>
+          <span style={{...S.calcHeaderLabel, flex:2}}>Length (ft)</span>
+          <span style={S.calcHeaderX}>×</span>
+          <span style={{...S.calcHeaderLabel, flex:2}}>Width (ft)</span>
+          <span style={{...S.calcHeaderLabel, flex:2, textAlign:"right"}}>Sq Ft</span>
+          <span style={{width:28}}/>
+        </div>
+
+        {areas.map((r, i) => (
+          <div key={r.id} style={S.calcRow}>
+            <span style={S.calcRowNum}>{i+1}</span>
+            <input
+              type="number" min="0" placeholder="0"
+              value={r.l}
+              onChange={e => updateRow(r.id, "l", e.target.value)}
+              style={{...S.input, ...S.calcInput}}
+            />
+            <span style={S.calcX}>×</span>
+            <input
+              type="number" min="0" placeholder="0"
+              value={r.w}
+              onChange={e => updateRow(r.id, "w", e.target.value)}
+              style={{...S.input, ...S.calcInput}}
+            />
+            <div style={S.calcResult}>
+              {r.area > 0 ? r.area.toLocaleString() : "—"}
+              <span style={S.calcResultUnit}> sq ft</span>
+            </div>
+            {rows.length > 1 ? (
+              <button style={S.calcDeleteBtn} onClick={() => removeRow(r.id)}>✕</button>
+            ) : (
+              <span style={{width:28}}/>
+            )}
+          </div>
+        ))}
+
+        <button style={{...S.btnSecondary, marginTop:12}} onClick={addRow}>+ Add to Total</button>
+      </section>
+
+      {/* Total */}
+      <section style={S.section}>
+        <div style={S.calcTotalRow}>
+          <span style={S.calcTotalLabel}>Total Area</span>
+          <span style={S.calcTotalValue}>{totalSqFt.toLocaleString()} sq ft</span>
+        </div>
+      </section>
+
+      {/* Send to Measure */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Add to Job</h2>
+        {!currentJob && (
+          <div style={{color:C.danger, fontSize:13, marginBottom:10}}>⚠️ Open a job first to add measurements.</div>
+        )}
+        <div style={S.formGrid}>
+          <label style={{...S.formLabel, gridColumn:"1 / -1"}}>Area / Zone Name *
+            <input value={areaName} onChange={e => setAreaName(e.target.value)}
+              style={S.input} placeholder="e.g. Main Driveway, Left Lane"/>
+          </label>
+          <label style={S.formLabel}>Service Type
+            <select value={serviceType} onChange={e => setServiceType(e.target.value)} style={S.input}>
+              {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </label>
+          <label style={S.formLabel}>Condition
+            <select value={condition} onChange={e => setCondition(e.target.value)} style={S.input}>
+              {["good","fair","poor","failed"].map(c =>
+                <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+            </select>
+          </label>
+        </div>
+        <label style={{...S.formLabel, marginTop:10}}>Notes
+          <input value={notes} onChange={e => setNotes(e.target.value)}
+            style={S.input} placeholder="Optional notes..."/>
+        </label>
+
+        <button
+          style={{...S.btnPrimary, marginTop:16, opacity: (!currentJob||totalSqFt===0||!areaName) ? 0.4 : 1}}
+          onClick={sendToMeasure}
+          disabled={!currentJob || totalSqFt===0 || !areaName}>
+          ➕ Add {totalSqFt > 0 ? totalSqFt.toLocaleString() + " sq ft" : ""} to Measurements
+        </button>
+      </section>
+    </div>
+  );
+}
+
+// ─── Invoice View ─────────────────────────────────────────────────────────────
+function InvoiceView({ currentJob, updateJob, rates }) {
+  const [invoiceType, setInvoiceType] = useState("due"); // "due" | "paid"
+  const [pdfLoading,  setPdfLoading]  = useState(false);
+  const [sent,        setSent]        = useState(false);
+  const [invoiceNum,  setInvoiceNum]  = useState("");
+  const [paymentDate, setPaymentDate] = useState(new Date().toLocaleDateString());
+  const [paymentMethod, setPaymentMethod] = useState("Check");
+
+  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+
+  const subtotal    = (currentJob.areas||[]).reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
+  const cityLine    = [currentJob.city, currentJob.state].filter(Boolean).join(", ") + (currentJob.zip ? " " + currentJob.zip : "");
+  const isPaid      = invoiceType === "paid";
+  const invoiceLabel = isPaid ? "PAID INVOICE" : "INVOICE";
+  const invNum      = invoiceNum || (currentJob.estimateNum||"").replace("EST-","INV-") || "INV-00001";
+
+  const buildEmailBody = () => [
+    invoiceLabel, "",
+    "From: " + COMPANY, "Phone: " + PHONE, "Date: " + currentJob.date,
+    "Invoice #: " + invNum, "",
+    "To: " + (currentJob.clientName||"Client"),
+    currentJob.address||"", cityLine||"", currentJob.clientPhone||"", "",
+    "─────────────────────────", "LINE ITEMS", "─────────────────────────",
+    ...(currentJob.areas||[]).map(a => {
+      const svc = rates[a.serviceType]; const amt = calcLineAmt(a,rates);
+      const qtyStr = a.serviceType==="patch"
+        ? (Number(a.measurement).toLocaleString() + " sq ft (" + calcPatchTons(a.measurement).toFixed(2) + " tons)")
+        : (Number(a.measurement).toLocaleString() + " " + svc?.unit);
+      return a.name + " | " + svc?.label + " | " + qtyStr + " | " + formatCurrency(amt);
+    }),
+    "", "─────────────────────────",
+    "TOTAL DUE: " + formatCurrency(subtotal),
+    isPaid ? ("PAID: " + paymentDate + " via " + paymentMethod) : "",
+    "─────────────────────────", "",
+    "Thank you for your business!",
+    COMPANY + " | " + PHONE + " | " + EMAIL,
+  ].filter(l => l !== null).join("\n");
+
+  const emailInvoice = () => {
+    const subject = encodeURIComponent(invoiceLabel + " — " + (currentJob.address||currentJob.clientName||"Your Property"));
+    const body    = encodeURIComponent(buildEmailBody());
+    const to      = currentJob.clientEmail ? encodeURIComponent(currentJob.clientEmail) : "";
+    window.location.href = "mailto:" + to + "?subject=" + subject + "&body=" + body;
+    setSent(true);
+  };
+
+  const copyInvoice = () => { navigator.clipboard.writeText(buildEmailBody()); alert("Copied to clipboard."); };
+
+  // ── PDF via jsPDF ────────────────────────────────────────────────────────
+  const generatePDF = async () => {
+    if (!currentJob.areas || currentJob.areas.length === 0) { alert("No line items on this job yet."); return; }
+    setPdfLoading(true);
+    try {
+      await new Promise((resolve, reject) => {
+        if (window.jspdf) { resolve(); return; }
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit:"pt", format:"letter" });
+      const PW = 612; const ML = 45; const MR = 45;
+      let y = 36;
+      const usable = PW - ML - MR;
+
+      const GOLD   = [201,162,39];
+      const BLACK  = [17,17,17];
+      const DGRAY  = [85,85,85];
+      const LGRAY  = [244,244,244];
+      const MGRAY  = [221,221,221];
+      const WHITE  = [255,255,255];
+      const HDRBLK = [26,26,26];
+      const GREEN  = [34,197,94];
+
+      // Logo
+      const logoW = 260, logoH = 80;
+      try { doc.addImage("data:image/png;base64," + LOGO_B64, "PNG", (PW-logoW)/2, y, logoW, logoH); } catch(e){}
+      y += logoH + 8;
+
+      // Company sub-line
+      doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+      doc.text(COMPANY + "  \u00b7  " + PHONE, PW/2, y, {align:"center"});
+      y += 16;
+
+      // Gold rule
+      doc.setDrawColor(...GOLD); doc.setLineWidth(2);
+      doc.line(ML, y, PW-MR, y);
+      y += 16;
+
+      // PAID stamp or INVOICE header
+      if (isPaid) {
+        // Green PAID banner
+        doc.setFillColor(...GREEN);
+        doc.roundedRect(ML, y-2, usable, 28, 4, 4, "F");
+        doc.setFontSize(14); doc.setFont("helvetica","bold"); doc.setTextColor(255,255,255);
+        doc.text("✓  PAID IN FULL", PW/2, y+17, {align:"center"});
+        y += 36;
+      }
+
+      y += 4;
+
+      // Client / date block
+      const blockH = 84;
+      doc.setFillColor(...LGRAY); doc.setDrawColor(...MGRAY); doc.setLineWidth(0.5);
+      doc.roundedRect(ML, y, usable, blockH, 3, 3, "FD");
+
+      let cy = y + 13;
+      doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
+      doc.text("BILL TO", ML+10, cy); cy += 13;
+      doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+      doc.text(currentJob.clientName || "\u2014", ML+10, cy); cy += 13;
+      doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...BLACK);
+      if (currentJob.address)    { doc.text(currentJob.address,    ML+10, cy); cy += 12; }
+      if (cityLine)              { doc.text(cityLine,              ML+10, cy); cy += 12; }
+      if (currentJob.clientPhone){ doc.text(currentJob.clientPhone, ML+10, cy); }
+
+      const rx = PW-MR-10;
+      let ry = y + 13;
+      doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
+      doc.text("DATE", rx, ry, {align:"right"}); ry += 13;
+      doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+      doc.text(currentJob.date, rx, ry, {align:"right"}); ry += 20;
+      doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
+      doc.text("INVOICE #", rx, ry, {align:"right"}); ry += 13;
+      doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+      doc.text(invNum, rx, ry, {align:"right"});
+      if (isPaid) {
+        ry += 20;
+        doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
+        doc.text("PAYMENT DATE", rx, ry, {align:"right"}); ry += 13;
+        doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(...GREEN);
+        doc.text(paymentDate + " — " + paymentMethod, rx, ry, {align:"right"});
+      }
+      y += blockH + 14;
+
+      // Line items
+      const cols = [210, 130, 110, 72];
+      const hdrs = ["Description", "Service", "Quantity", "Amount"];
+      const hdrH = 24;
+      doc.setFillColor(...HDRBLK);
+      doc.rect(ML, y, usable, hdrH, "F");
+      doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...GOLD);
+      let cx = ML;
+      hdrs.forEach((h,i) => {
+        const right = i >= 2;
+        doc.text(h, right ? cx+cols[i]-6 : cx+6, y+16, {align: right?"right":"left"});
+        cx += cols[i];
+      });
+      y += hdrH;
+
+      (currentJob.areas||[]).forEach((a,idx) => {
+        const svc  = rates[a.serviceType];
+        const amt  = calcLineAmt(a,rates);
+        const qty  = Number(a.measurement||0);
+        const tons = a.serviceType==="patch" ? calcPatchTons(qty) : null;
+        const qtyStr = tons !== null
+          ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
+          : qty.toLocaleString() + (svc?.unit==="linft" ? " lin ft" : " sq ft");
+        const nameArr = doc.splitTextToSize(a.name + (a.notes ? "\n"+a.notes : ""), cols[0]-12);
+        const qtyParts = qtyStr.split("\n");
+        const rh = Math.max(nameArr.length, qtyParts.length) * 13 + 10;
+
+        doc.setFillColor(...(idx%2===0 ? WHITE : LGRAY));
+        doc.rect(ML, y, usable, rh, "F");
+        doc.setDrawColor(...MGRAY); doc.setLineWidth(0.25);
+        doc.line(ML, y+rh, ML+usable, y+rh);
+
+        doc.setFontSize(9); doc.setTextColor(...BLACK);
+        cx = ML;
+        doc.setFont("helvetica","bold"); doc.text(nameArr[0], cx+6, y+15);
+        if (nameArr[1]) { doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY); doc.text(nameArr[1], cx+6, y+28); doc.setTextColor(...BLACK); }
+        cx += cols[0];
+        doc.setFont("helvetica","normal"); doc.text(svc?.label||"", cx+6, y+15);
+        cx += cols[1];
+        doc.text(qtyParts[0], cx+cols[2]-6, y+15, {align:"right"});
+        if (qtyParts[1]) { doc.setTextColor(...DGRAY); doc.text(qtyParts[1], cx+cols[2]-6, y+28, {align:"right"}); doc.setTextColor(...BLACK); }
+        cx += cols[2];
+        doc.setFont("helvetica","bold"); doc.text(formatCurrency(amt), cx+cols[3]-6, y+15, {align:"right"});
+        y += rh;
+      });
+
+      y += 8;
+
+      // Total bar
+      const totalBarH = 30;
+      doc.setFillColor(...HDRBLK);
+      doc.rect(ML, y, usable, totalBarH, "F");
+      doc.setDrawColor(...(isPaid ? GREEN : GOLD)); doc.setLineWidth(1);
+      doc.line(ML, y, ML+usable, y);
+      doc.setFontSize(12); doc.setFont("helvetica","bold");
+      doc.setTextColor(...(isPaid ? GREEN : GOLD));
+      doc.text(isPaid ? "TOTAL PAID" : "TOTAL DUE", ML+10, y+20);
+      doc.text(formatCurrency(subtotal), PW-MR-6, y+20, {align:"right"});
+      y += totalBarH + 16;
+
+      // Payment info for paid invoices
+      if (isPaid) {
+        doc.setFillColor(34,197,94,30);
+        doc.setFillColor(220,255,220);
+        doc.setDrawColor(...GREEN); doc.setLineWidth(0.5);
+        doc.roundedRect(ML, y, usable, 30, 3, 3, "FD");
+        doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(...GREEN);
+        doc.text("Payment received on " + paymentDate + " via " + paymentMethod + "  —  Thank you!", PW/2, y+19, {align:"center"});
+        y += 44;
+      }
+
+      // Thank you
+      doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+      doc.text("Thank you for your business! " + COMPANY + " | " + PHONE, PW/2, y, {align:"center"});
+      y += 14;
+      doc.text("A 25% deposit is required to schedule work. Balance due upon completion.", PW/2, y, {align:"center"});
+
+      // Save
+      const filename = "TPS_" + (isPaid ? "PaidInvoice" : "Invoice") + "_" + invNum + ".pdf";
+      doc.save(filename);
+      setSent(true);
+    } catch(e) {
+      console.error(e);
+      alert("PDF generation failed: " + e.message);
+    }
+    setPdfLoading(false);
+  };
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Invoice</h1>
+      <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
+
+      {/* Invoice type toggle */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Invoice Type</h2>
+        <div style={S.btnRow}>
+          <button
+            style={{...S.toggleBtn, ...(invoiceType==="due" ? S.toggleBtnActive : {})}}
+            onClick={() => setInvoiceType("due")}>
+            📄 Amount Due
+          </button>
+          <button
+            style={{...S.toggleBtn, ...(invoiceType==="paid" ? S.toggleBtnPaid : {})}}
+            onClick={() => setInvoiceType("paid")}>
+            ✅ Paid in Full
+          </button>
+        </div>
+      </section>
+
+      {/* Invoice details */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Invoice Details</h2>
+        <div style={S.formGrid}>
+          <label style={S.formLabel}>Invoice #
+            <input value={invNum} onChange={e => setInvoiceNum(e.target.value)} style={S.input}
+              placeholder={(currentJob.estimateNum||"").replace("EST-","INV-") || "INV-00001"}/>
+          </label>
+          {isPaid && (
+            <label style={S.formLabel}>Payment Date
+              <input value={paymentDate} onChange={e => setPaymentDate(e.target.value)} style={S.input}/>
+            </label>
+          )}
+          {isPaid && (
+            <label style={S.formLabel}>Payment Method
+              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={S.input}>
+                {["Check","Cash","Credit Card","Venmo","Zelle","Other"].map(m =>
+                  <option key={m} value={m}>{m}</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+      </section>
+
+      {/* Preview */}
+      <section style={S.section}>
+        <div style={S.invoiceHeader}>
+          <div>
+            <div style={S.coName}>{COMPANY}</div>
+            <div style={S.coContact}>{PHONE}</div>
+          </div>
+          <div style={S.estimateDate}>
+            <div style={{...S.estimateLabel, color: isPaid ? C.green : C.accent}}>
+              {isPaid ? "✅ PAID INVOICE" : "INVOICE"}
+            </div>
+            <div style={S.estimateDateVal}>{currentJob.date}</div>
+            <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>{invNum}</div>
+          </div>
+        </div>
+
+        <div style={S.estimateClient}>
+          <div style={S.estimateClientLabel}>BILL TO</div>
+          <div style={S.estimateClientName}>{currentJob.clientName||"—"}</div>
+          {currentJob.address    && <div style={S.estimateClientAddr}>{currentJob.address}</div>}
+          {cityLine              && <div style={S.estimateClientAddr}>{cityLine}</div>}
+          {currentJob.clientPhone && <div style={S.estimateClientAddr}>{currentJob.clientPhone}</div>}
+        </div>
+
+        {isPaid && (
+          <div style={S.paidBanner}>
+            ✓ PAID — {paymentDate} via {paymentMethod}
+          </div>
+        )}
+
+        {(!currentJob.areas || currentJob.areas.length === 0) ? (
+          <div style={S.empty}><p style={S.emptyText}>No line items yet. Add measurements first.</p></div>
+        ) : (
+          <table style={S.table}>
+            <thead><tr>{["Description","Service","Quantity","Amount"].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {(currentJob.areas||[]).map(a => {
+                const svc  = rates[a.serviceType];
+                const amt  = calcLineAmt(a,rates);
+                const tons = a.serviceType==="patch" ? calcPatchTons(a.measurement) : null;
+                return (
+                  <tr key={a.id} style={S.tr}>
+                    <td style={S.td}><div style={S.tdMain}>{a.name}</div>{a.notes&&<div style={S.tdSub}>{a.notes}</div>}</td>
+                    <td style={S.td}>{svc?.label}</td>
+                    <td style={{...S.td, textAlign:"right"}}>
+                      {Number(a.measurement).toLocaleString()} {svc?.unit==="linft"?"lin ft":"sq ft"}
+                      {tons!==null && <div style={S.tdSub}>{tons.toFixed(2)} tons</div>}
+                    </td>
+                    <td style={{...S.td, textAlign:"right", fontWeight:600}}>{formatCurrency(amt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        <div style={S.totalsBox}>
+          <div style={{...S.totalLineBold, color: isPaid ? C.green : C.accent}}>
+            <span>{isPaid ? "TOTAL PAID" : "TOTAL DUE"}</span>
+            <span>{formatCurrency(subtotal)}</span>
+          </div>
+        </div>
+
+        <div style={S.estimateFooter}>Thank you for your business! · {COMPANY} · {PHONE}</div>
+      </section>
+
+      {/* Actions */}
+      <section style={S.section}>
+        <div style={S.actionBtns}>
+          <button style={{...S.btnPrimary, opacity:pdfLoading?0.5:1, background: isPaid ? "#16a34a" : C.accent}}
+            onClick={generatePDF} disabled={pdfLoading}>
+            {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
+          </button>
+          <button style={S.btnSecondary} onClick={emailInvoice}>✉️ Email</button>
+          <button style={S.btnSecondary} onClick={copyInvoice}>📋 Copy Text</button>
+        </div>
+        {sent && <div style={S.sentMsg}>✅ Done!</div>}
+      </section>
     </div>
   );
 }
@@ -1135,9 +1642,11 @@ export default function App() {
       <div style={S.content}>
         {view==="jobs"     && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="inspect"  && <InspectView currentJob={currentJob} updateJob={updateJob}/>}
+        {view==="calc"     && <CalcView    currentJob={currentJob} updateJob={updateJob} rates={rates} setView={setView}/>}
         {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
         {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
         {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
+        {view==="invoice"  && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
         {view==="rates"    && <RatesView   rates={rates} setRates={handleSetRates}/>}
       </div>
     </div>
