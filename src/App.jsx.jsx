@@ -50,13 +50,13 @@ const C = {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const S = {
   app:{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'DM Sans','Segoe UI',sans-serif", display:"flex", flexDirection:"column" },
-  nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 10px", position:"sticky", top:0, zIndex:100 },
-  navBrand:{ display:"flex", alignItems:"center" },
-  navTitle:{ fontWeight:800, fontSize:15, color:C.accent, letterSpacing:"0.06em" },
-  navTabs:{ display:"flex" },
-  navTab:{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, padding:"9px 8px", background:"none", border:"none", color:C.textMuted, cursor:"pointer", fontSize:10, borderBottom:"2px solid transparent", transition:"all .15s" },
+  nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"stretch", position:"sticky", top:0, zIndex:100, minHeight:48 },
+  navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0 },
+  navTitle:{ fontWeight:800, fontSize:14, color:C.accent, letterSpacing:"0.06em" },
+  navTabs:{ display:"flex", overflowX:"auto", flex:1, scrollbarWidth:"none", msOverflowStyle:"none" },
+  navTab:{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1, padding:"6px 10px", background:"none", border:"none", color:C.textMuted, cursor:"pointer", fontSize:10, borderBottom:"2px solid transparent", transition:"all .15s", flexShrink:0, minWidth:52 },
   navTabActive:{ color:C.accent, borderBottomColor:C.accent },
-  navTabIcon:{ fontSize:14 }, navTabLabel:{},
+  navTabIcon:{ fontSize:15 }, navTabLabel:{whiteSpace:"nowrap"},
   content:{ flex:1, overflowY:"auto" },
   page:{ maxWidth:700, margin:"0 auto", padding:"20px 16px 80px" },
   pageHeader:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 },
@@ -213,7 +213,16 @@ const S = {
 };
 
 // ─── Top Nav ──────────────────────────────────────────────────────────────────
+// Inject scrollbar-hiding CSS once
+if (typeof document !== "undefined" && !document.getElementById("tps-nav-css")) {
+  const style = document.createElement("style");
+  style.id = "tps-nav-css";
+  style.textContent = ".tps-nav-tabs::-webkit-scrollbar{display:none}";
+  document.head.appendChild(style);
+}
+
 function TopNav({ view, setView }) {
+  const tabsRef = React.useRef(null);
   const tabs = [
     {key:"jobs",     label:"Jobs",     icon:"📋"},
     {key:"inspect",  label:"Inspect",  icon:"🔍"},
@@ -224,12 +233,21 @@ function TopNav({ view, setView }) {
     {key:"invoice",  label:"Invoice",  icon:"🧾"},
     {key:"rates",    label:"Rates",    icon:"⚙️"},
   ];
+
+  // Scroll active tab into view when view changes
+  React.useEffect(() => {
+    if (!tabsRef.current) return;
+    const activeBtn = tabsRef.current.querySelector("[data-active='true']");
+    if (activeBtn) activeBtn.scrollIntoView({behavior:"smooth", block:"nearest", inline:"center"});
+  }, [view]);
+
   return (
     <nav style={S.nav}>
       <div style={S.navBrand}><span style={S.navTitle}>TPS</span></div>
-      <div style={S.navTabs}>
+      <div ref={tabsRef} className="tps-nav-tabs" style={S.navTabs}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setView(t.key)}
+            data-active={view===t.key?"true":"false"}
             style={{...S.navTab,...(view===t.key?S.navTabActive:{})}}>
             <span style={S.navTabIcon}>{t.icon}</span>
             <span style={S.navTabLabel}>{t.label}</span>
