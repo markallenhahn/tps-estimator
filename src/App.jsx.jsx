@@ -1605,14 +1605,28 @@ export default function App() {
 
   const currentJob = jobs.find(j => j.id === currentJobId) || null;
 
+  // Keep a ref of pending syncs so debounce always uses latest state
+  const pendingSyncRef = useRef({});
+  const syncTimerRef   = useRef({});
+
   const updateJob = fn => {
-    let updated;
-    setJobs(prev => prev.map(j => {
-      if (j.id !== currentJobId) return j;
-      updated = fn(j);
-      return updated;
-    }));
-    if (updated) syncJob(updated);
+    setJobs(prev => {
+      const next = prev.map(j => {
+        if (j.id !== currentJobId) return j;
+        return fn(j);
+      });
+      // Find updated job and schedule debounced sync
+      const updated = next.find(j => j.id === currentJobId);
+      if (updated) {
+        pendingSyncRef.current[updated.id] = updated;
+        clearTimeout(syncTimerRef.current[updated.id]);
+        syncTimerRef.current[updated.id] = setTimeout(() => {
+          const toSync = pendingSyncRef.current[updated.id];
+          if (toSync) syncJob(toSync);
+        }, 800);
+      }
+      return next;
+    });
   };
 
   const setCurrentJob = job => setCurrentJobId(job.id);
