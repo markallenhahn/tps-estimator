@@ -174,7 +174,10 @@ const S = {
   toggleBtn:{ flex:1, background:C.surface2, border:`1px solid ${C.border}`, color:C.textMuted, borderRadius:8, padding:"12px 0", fontSize:14, fontWeight:600, cursor:"pointer" },
   toggleBtnActive:{ background:"#2a2a1a", border:`1px solid ${C.accent}`, color:C.accent },
   toggleBtnPaid:{ background:"#14532d", border:"1px solid #16a34a", color:"#4ade80" },
-  // Calc
+  // Signature pad
+  sigWrap:{ position:"relative", borderRadius:8, overflow:"hidden", border:`1px solid ${C.border}` },
+  sigCanvas:{ display:"block", width:"100%", height:120, background:C.surface2, cursor:"crosshair", touchAction:"none" },
+  sigSavedBadge:{ position:"absolute", top:6, right:8, fontSize:11, color:C.green, fontWeight:700 },
   calcHeader:{ display:"flex", alignItems:"center", gap:6, marginBottom:6, paddingBottom:6, borderBottom:`1px solid ${C.border}` },
   calcHeaderLabel:{ flex:1, fontSize:11, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.06em" },
   calcHeaderX:{ fontSize:13, color:C.textDim, width:16, textAlign:"center" },
@@ -893,6 +896,8 @@ function InspectView({ currentJob, updateJob }) {
   const [stream,    setStream]    = useState(null);
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
+  const sigCanvasRef = useRef(null);
+  const sigDrawing   = useRef(false);
 
   const stopStream = useCallback(() => {
     if (stream) stream.getTracks().forEach(t => t.stop());
@@ -921,6 +926,55 @@ function InspectView({ currentJob, updateJob }) {
   };
 
   const removePhoto = (id) => updateJob(j => ({...j, photos:j.photos.filter(p => p.id!==id)}));
+
+  // ── Signature pad helpers ──
+  const getSigPos = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const src  = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * (canvas.width / rect.width),
+             y: (src.clientY - rect.top)  * (canvas.height / rect.height) };
+  };
+
+  const sigStart = (e) => {
+    e.preventDefault();
+    const c = sigCanvasRef.current; if (!c) return;
+    const ctx = c.getContext("2d");
+    const pos = getSigPos(e, c);
+    ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+    sigDrawing.current = true;
+  };
+
+  const sigMove = (e) => {
+    e.preventDefault();
+    if (!sigDrawing.current) return;
+    const c = sigCanvasRef.current; if (!c) return;
+    const ctx = c.getContext("2d");
+    const pos = getSigPos(e, c);
+    ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.strokeStyle = "#f59e0b";
+    ctx.lineTo(pos.x, pos.y); ctx.stroke();
+  };
+
+  const sigEnd = (e) => {
+    e.preventDefault();
+    sigDrawing.current = false;
+    const c = sigCanvasRef.current; if (!c) return;
+    // Save signature as dataURL on the job
+    updateJob(j => ({...j, signature: c.toDataURL("image/png")}));
+  };
+
+  const clearSig = () => {
+    const c = sigCanvasRef.current; if (!c) return;
+    c.getContext("2d").clearRect(0, 0, c.width, c.height);
+    updateJob(j => ({...j, signature: null}));
+  };
+
+  // Restore existing signature onto canvas after mount
+  useEffect(() => {
+    if (!currentJob?.signature || !sigCanvasRef.current) return;
+    const img = new Image();
+    img.onload = () => sigCanvasRef.current?.getContext("2d").drawImage(img, 0, 0);
+    img.src = currentJob.signature;
+  }, [currentJob?.id]); // only re-draw when job changes, not on every keystroke
 
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
@@ -968,6 +1022,29 @@ function InspectView({ currentJob, updateJob }) {
             style={{...S.input, height:72, resize:"vertical"}}
             placeholder="General condition, access notes, special instructions..."/>
         </label>
+      </section>
+
+      {/* Signature Pad */}
+      <section style={S.section}>
+        <h2 style={S.h2}>TPS Representative Signature</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginBottom:10, marginTop:-8}}>
+          Draw your signature below — it will appear on the estimate PDF.
+        </p>
+        <div style={S.sigWrap}>
+          <canvas
+            ref={sigCanvasRef}
+            width={560} height={140}
+            style={S.sigCanvas}
+            onMouseDown={sigStart} onMouseMove={sigMove} onMouseUp={sigEnd} onMouseLeave={sigEnd}
+            onTouchStart={sigStart} onTouchMove={sigMove} onTouchEnd={sigEnd}
+          />
+          {currentJob.signature && (
+            <div style={S.sigSavedBadge}>✓ Saved</div>
+          )}
+        </div>
+        <button style={{...S.btnSecondary, marginTop:10, fontSize:12}} onClick={clearSig}>
+          🗑 Clear Signature
+        </button>
       </section>
 
       <section style={S.section}>
@@ -1374,6 +1451,12 @@ function EstimateView({ currentJob, updateJob, rates }) {
           const sx = ML + col * (sigW + 30);
           doc.line(sx, lineY, sx + sigW, lineY);
           doc.text(sigLabels[si], sx, lineY + 11);
+          // Draw saved signature above the TPS rep line (index 3)
+          if (si === 3 && currentJob.signature) {
+            try {
+              doc.addImage(currentJob.signature, "PNG", sx, lineY - 28, sigW, 26);
+            } catch(e) {}
+          }
         });
       });
       y += 2 * sigRowH + 10;
