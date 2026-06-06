@@ -818,27 +818,34 @@ function InvoiceView({ currentJob, updateJob, rates }) {
         {(!currentJob.areas || currentJob.areas.length === 0) ? (
           <div style={S.empty}><p style={S.emptyText}>No line items yet. Add measurements first.</p></div>
         ) : (
-          <table style={S.table}>
-            <thead><tr>{["Description","Service","Quantity","Amount"].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {(currentJob.areas||[]).map(a => {
-                const svc  = rates[a.serviceType];
-                const amt  = calcLineAmt(a,rates);
-                const tons = a.serviceType==="patch" ? calcPatchTons(a.measurement) : null;
-                return (
-                  <tr key={a.id} style={S.tr}>
-                    <td style={S.td}><div style={S.tdMain}>{a.name}</div>{a.notes&&<div style={S.tdSub}>{a.notes}</div>}</td>
-                    <td style={S.td}>{svc?.label}</td>
-                    <td style={{...S.td, textAlign:"right"}}>
-                      {Number(a.measurement).toLocaleString()} {svc?.unit==="linft"?"lin ft":"sq ft"}
-                      {tons!==null && <div style={S.tdSub}>{tons.toFixed(2)} tons</div>}
-                    </td>
-                    <td style={{...S.td, textAlign:"right", fontWeight:600}}>{formatCurrency(amt)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div style={{marginBottom:12}}>
+            {(currentJob.areas||[]).map((a, idx) => {
+              const svc  = rates[a.serviceType];
+              const amt  = calcLineAmt(a,rates);
+              const tons = a.serviceType==="patch" ? calcPatchTons(a.measurement) : null;
+              const qty  = Number(a.measurement).toLocaleString();
+              const unit = svc?.unit==="linft" ? "lin ft" : "sq ft";
+              return (
+                <div key={a.id} style={{
+                  background: idx%2===0 ? C.surface2 : "transparent",
+                  borderRadius:8, padding:"10px 12px", marginBottom:4,
+                  borderBottom:`1px solid ${C.border}`
+                }}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                    <div style={{flex:1, minWidth:0, marginRight:8}}>
+                      <div style={{fontWeight:700, fontSize:14}}>{a.name}</div>
+                      <div style={{fontSize:12, color:C.textMuted, marginTop:1}}>{svc?.label}</div>
+                      {a.notes && <div style={{fontSize:11, color:C.textDim, fontStyle:"italic", marginTop:2}}>{a.notes}</div>}
+                    </div>
+                    <div style={{textAlign:"right", flexShrink:0}}>
+                      <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(amt)}</div>
+                      <div style={{fontSize:11, color:C.textMuted, marginTop:1}}>{qty} {unit}{tons!==null ? " / " + tons.toFixed(2) + " tons" : ""}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
 
         <div style={S.totalsBox}>
@@ -1525,30 +1532,34 @@ function EstimateView({ currentJob, updateJob, rates }) {
           <div style={S.empty}><p style={S.emptyText}>No line items yet. Add measurements first.</p></div>
         ) : (
           <>
-            <table style={S.table}>
-              <thead><tr>{["Area / Zone","Service","Quantity","Rate","Amount"].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
-              <tbody>
-                {currentJob.areas.map(a => {
-                  const svc  = rates[a.serviceType];
-                  const amt  = calcLineAmt(a, rates);
-                  const tons = a.serviceType==="patch" ? calcPatchTons(a.measurement) : null;
-                  return (
-                    <tr key={a.id} style={S.tr}>
-                      <td style={S.td}><div style={S.tdMain}>{a.name}</div>{a.notes&&<div style={S.tdSub}>{a.notes}</div>}</td>
-                      <td style={S.td}>{svc?.label}</td>
-                      <td style={{...S.td, textAlign:"right"}}>
-                        {Number(a.measurement).toLocaleString()} {svc?.unit==="linft"?"lin ft":"sq ft"}
-                        {tons!==null && <div style={S.tdSub}>{tons.toFixed(2)} tons</div>}
-                      </td>
-                      <td style={{...S.td, textAlign:"right"}}>
-                        {tons!==null ? <>{formatCurrency(svc?.rate||0)}<div style={S.tdSub}>/ton</div></> : formatCurrency(svc?.rate||0)}
-                      </td>
-                      <td style={{...S.td, textAlign:"right", fontWeight:600}}>{formatCurrency(amt)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div style={{marginBottom:12}}>
+              {currentJob.areas.map((a, idx) => {
+                const svc  = rates[a.serviceType];
+                const amt  = calcLineAmt(a, rates);
+                const tons = a.serviceType==="patch" ? calcPatchTons(a.measurement) : null;
+                const qty  = Number(a.measurement).toLocaleString();
+                const unit = svc?.unit==="linft" ? "lin ft" : "sq ft";
+                return (
+                  <div key={a.id} style={{
+                    background: idx%2===0 ? C.surface2 : "transparent",
+                    borderRadius:8, padding:"10px 12px", marginBottom:4,
+                    borderBottom:`1px solid ${C.border}`
+                  }}>
+                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                      <div style={{flex:1, minWidth:0, marginRight:8}}>
+                        <div style={{fontWeight:700, fontSize:14}}>{a.name}</div>
+                        <div style={{fontSize:12, color:C.textMuted, marginTop:1}}>{svc?.label}</div>
+                        {a.notes && <div style={{fontSize:11, color:C.textDim, fontStyle:"italic", marginTop:2}}>{a.notes}</div>}
+                      </div>
+                      <div style={{textAlign:"right", flexShrink:0}}>
+                        <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(amt)}</div>
+                        <div style={{fontSize:11, color:C.textMuted, marginTop:1}}>{qty} {unit}{tons!==null ? " / " + tons.toFixed(2) + " tons" : ""}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
             <div style={S.adjustRow}>
               <label style={S.adjustLabel}>Markup %
