@@ -594,7 +594,7 @@ function InvoiceView({ currentJob, updateJob, rates }) {
         doc.setFillColor(...GREEN);
         doc.roundedRect(ML, y-2, usable, 28, 4, 4, "F");
         doc.setFontSize(14); doc.setFont("helvetica","bold"); doc.setTextColor(255,255,255);
-        doc.text("✓  PAID IN FULL", PW/2, y+17, {align:"center"});
+        doc.text("** PAID IN FULL **", PW/2, y+17, {align:"center"});
         y += 36;
       }
 
