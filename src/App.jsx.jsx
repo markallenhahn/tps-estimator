@@ -1146,7 +1146,6 @@ function EstimateView({ currentJob, updateJob, rates }) {
     }),
     "", "─────────────────────────",
     "Subtotal: " + formatCurrency(subtotal),
-    margin>0   ? ("Margin (" + margin + "%): +" + formatCurrency(marginAmt))       : null,
     discount>0 ? ("Discount (" + discount + "%): -" + formatCurrency(discountAmt)) : null,
     "TOTAL: " + formatCurrency(total), "─────────────────────────", "",
     currentJob.notes ? ("Site Notes: " + currentJob.notes) : null, "",
@@ -1300,21 +1299,15 @@ function EstimateView({ currentJob, updateJob, rates }) {
 
       y += 8;
 
-      // ── Totals ──
-      const totRows = [];
-      if (margin>0)   totRows.push(["Margin ("+margin+"%)",    "+"+formatCurrency(marginAmt)]);
-      if (discount>0) totRows.push(["Discount ("+discount+"%)","-"+formatCurrency(discountAmt)]);
-
-      if (totRows.length > 0) {
-        totRows.forEach(row => {
-          doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
-          doc.text(row[0], PW-MR-70, y+12);
-          doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
-          doc.text(row[1], PW-MR-6, y+12, { align:"right" });
-          y += 16;
-        });
+      // ── Totals ── (discount only, no margin)
+      if (discount>0) {
+        doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+        doc.text("Discount (" + discount + "%)", ML+10, y+12);
+        doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+        doc.text("-" + formatCurrency(discountAmt), PW-MR-6, y+12, { align:"right" });
+        y += 18;
       } else {
-        y += 16;
+        y += 8;
       }
 
       // TOTAL DUE bar
@@ -1456,7 +1449,7 @@ function EstimateView({ currentJob, updateJob, rates }) {
             </table>
 
             <div style={S.adjustRow}>
-              <label style={S.adjustLabel}>Margin %
+              <label style={S.adjustLabel}>Markup %
                 <input type="number" value={margin} min="0" max="100"
                   onChange={e => setMargin(Number(e.target.value))} style={S.adjustInput}/>
               </label>
@@ -1468,7 +1461,6 @@ function EstimateView({ currentJob, updateJob, rates }) {
 
             <div style={S.totalsBox}>
               <div style={S.totalLine}><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-              {margin>0   && <div style={S.totalLine}><span>Margin ({margin}%)</span><span>+{formatCurrency(marginAmt)}</span></div>}
               {discount>0 && <div style={S.totalLine}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
               <div style={S.totalLineBold}><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
             </div>
