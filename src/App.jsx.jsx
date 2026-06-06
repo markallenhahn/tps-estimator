@@ -708,8 +708,6 @@ function InvoiceView({ currentJob, updateJob, rates }) {
       // Thank you
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
       doc.text("Thank you for your business! " + COMPANY + " | " + PHONE, PW/2, y, {align:"center"});
-      y += 14;
-      doc.text("A 25% deposit is required to schedule work. Balance due upon completion.", PW/2, y, {align:"center"});
 
       // Save
       const filename = "TPS_" + (isPaid ? "PaidInvoice" : "Invoice") + "_" + invNum + ".pdf";
