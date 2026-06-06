@@ -50,15 +50,15 @@ const C = {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const S = {
   app:{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'DM Sans','Segoe UI',sans-serif", display:"flex", flexDirection:"column" },
-  nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"stretch", position:"sticky", top:0, zIndex:100, minHeight:48 },
+  nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"stretch", position:"sticky", top:0, zIndex:100, minHeight:56 },
   navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0 },
   navTitle:{ fontWeight:800, fontSize:14, color:C.accent, letterSpacing:"0.06em" },
   navTabs:{ display:"flex", overflowX:"auto", flex:1, scrollbarWidth:"none", msOverflowStyle:"none" },
   navTab:{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1, padding:"6px 10px", background:"none", border:"none", color:C.textMuted, cursor:"pointer", fontSize:10, borderBottom:"2px solid transparent", transition:"all .15s", flexShrink:0, minWidth:52 },
   navTabActive:{ color:C.accent, borderBottomColor:C.accent },
   navTabIcon:{ fontSize:15 }, navTabLabel:{whiteSpace:"nowrap"},
-  content:{ flex:1, overflowY:"auto" },
-  page:{ maxWidth:700, margin:"0 auto", padding:"20px 16px 80px" },
+  content:{ flex:1 },
+  page:{ maxWidth:700, margin:"0 auto", padding:"24px 16px 80px" },
   pageHeader:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 },
   h1:{ fontSize:24, fontWeight:700, margin:0 },
   h2:{ fontSize:13, fontWeight:600, margin:"0 0 12px", color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.08em" },
@@ -510,7 +510,12 @@ function InvoiceView({ currentJob, updateJob, rates }) {
 
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
+  const margin      = Number(currentJob.margin   || 0);
+  const discount    = Number(currentJob.discount || 0);
   const subtotal    = (currentJob.areas||[]).reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
+  const marginAmt   = subtotal * (margin/100);
+  const discountAmt = (subtotal + marginAmt) * (discount/100);
+  const total       = subtotal + marginAmt - discountAmt;
   const cityLine    = [currentJob.city, currentJob.state].filter(Boolean).join(", ") + (currentJob.zip ? " " + currentJob.zip : "");
   const isPaid      = invoiceType === "paid";
   const invoiceLabel = isPaid ? "PAID INVOICE" : "INVOICE";
@@ -531,7 +536,8 @@ function InvoiceView({ currentJob, updateJob, rates }) {
       return a.name + " | " + svc?.label + " | " + qtyStr + " | " + formatCurrency(amt);
     }),
     "", "─────────────────────────",
-    "TOTAL DUE: " + formatCurrency(subtotal),
+    discount>0 ? ("Discount (" + discount + "%): -" + formatCurrency(discountAmt)) : null,
+    "TOTAL DUE: " + formatCurrency(total),
     isPaid ? ("PAID: " + paymentDate + " via " + paymentMethod) : "",
     "─────────────────────────", "",
     "Thank you for your business!",
@@ -685,6 +691,16 @@ function InvoiceView({ currentJob, updateJob, rates }) {
 
       y += 8;
 
+      // Discount row
+      if (discount > 0) {
+        doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(220,38,38);
+        doc.text("Discount (" + discount + "%)", ML+10, y+12);
+        doc.text("-" + formatCurrency(discountAmt), PW-MR-6, y+12, {align:"right"});
+        y += 18;
+      } else {
+        y += 8;
+      }
+
       // Total bar
       const totalBarH = 30;
       doc.setFillColor(...HDRBLK);
@@ -694,7 +710,7 @@ function InvoiceView({ currentJob, updateJob, rates }) {
       doc.setFontSize(12); doc.setFont("helvetica","bold");
       doc.setTextColor(...(isPaid ? GREEN : GOLD));
       doc.text(isPaid ? "TOTAL PAID" : "TOTAL DUE", ML+10, y+20);
-      doc.text(formatCurrency(subtotal), PW-MR-6, y+20, {align:"right"});
+      doc.text(formatCurrency(total), PW-MR-6, y+20, {align:"right"});
       y += totalBarH + 16;
 
       // Payment info for paid invoices
@@ -826,9 +842,10 @@ function InvoiceView({ currentJob, updateJob, rates }) {
         )}
 
         <div style={S.totalsBox}>
+          {discount>0 && <div style={{...S.totalLine, color:C.danger, fontWeight:700}}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
           <div style={{...S.totalLineBold, color: isPaid ? C.green : C.accent}}>
             <span>{isPaid ? "TOTAL PAID" : "TOTAL DUE"}</span>
-            <span>{formatCurrency(subtotal)}</span>
+            <span>{formatCurrency(total)}</span>
           </div>
         </div>
 
@@ -1195,12 +1212,15 @@ function MeasureView({ currentJob, updateJob, rates }) {
 
 // ─── Estimate View ────────────────────────────────────────────────────────────
 function EstimateView({ currentJob, updateJob, rates }) {
-  const [margin,     setMargin]     = useState(0);
-  const [discount,   setDiscount]   = useState(0);
   const [sent,       setSent]       = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+
+  const margin   = Number(currentJob.margin   || 0);
+  const discount = Number(currentJob.discount || 0);
+  const setMargin   = val => updateJob(j => ({...j, margin:   Number(val)}));
+  const setDiscount = val => updateJob(j => ({...j, discount: Number(val)}));
 
   const subtotal    = currentJob.areas.reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
   const marginAmt   = subtotal * (margin/100);
