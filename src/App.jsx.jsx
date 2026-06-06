@@ -1301,9 +1301,8 @@ function EstimateView({ currentJob, updateJob, rates }) {
 
       // ── Totals ── (discount only, no margin)
       if (discount>0) {
-        doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+        doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(220,38,38);
         doc.text("Discount (" + discount + "%)", ML+10, y+12);
-        doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
         doc.text("-" + formatCurrency(discountAmt), PW-MR-6, y+12, { align:"right" });
         y += 18;
       } else {
@@ -1461,7 +1460,7 @@ function EstimateView({ currentJob, updateJob, rates }) {
 
             <div style={S.totalsBox}>
               <div style={S.totalLine}><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-              {discount>0 && <div style={S.totalLine}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
+              {discount>0 && <div style={{...S.totalLine, color:C.danger, fontWeight:700}}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
               <div style={S.totalLineBold}><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
             </div>
           </>
