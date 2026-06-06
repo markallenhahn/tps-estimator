@@ -15,7 +15,7 @@ const DEFAULT_RATES = {
   striping:  { label:"Line Striping", unit:"linft", rate:1.25, rateLabel:"$/lin ft" },
 };
 
-const initialJob = () => ({
+const initialJob = (rates) => ({
   id: Date.now(),
   clientName:"", clientEmail:"", clientPhone:"",
   address:"", city:"", state:"PA", zip:"",
@@ -23,6 +23,7 @@ const initialJob = () => ({
   estimateNum: `EST-${Date.now().toString().slice(-5)}`,
   notes:"", areas:[], photos:[],
   status:"draft",
+  rates: rates ? {...rates} : null,
 });
 
 const initialArea = () => ({
@@ -261,20 +262,51 @@ function TopNav({ view, setView }) {
 }
 
 // ─── Rates Editor ─────────────────────────────────────────────────────────────
-function RatesView({ rates, setRates }) {
-  const [editing, setEditing] = useState({...rates});
+function RatesView({ rates, setRates, currentJob, updateJob }) {
+  // If a job is active, edit that job's rates. Otherwise edit global defaults.
+  const jobRates    = currentJob?.rates || null;
+  const activeRates = jobRates || rates;
+  const [editing, setEditing] = useState({...activeRates});
+
+  // Re-sync editing state if job changes
+  useEffect(() => { setEditing({...(currentJob?.rates || rates)}); }, [currentJob?.id]);
+
   const save = () => {
     for (const [k,v] of Object.entries(editing)) {
       if (isNaN(Number(v.rate)) || Number(v.rate) < 0) { alert(`Invalid rate for ${v.label}`); return; }
     }
-    setRates(editing); alert("Rates saved!");
+    if (currentJob) {
+      updateJob(j => ({...j, rates: editing}));
+      alert("Rates saved for this job!");
+    } else {
+      setRates(editing);
+      alert("Default rates saved!");
+    }
   };
+
   const reset = () => {
-    if (confirm("Reset to default rates?")) { setEditing({...DEFAULT_RATES}); setRates({...DEFAULT_RATES}); }
+    if (currentJob) {
+      if (confirm("Reset this job's rates to current defaults?")) {
+        setEditing({...rates});
+        updateJob(j => ({...j, rates: {...rates}}));
+      }
+    } else {
+      if (confirm("Reset to built-in default rates?")) { setEditing({...DEFAULT_RATES}); setRates({...DEFAULT_RATES}); }
+    }
   };
+
   return (
     <div style={S.page}>
       <div style={S.pageHeader}><h1 style={S.h1}>Service Rates</h1></div>
+      {currentJob ? (
+        <div style={{background:"#1a2a1a", border:"1px solid #2a4a2a", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:C.green}}>
+          ✎ Editing rates for <strong>{currentJob.clientName||"this job"}</strong> only — does not affect other jobs or defaults.
+        </div>
+      ) : (
+        <div style={{background:"#1a1a2a", border:"1px solid #2a2a4a", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:"#818cf8"}}>
+          ℹ Editing default rates — applies to new jobs only. Open a job to edit its rates individually.
+        </div>
+      )}
       <section style={S.section}>
         <h2 style={S.h2}>Adjust Pricing</h2>
         <div style={S.ratesTable}>
@@ -306,7 +338,7 @@ function RatesView({ rates, setRates }) {
         </div>
         <div style={{...S.btnRow, marginTop:16}}>
           <button style={S.btnPrimary} onClick={save}>💾 Save Rates</button>
-          <button style={S.btnSecondary} onClick={reset}>↩ Reset Defaults</button>
+          <button style={S.btnSecondary} onClick={reset}>↩ Reset</button>
         </div>
       </section>
     </div>
@@ -876,8 +908,8 @@ function InvoiceView({ currentJob, updateJob, rates }) {
 }
 
 // ─── Jobs List ────────────────────────────────────────────────────────────────
-function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView }) {
-  const create = () => { const j=initialJob(); setJobs(p=>[j,...p]); setCurrentJob(j); setView("inspect"); };
+function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates }) {
+  const create = () => { const j=initialJob(rates); setJobs(p=>[j,...p]); setCurrentJob(j); setView("inspect"); };
   const open   = (job) => { setCurrentJob(job); setView("inspect"); };
   const remove = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
   return (
@@ -1774,14 +1806,14 @@ export default function App() {
         }}>{syncStatus}</div>
       )}
       <div style={S.content}>
-        {view==="jobs"     && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="jobs"     && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates}/>}
         {view==="inspect"  && <InspectView currentJob={currentJob} updateJob={updateJob}/>}
-        {view==="calc"     && <CalcView    currentJob={currentJob} updateJob={updateJob} rates={rates} setView={setView}/>}
-        {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
+        {view==="calc"     && <CalcView    currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates} setView={setView}/>}
+        {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates}/>}
         {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
-        {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
-        {view==="invoice"  && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={rates}/>}
-        {view==="rates"    && <RatesView   rates={rates} setRates={handleSetRates}/>}
+        {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates}/>}
+        {view==="invoice"  && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates}/>}
+        {view==="rates"    && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
       </div>
     </div>
   );
