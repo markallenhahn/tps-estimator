@@ -876,23 +876,33 @@ function LeafletMap({ jobs, onOpenJob, getDirectionsUrl }) {
         try {
           let lat = null, lng = null;
 
-          // Try geocoder 1: Photon (Komoot)
+          // Try geocoder 1: geocode.maps.co (free, CORS-enabled, no key)
           try {
-            const url = "https://photon.komoot.io/api/?q=" + encodeURIComponent(addr) + "&limit=1&lang=en";
+            const url = "https://geocode.maps.co/search?q=" + encodeURIComponent(addr) + "&api_key=67a1e1e426ea5870853507ixa4eded7";
             const res  = await fetch(url);
             const data = await res.json();
-            const f = data?.features?.[0];
-            if (f) { lng = f.geometry.coordinates[0]; lat = f.geometry.coordinates[1]; }
-          } catch(e1) { console.warn("Photon failed:", e1); }
+            if (data?.[0]) { lat = Number(data[0].lat); lng = Number(data[0].lon); }
+          } catch(e1) { console.warn("geocode.maps.co failed:", e1); }
 
-          // Try geocoder 2: Nominatim (fallback)
+          // Try geocoder 2: Photon (fallback)
           if (lat === null) {
             try {
-              const url2 = "https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(addr) + "&limit=1&countrycodes=us";
-              const res2 = await fetch(url2, { headers:{"Accept":"application/json"} });
+              const url2 = "https://photon.komoot.io/api/?q=" + encodeURIComponent(addr) + "&limit=1&lang=en";
+              const res2 = await fetch(url2);
               const data2 = await res2.json();
-              if (data2?.[0]) { lat = Number(data2[0].lat); lng = Number(data2[0].lon); }
-            } catch(e2) { console.warn("Nominatim failed:", e2); }
+              const f = data2?.features?.[0];
+              if (f) { lat = f.geometry.coordinates[1]; lng = f.geometry.coordinates[0]; }
+            } catch(e2) { console.warn("Photon failed:", e2); }
+          }
+
+          // Try geocoder 3: Nominatim (last resort)
+          if (lat === null) {
+            try {
+              const url3 = "https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(addr) + "&limit=1&countrycodes=us";
+              const res3 = await fetch(url3, { headers:{"Accept":"application/json"} });
+              const data3 = await res3.json();
+              if (data3?.[0]) { lat = Number(data3[0].lat); lng = Number(data3[0].lon); }
+            } catch(e3) { console.warn("Nominatim failed:", e3); }
           }
 
           if (lat === null) { console.warn("All geocoders failed for:", addr); continue; }
