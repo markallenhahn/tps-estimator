@@ -806,161 +806,254 @@ function InvoiceView({ currentJob, updateJob, rates }) {
 // ─── Schedule View ────────────────────────────────────────────────────────────
 function ScheduleView({ jobs, setCurrentJob, setView }) {
   const today    = new Date();
-  const [year,   setYear]   = useState(today.getFullYear());
-  const [month,  setMonth]  = useState(today.getMonth()); // 0-indexed
-  const [selectedDay, setSelectedDay] = useState(null); // "YYYY-MM-DD"
+  const [mode,        setMode]        = useState("calendar"); // "calendar" | "map"
+  const [year,        setYear]        = useState(today.getFullYear());
+  const [month,       setMonth]       = useState(today.getMonth());
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [mapJob,      setMapJob]      = useState(null); // job whose pin was tapped
+  const mapRef = useRef(null);
 
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const DAYS   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const pad    = n => String(n).padStart(2,"0");
+  const todayKey = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
 
-  const prevMonth = () => { if (month===0) { setMonth(11); setYear(y=>y-1); } else setMonth(m=>m-1); setSelectedDay(null); };
-  const nextMonth = () => { if (month===11) { setMonth(0);  setYear(y=>y+1); } else setMonth(m=>m+1); setSelectedDay(null); };
+  const prevMonth = () => { if (month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1); setSelectedDay(null); };
+  const nextMonth = () => { if (month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1); setSelectedDay(null); };
 
-  // Build calendar grid
-  const firstDay   = new Date(year, month, 1).getDay();
+  // Calendar grid
+  const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const cells = [];
   for (let i=0; i<firstDay; i++) cells.push(null);
   for (let d=1; d<=daysInMonth; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
+  while (cells.length%7!==0) cells.push(null);
 
-  // Map scheduledDate → jobs
   const jobsByDate = {};
   jobs.forEach(j => {
     if (!j.scheduledDate) return;
     if (!jobsByDate[j.scheduledDate]) jobsByDate[j.scheduledDate] = [];
     jobsByDate[j.scheduledDate].push(j);
   });
-
-  const pad    = n => String(n).padStart(2,"0");
-  const dateKey = d => d ? `${year}-${pad(month+1)}-${pad(d)}` : null;
-  const todayKey = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
-
+  const dateKey     = d => d ? `${year}-${pad(month+1)}-${pad(d)}` : null;
   const selectedJobs = selectedDay ? (jobsByDate[selectedDay]||[]) : [];
 
   const openJob = (job) => { setCurrentJob(job); setView("invoice"); };
+
+  // Upcoming jobs with addresses for map
+  const upcomingMapped = jobs
+    .filter(j => j.scheduledDate && j.scheduledDate >= todayKey && (j.address||j.city))
+    .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate));
+
+  // Build Google Maps embed URL with multiple markers
+  const buildMapUrl = () => {
+    if (upcomingMapped.length === 0) return null;
+    const base = "https://maps.google.com/maps?";
+    if (upcomingMapped.length === 1) {
+      const j = upcomingMapped[0];
+      const addr = encodeURIComponent([j.address, j.city, j.state, j.zip].filter(Boolean).join(" "));
+      return base + "q=" + addr + "&output=embed&z=14";
+    }
+    // Multiple jobs — show all as waypoints centered on first
+    const first = upcomingMapped[0];
+    const q = encodeURIComponent([first.address, first.city, first.state].filter(Boolean).join(" "));
+    return base + "q=" + q + "&output=embed&z=11";
+  };
+
+  // Directions URL for native maps
+  const getDirectionsUrl = (j) => {
+    const addr = encodeURIComponent([j.address, j.city, j.state, j.zip].filter(Boolean).join(", "));
+    // Works on both iOS (Apple Maps) and Android (Google Maps)
+    return `https://maps.google.com/maps?daddr=${addr}`;
+  };
 
   return (
     <div style={S.page}>
       <h1 style={S.h1}>Schedule</h1>
 
-      {/* Month navigator */}
-      <div style={S.calNav}>
-        <button style={S.calNavBtn} onClick={prevMonth}>‹</button>
-        <span style={S.calMonthLabel}>{MONTHS[month]} {year}</span>
-        <button style={S.calNavBtn} onClick={nextMonth}>›</button>
+      {/* Mode toggle */}
+      <div style={{...S.btnRow, marginBottom:16}}>
+        <button style={{...S.toggleBtn, flex:1, ...(mode==="calendar" ? S.toggleBtnActive : {})}}
+          onClick={() => { setMode("calendar"); setMapJob(null); }}>
+          📅 Calendar
+        </button>
+        <button style={{...S.toggleBtn, flex:1, ...(mode==="map" ? S.toggleBtnActive : {})}}
+          onClick={() => { setMode("map"); setSelectedDay(null); }}>
+          🗺 Map
+        </button>
       </div>
 
-      {/* Day-of-week headers */}
-      <div style={S.calGrid}>
-        {DAYS.map(d => <div key={d} style={S.calDayHeader}>{d}</div>)}
+      {/* ── CALENDAR MODE ── */}
+      {mode === "calendar" && (<>
+        <div style={S.calNav}>
+          <button style={S.calNavBtn} onClick={prevMonth}>‹</button>
+          <span style={S.calMonthLabel}>{MONTHS[month]} {year}</span>
+          <button style={S.calNavBtn} onClick={nextMonth}>›</button>
+        </div>
 
-        {cells.map((d, i) => {
-          const key    = dateKey(d);
-          const hasJobs = key && jobsByDate[key]?.length > 0;
-          const isToday = key === todayKey;
-          const isSel   = key === selectedDay;
-          const count   = hasJobs ? jobsByDate[key].length : 0;
+        <div style={S.calGrid}>
+          {DAYS.map(d => <div key={d} style={S.calDayHeader}>{d}</div>)}
+          {cells.map((d, i) => {
+            const key     = dateKey(d);
+            const hasJobs = key && jobsByDate[key]?.length > 0;
+            const isToday = key === todayKey;
+            const isSel   = key === selectedDay;
+            const count   = hasJobs ? jobsByDate[key].length : 0;
+            return (
+              <div key={i} style={{
+                ...S.calCell,
+                ...(isToday ? S.calCellToday : {}),
+                ...(isSel   ? S.calCellSelected : {}),
+                ...(d===null ? S.calCellEmpty : {}),
+                ...(hasJobs && !isSel ? S.calCellHasJobs : {}),
+              }} onClick={() => d && setSelectedDay(isSel ? null : key)}>
+                {d && <>
+                  <span style={S.calDayNum}>{d}</span>
+                  {hasJobs && (
+                    <div style={S.calDots}>
+                      {Array.from({length:Math.min(count,3)}).map((_,i2) =>
+                        <span key={i2} style={{...S.calDot,...(isSel?{background:"#fff"}:{})}}/>
+                      )}
+                      {count>3 && <span style={{...S.calDotMore,...(isSel?{color:"#fff"}:{})}}> +{count-3}</span>}
+                    </div>
+                  )}
+                </>}
+              </div>
+            );
+          })}
+        </div>
 
-          return (
-            <div key={i} style={{
-              ...S.calCell,
-              ...(isToday ? S.calCellToday : {}),
-              ...(isSel   ? S.calCellSelected : {}),
-              ...(d===null ? S.calCellEmpty : {}),
-              ...(hasJobs && !isSel ? S.calCellHasJobs : {}),
-            }}
-              onClick={() => d && setSelectedDay(isSel ? null : key)}>
-              {d && <>
-                <span style={S.calDayNum}>{d}</span>
-                {hasJobs && (
-                  <div style={S.calDots}>
-                    {Array.from({length:Math.min(count,3)}).map((_,i) =>
-                      <span key={i} style={{...S.calDot, ...(isSel?{background:"#fff"}:{})}}/>
-                    )}
-                    {count>3 && <span style={{...S.calDotMore, ...(isSel?{color:"#fff"}:{})}}>+{count-3}</span>}
-                  </div>
-                )}
-              </>}
+        {selectedDay && (
+          <section style={{...S.section, marginTop:20}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+              <h2 style={{...S.h2, margin:0}}>
+                {new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
+              </h2>
+              <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => setSelectedDay(null)}>✕</button>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Selected day job list */}
-      {selectedDay && (
-        <section style={{...S.section, marginTop:20}}>
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
-            <h2 style={{...S.h2, margin:0}}>
-              {new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
-            </h2>
-            <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => setSelectedDay(null)}>✕</button>
-          </div>
-
-          {selectedJobs.length === 0 ? (
-            <p style={{color:C.textMuted, fontSize:13}}>No jobs scheduled for this day.</p>
-          ) : (
-            selectedJobs.map(j => {
+            {selectedJobs.length === 0 ? (
+              <p style={{color:C.textMuted, fontSize:13}}>No jobs scheduled.</p>
+            ) : selectedJobs.map(j => {
               const total = (j.areas||[]).reduce((sum,a) => {
-                const svc = (j.rates||{})[a.serviceType] || {};
+                const svc = (j.rates||{})[a.serviceType]||{};
                 const qty = Number(a.measurement||0);
-                const tons = a.serviceType==="patch" ? (qty*3)/180 : 0;
-                return sum + (a.serviceType==="patch" ? tons*(svc.rate||650) : qty*(svc.rate||0));
-              }, 0);
+                const tons = a.serviceType==="patch"?(qty*3)/180:0;
+                return sum+(a.serviceType==="patch"?tons*(svc.rate||650):qty*(svc.rate||0));
+              },0);
               return (
-                <div key={j.id} style={S.schedJobCard} onClick={() => openJob(j)}>
+                <div key={j.id} style={S.schedJobCard}>
                   <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
-                    <div>
-                      <div style={S.schedJobName}>{j.clientName||"Unnamed Client"}</div>
-                      <div style={S.schedJobAddr}>{j.address||"No address"}{j.city ? ", "+j.city : ""}</div>
+                    <div style={{flex:1, minWidth:0, marginRight:8}}>
+                      <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                      <div style={S.schedJobAddr}>{j.address||""}{j.city?", "+j.city:""}</div>
                       <div style={S.schedJobMeta}>
-                        {j.areas.length} area{j.areas.length!==1?"s":""} · {j.photos.length} photo{j.photos.length!==1?"s":""}
-                        {total>0 ? " · $"+total.toFixed(0) : ""}
+                        {j.areas.length} area{j.areas.length!==1?"s":""}{total>0?" · $"+total.toFixed(0):""}
                       </div>
                       {j.notes && <div style={S.schedJobNotes}>{j.notes}</div>}
                     </div>
-                    <div style={{display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6}}>
-                      <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
-                      <span style={{fontSize:11, color:C.accent}}>Open →</span>
-                    </div>
+                    <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
+                  </div>
+                  <div style={{display:"flex", gap:8, marginTop:10}}>
+                    <button style={{...S.btnSmall, flex:1}} onClick={() => openJob(j)}>Open Job</button>
+                    {(j.address||j.city) && (
+                      <a href={getDirectionsUrl(j)} target="_blank" rel="noopener noreferrer"
+                        style={{...S.btnSmall, flex:1, background:"#1a2a3a", color:"#60a5fa", textDecoration:"none", textAlign:"center"}}>
+                        🧭 Directions
+                      </a>
+                    )}
                   </div>
                 </div>
               );
-            })
-          )}
-        </section>
-      )}
+            })}
+          </section>
+        )}
 
-      {/* Upcoming jobs list */}
-      {!selectedDay && (() => {
-        const upcoming = jobs
-          .filter(j => j.scheduledDate && j.scheduledDate >= todayKey)
-          .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate))
-          .slice(0, 10);
-        if (!upcoming.length) return null;
-        return (
-          <section style={{...S.section, marginTop:20}}>
-            <h2 style={S.h2}>Upcoming</h2>
-            {upcoming.map(j => (
-              <div key={j.id} style={S.schedJobCard} onClick={() => openJob(j)}>
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-                  <div>
-                    <div style={S.schedJobName}>{j.clientName||"Unnamed Client"}</div>
-                    <div style={S.schedJobAddr}>{j.address||"No address"}</div>
+        {!selectedDay && (() => {
+          const upcoming = jobs.filter(j=>j.scheduledDate&&j.scheduledDate>=todayKey)
+            .sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate)).slice(0,10);
+          if (!upcoming.length) return <div style={{...S.empty, marginTop:20}}><p style={S.emptyText}>No upcoming scheduled jobs.</p></div>;
+          return (
+            <section style={{...S.section, marginTop:20}}>
+              <h2 style={S.h2}>Upcoming</h2>
+              {upcoming.map(j => (
+                <div key={j.id} style={S.schedJobCard} onClick={() => openJob(j)}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+                    <div>
+                      <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                      <div style={S.schedJobAddr}>{j.address||"No address"}</div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:13, fontWeight:700, color:C.accent}}>
+                        {new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                      </div>
+                      <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
+                    </div>
                   </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:13, fontWeight:700, color:C.accent}}>{new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
-                    <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
+                </div>
+              ))}
+            </section>
+          );
+        })()}
+      </>)}
+
+      {/* ── MAP MODE ── */}
+      {mode === "map" && (
+        <div>
+          {upcomingMapped.length === 0 ? (
+            <div style={S.empty}>
+              <div style={S.emptyIcon}>🗺</div>
+              <p style={S.emptyText}>No upcoming scheduled jobs with addresses.</p>
+            </div>
+          ) : (<>
+            {/* Google Maps embed */}
+            <div style={{borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}`, marginBottom:16, height:300}}>
+              <iframe
+                ref={mapRef}
+                src={buildMapUrl()}
+                width="100%" height="300"
+                style={{border:"none", display:"block"}}
+                allowFullScreen loading="lazy"
+                title="Job locations map"
+              />
+            </div>
+
+            {/* Job list with directions */}
+            <h2 style={S.h2}>Upcoming Jobs ({upcomingMapped.length})</h2>
+            {upcomingMapped.map((j, idx) => (
+              <div key={j.id} style={S.schedJobCard}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                  <div style={{flex:1, minWidth:0, marginRight:8}}>
+                    <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:2}}>
+                      <div style={{
+                        width:22, height:22, borderRadius:"50%", background:C.accent,
+                        color:"#000", fontSize:11, fontWeight:800,
+                        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0
+                      }}>{idx+1}</div>
+                      <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                    </div>
+                    <div style={S.schedJobAddr}>{j.address||""}{j.city?", "+j.city:""}</div>
+                    <div style={S.schedJobMeta}>
+                      📅 {new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}
+                    </div>
                   </div>
+                  <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
+                </div>
+                <div style={{display:"flex", gap:8, marginTop:10}}>
+                  <button style={{...S.btnSmall, flex:1}} onClick={() => openJob(j)}>Open Job</button>
+                  <a href={getDirectionsUrl(j)} target="_blank" rel="noopener noreferrer"
+                    style={{...S.btnSmall, flex:1, background:"#1a2a3a", color:"#60a5fa", textDecoration:"none", textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center"}}>
+                    🧭 Directions
+                  </a>
                 </div>
               </div>
             ))}
-          </section>
-        );
-      })()}
+          </>)}
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ─── Jobs List ────────────────────────────────────────────────────────────────
 function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById }) {
