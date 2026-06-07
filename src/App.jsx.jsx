@@ -806,170 +806,109 @@ function InvoiceView({ currentJob, updateJob, rates }) {
   );
 }
 
-// ─── Leaflet Map Component ────────────────────────────────────────────────────
-function LeafletMap({ jobs, onOpenJob, getDirectionsUrl }) {
-  const mapDivRef = useRef(null);
-  const mapObjRef = useRef(null);
-  const [status, setStatus] = useState("Loading map...");
+// ─── Map Component ────────────────────────────────────────────────────────────
+function JobsMap({ jobs, getDirectionsUrl }) {
+  const iframeRef = useRef(null);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!iframeRef.current || jobs.length === 0) return;
 
-    const loadMap = async () => {
-      setStatus("Loading map...");
+    // Build a self-contained HTML page that loads Leaflet + OpenStreetMap
+    // and geocodes addresses using the browser inside the iframe (bypasses CSP)
+    const jobsJson = JSON.stringify(jobs.map((j, i) => ({
+      num:   i + 1,
+      name:  j.clientName || "Unnamed",
+      addr:  [j.address, j.city, j.state, j.zip].filter(Boolean).join(", "),
+      date:  j.scheduledDate,
+      dir:   getDirectionsUrl(j),
+    })));
 
-      // Load Leaflet CSS
-      if (!document.getElementById("leaflet-css")) {
-        const link = document.createElement("link");
-        link.id = "leaflet-css"; link.rel = "stylesheet";
-        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-        document.head.appendChild(link);
-      }
+    const html = `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>html,body,#map{margin:0;padding:0;width:100%;height:100%}
+#status{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;padding:5px 14px;border-radius:20px;font-family:sans-serif;font-size:12px;pointer-events:none;display:none}
+</style>
+</head><body>
+<div id="map"></div><div id="status"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const JOBS = ${jobsJson};
+const map  = L.map('map').setView([41.05,-75.35],10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'© OpenStreetMap contributors',maxZoom:19
+}).addTo(map);
 
-      // Load Leaflet JS
-      if (!window.L) {
-        await new Promise((res, rej) => {
-          const s = document.createElement("script");
-          s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-          s.onload = res; s.onerror = rej;
-          document.head.appendChild(s);
-        });
-      }
+const status = document.getElementById('status');
+const bounds = [];
 
-      if (cancelled || !mapDivRef.current) return;
+async function geocode(addr) {
+  // Try Photon first
+  try {
+    const r = await fetch('https://photon.komoot.io/api/?q='+encodeURIComponent(addr)+'&limit=1');
+    const d = await r.json();
+    const f = d?.features?.[0];
+    if(f) return [f.geometry.coordinates[1], f.geometry.coordinates[0]];
+  } catch(e){}
+  // Fallback: Nominatim
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(addr)+'&limit=1');
+    const d = await r.json();
+    if(d?.[0]) return [+d[0].lat, +d[0].lon];
+  } catch(e){}
+  return null;
+}
 
-      // Destroy old map
-      if (mapObjRef.current) { mapObjRef.current.remove(); mapObjRef.current = null; }
+(async()=>{
+  for(let i=0;i<JOBS.length;i++){
+    const j = JOBS[i];
+    if(!j.addr) continue;
+    status.style.display='block';
+    status.textContent='Locating '+(i+1)+' of '+JOBS.length+'...';
+    const coords = await geocode(j.addr);
+    if(!coords){await new Promise(r=>setTimeout(r,400));continue;}
+    bounds.push(coords);
+    const icon = L.divIcon({
+      className:'',
+      html:'<div style="width:28px;height:28px;border-radius:50%;background:#f59e0b;color:#000;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5)">'+j.num+'</div>',
+      iconSize:[28,28],iconAnchor:[14,14],popupAnchor:[0,-16]
+    });
+    const dateStr = j.date ? new Date(j.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+    L.marker(coords,{icon}).addTo(map).bindPopup(
+      '<div style="font-family:sans-serif;min-width:160px">'+
+      '<b style="font-size:14px">'+j.name+'</b><br>'+
+      '<span style="font-size:12px;color:#555">'+j.addr+'</span><br>'+
+      '<span style="font-size:11px;color:#888">📅 '+dateStr+'</span><br><br>'+
+      '<a href="'+j.dir+'" target="_blank" style="display:block;background:#1d4ed8;color:#fff;text-align:center;padding:6px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">🧭 Get Directions</a>'+
+      '</div>'
+    );
+    if(bounds.length>0) map.fitBounds(bounds,{padding:[40,40],maxZoom:13});
+    await new Promise(r=>setTimeout(r,400));
+  }
+  status.style.display='none';
+  if(bounds.length===0){status.style.display='block';status.textContent='Could not locate addresses';}
+})();
+</script></body></html>`;
 
-      const L = window.L;
-
-      // Fix default icon paths broken by bundlers
-      delete L.Icon.Default.prototype._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
-
-      const map = L.map(mapDivRef.current, { zoomControl: true });
-      mapObjRef.current = map;
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap contributors", maxZoom: 19,
-      }).addTo(map);
-
-      // Default view — Pocono area — while geocoding
-      map.setView([41.05, -75.35], 11);
-
-      const bounds = [];
-      let pinCount = 0;
-
-      for (let i = 0; i < jobs.length; i++) {
-        if (cancelled) return;
-        const j = jobs[i];
-        const addr = [j.address, j.city, j.state, j.zip].filter(Boolean).join(", ");
-        if (!addr.trim()) continue;
-
-        setStatus("Locating " + (i+1) + " of " + jobs.length + "...");
-        console.log("Geocoding:", addr);
-
-        try {
-          let lat = null, lng = null;
-
-          // Try geocoder 1: geocode.maps.co (free, CORS-enabled, no key)
-          try {
-            const url = "https://geocode.maps.co/search?q=" + encodeURIComponent(addr) + "&api_key=67a1e1e426ea5870853507ixa4eded7";
-            const res  = await fetch(url);
-            const data = await res.json();
-            if (data?.[0]) { lat = Number(data[0].lat); lng = Number(data[0].lon); }
-          } catch(e1) { console.warn("geocode.maps.co failed:", e1); }
-
-          // Try geocoder 2: Photon (fallback)
-          if (lat === null) {
-            try {
-              const url2 = "https://photon.komoot.io/api/?q=" + encodeURIComponent(addr) + "&limit=1&lang=en";
-              const res2 = await fetch(url2);
-              const data2 = await res2.json();
-              const f = data2?.features?.[0];
-              if (f) { lat = f.geometry.coordinates[1]; lng = f.geometry.coordinates[0]; }
-            } catch(e2) { console.warn("Photon failed:", e2); }
-          }
-
-          // Try geocoder 3: Nominatim (last resort)
-          if (lat === null) {
-            try {
-              const url3 = "https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(addr) + "&limit=1&countrycodes=us";
-              const res3 = await fetch(url3, { headers:{"Accept":"application/json"} });
-              const data3 = await res3.json();
-              if (data3?.[0]) { lat = Number(data3[0].lat); lng = Number(data3[0].lon); }
-            } catch(e3) { console.warn("Nominatim failed:", e3); }
-          }
-
-          if (lat === null) { console.warn("All geocoders failed for:", addr); continue; }
-          bounds.push([lat, lng]);
-          pinCount++;
-
-          const icon = L.divIcon({
-            className: "",
-            html: `<div style="width:30px;height:30px;border-radius:50%;background:#f59e0b;color:#000;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);line-height:1">${i+1}</div>`,
-            iconSize: [30,30], iconAnchor: [15,15], popupAnchor: [0,-18],
-          });
-
-          const dateStr = new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
-          const dirUrl  = getDirectionsUrl(j);
-
-          L.marker([lat, lng], {icon}).addTo(map).bindPopup(`
-            <div style="font-family:system-ui,sans-serif;min-width:170px;padding:4px 0">
-              <div style="font-weight:700;font-size:14px;margin-bottom:3px">${j.clientName||"Unnamed"}</div>
-              <div style="font-size:12px;color:#444;margin-bottom:3px">${addr}</div>
-              <div style="font-size:11px;color:#888;margin-bottom:10px">📅 ${dateStr}</div>
-              <a href="${dirUrl}" target="_blank"
-                style="display:block;background:#1d4ed8;color:#fff;text-align:center;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">
-                🧭 Get Directions
-              </a>
-            </div>
-          `);
-
-          // Fit bounds after each pin so map updates progressively
-          if (bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
-          }
-        } catch(e) {
-          console.warn("Geocode error for", addr, e);
-        }
-
-        // Delay between requests to avoid rate limiting
-        await new Promise(r => setTimeout(r, 500));
-      }
-
-      if (cancelled) return;
-      setStatus(pinCount > 0 ? "" : "Could not locate addresses — check that full addresses are entered.");
-    };
-
-    loadMap();
-    return () => {
-      cancelled = true;
-      if (mapObjRef.current) { mapObjRef.current.remove(); mapObjRef.current = null; }
-    };
+    const blob = new Blob([html], {type:"text/html"});
+    const url  = URL.createObjectURL(blob);
+    iframeRef.current.src = url;
+    return () => URL.revokeObjectURL(url);
   }, [jobs.map(j => j.id + "|" + j.scheduledDate).join(",")]);
 
   return (
-    <div style={{borderRadius:12, overflow:"hidden", border:`1px solid #2e2e2e`, marginBottom:16, position:"relative"}}>
-      <div ref={mapDivRef} style={{width:"100%", height:320}}/>
-      {status && (
-        <div style={{position:"absolute", bottom:8, left:"50%", transform:"translateX(-50%)",
-          background:"rgba(0,0,0,.75)", color:"#fff", fontSize:11, padding:"5px 12px",
-          borderRadius:20, zIndex:1000, whiteSpace:"nowrap", pointerEvents:"none"}}>
-          {status}
-        </div>
-      )}
+    <div style={{borderRadius:12, overflow:"hidden", border:`1px solid #2e2e2e`, marginBottom:16, height:320, position:"relative"}}>
+      <iframe ref={iframeRef} style={{width:"100%", height:"100%", border:"none", display:"block"}}
+        title="Job locations map" sandbox="allow-scripts allow-same-origin allow-popups allow-top-navigation"/>
       <div style={{position:"absolute", top:8, left:8, background:"rgba(0,0,0,.65)", color:"#fff",
-        fontSize:11, padding:"4px 8px", borderRadius:6, zIndex:1000, pointerEvents:"none"}}>
+        fontSize:11, padding:"4px 8px", borderRadius:6, zIndex:10, pointerEvents:"none"}}>
         Tap a pin for details
       </div>
     </div>
   );
 }
+
 
 // ─── Schedule View ────────────────────────────────────────────────────────────
 function ScheduleView({ jobs, setCurrentJob, setView }) {
@@ -1156,8 +1095,8 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
               <p style={S.emptyText}>No upcoming scheduled jobs with addresses.</p>
             </div>
           ) : (<>
-            {/* Leaflet map with all pins */}
-            <LeafletMap jobs={upcomingMapped} onOpenJob={openJob} getDirectionsUrl={getDirectionsUrl}/>
+            {/* Map with all pins */}
+            <JobsMap jobs={upcomingMapped} getDirectionsUrl={getDirectionsUrl}/>
 
             {/* Job list with directions */}
             <h2 style={{...S.h2, marginTop:16}}>Upcoming Jobs ({upcomingMapped.length})</h2>
