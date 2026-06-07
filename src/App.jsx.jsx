@@ -803,15 +803,117 @@ function InvoiceView({ currentJob, updateJob, rates }) {
   );
 }
 
+// ─── Leaflet Map Component ────────────────────────────────────────────────────
+function LeafletMap({ jobs, onOpenJob, getDirectionsUrl }) {
+  const mapDivRef = useRef(null);
+  const mapObjRef = useRef(null);
+
+  useEffect(() => {
+    // Load Leaflet CSS + JS if not already loaded
+    const loadLeaflet = async () => {
+      if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link");
+        link.id   = "leaflet-css";
+        link.rel  = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
+      }
+      if (!window.L) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+          s.onload = resolve; s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      if (!mapDivRef.current) return;
+
+      // Destroy previous map instance if any
+      if (mapObjRef.current) {
+        mapObjRef.current.remove();
+        mapObjRef.current = null;
+      }
+
+      const L = window.L;
+      const map = L.map(mapDivRef.current, { zoomControl:true });
+      mapObjRef.current = map;
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 19,
+      }).addTo(map);
+
+      // Geocode each job address using Nominatim (free, no key)
+      const bounds = [];
+      for (let i = 0; i < jobs.length; i++) {
+        const j = jobs[i];
+        const addr = [j.address, j.city, j.state, j.zip].filter(Boolean).join(", ");
+        try {
+          const res  = await fetch("https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(addr) + "&limit=1", {
+            headers: { "Accept-Language": "en" }
+          });
+          const data = await res.json();
+          if (!data[0]) continue;
+          const lat = Number(data[0].lat);
+          const lng = Number(data[0].lon);
+          bounds.push([lat, lng]);
+
+          // Numbered gold pin
+          const icon = L.divIcon({
+            className: "",
+            html: `<div style="width:28px;height:28px;border-radius:50%;background:#f59e0b;color:#000;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)">${i+1}</div>`,
+            iconSize: [28,28], iconAnchor: [14,14], popupAnchor: [0,-16],
+          });
+
+          const dateStr = new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
+          const marker = L.marker([lat, lng], {icon}).addTo(map);
+          marker.bindPopup(`
+            <div style="font-family:sans-serif;min-width:160px">
+              <div style="font-weight:700;font-size:14px;margin-bottom:4px">${j.clientName||"Unnamed"}</div>
+              <div style="font-size:12px;color:#555;margin-bottom:4px">${addr}</div>
+              <div style="font-size:11px;color:#888;margin-bottom:8px">📅 ${dateStr}</div>
+              <a href="${getDirectionsUrl(j)}" target="_blank"
+                style="display:block;background:#1d4ed8;color:#fff;text-align:center;padding:5px 10px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">
+                🧭 Directions
+              </a>
+            </div>
+          `);
+        } catch(e) { console.warn("Geocode failed for", addr, e); }
+      }
+
+      if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      } else {
+        // Default to Pocono area
+        map.setView([41.05, -75.35], 11);
+      }
+    };
+
+    loadLeaflet();
+
+    return () => {
+      if (mapObjRef.current) { mapObjRef.current.remove(); mapObjRef.current = null; }
+    };
+  }, [jobs.map(j=>j.id+j.scheduledDate).join(",")]);
+
+  return (
+    <div style={{borderRadius:12, overflow:"hidden", border:`1px solid #2e2e2e`, marginBottom:16, height:320, position:"relative"}}>
+      <div ref={mapDivRef} style={{width:"100%", height:"100%"}}/>
+      <div style={{position:"absolute", top:8, left:8, background:"rgba(0,0,0,.65)", color:"#fff", fontSize:11, padding:"4px 8px", borderRadius:6, zIndex:1000, pointerEvents:"none"}}>
+        Tap a pin for details
+      </div>
+    </div>
+  );
+}
+
 // ─── Schedule View ────────────────────────────────────────────────────────────
 function ScheduleView({ jobs, setCurrentJob, setView }) {
   const today    = new Date();
-  const [mode,        setMode]        = useState("calendar"); // "calendar" | "map"
+  const [mode,        setMode]        = useState("calendar");
   const [year,        setYear]        = useState(today.getFullYear());
   const [month,       setMonth]       = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState(null);
-  const [mapJob,      setMapJob]      = useState(null); // job whose pin was tapped
-  const mapRef = useRef(null);
 
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const DAYS   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -844,21 +946,6 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
   const upcomingMapped = jobs
     .filter(j => j.scheduledDate && j.scheduledDate >= todayKey && (j.address||j.city))
     .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate));
-
-  // Build Google Maps embed URL with multiple markers
-  const buildMapUrl = () => {
-    if (upcomingMapped.length === 0) return null;
-    const base = "https://maps.google.com/maps?";
-    if (upcomingMapped.length === 1) {
-      const j = upcomingMapped[0];
-      const addr = encodeURIComponent([j.address, j.city, j.state, j.zip].filter(Boolean).join(" "));
-      return base + "q=" + addr + "&output=embed&z=14";
-    }
-    // Multiple jobs — show all as waypoints centered on first
-    const first = upcomingMapped[0];
-    const q = encodeURIComponent([first.address, first.city, first.state].filter(Boolean).join(" "));
-    return base + "q=" + q + "&output=embed&z=11";
-  };
 
   // Directions URL for native maps
   const getDirectionsUrl = (j) => {
@@ -1005,20 +1092,11 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
               <p style={S.emptyText}>No upcoming scheduled jobs with addresses.</p>
             </div>
           ) : (<>
-            {/* Google Maps embed */}
-            <div style={{borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}`, marginBottom:16, height:300}}>
-              <iframe
-                ref={mapRef}
-                src={buildMapUrl()}
-                width="100%" height="300"
-                style={{border:"none", display:"block"}}
-                allowFullScreen loading="lazy"
-                title="Job locations map"
-              />
-            </div>
+            {/* Leaflet map with all pins */}
+            <LeafletMap jobs={upcomingMapped} onOpenJob={openJob} getDirectionsUrl={getDirectionsUrl}/>
 
             {/* Job list with directions */}
-            <h2 style={S.h2}>Upcoming Jobs ({upcomingMapped.length})</h2>
+            <h2 style={{...S.h2, marginTop:16}}>Upcoming Jobs ({upcomingMapped.length})</h2>
             {upcomingMapped.map((j, idx) => (
               <div key={j.id} style={S.schedJobCard}>
                 <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
