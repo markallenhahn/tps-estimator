@@ -111,10 +111,14 @@ const S = {
   jobCardAddr:{ color:C.textMuted, fontSize:13, marginBottom:4 },
   jobCardMeta:{ color:C.textDim, fontSize:12 },
   jobCardActions:{ borderTop:`1px solid ${C.border}`, padding:"8px 16px", display:"flex", gap:8 },
-  statusBadge:{ fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:20, textTransform:"uppercase" },
-  status_draft:{ background:"#2a2a1a", color:"#ca8a04" },
-  status_sent:{ background:"#1a2a1a", color:C.green },
-  status_signed:{ background:"#14532d", color:"#4ade80" },
+  statusBadge:{ fontSize:11, fontWeight:700, padding:\"3px 8px\", borderRadius:20, textTransform:\"uppercase\" },
+  status_draft:{     background:"#2a2a1a", color:"#ca8a04" },
+  status_sent:{      background:"#1a1a2a", color:"#a78bfa" },
+  status_signed:{    background:"#14532d", color:"#4ade80" },
+  status_scheduled:{ background:"#1a2a3a", color:"#60a5fa" },
+  status_booked:{    background:"#1a2535", color:"#38bdf8" },
+  status_completed:{ background:"#1a2a1a", color:"#86efac" },
+  status_paid:{      background:"#14532d", color:"#4ade80" },
   areaList:{ display:"flex", flexDirection:"column", gap:8 },
   areaRow:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 12px", display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 },
   areaRowMain:{ flex:1 }, areaName:{ fontWeight:600, fontSize:14 },
@@ -986,10 +990,13 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
 
 // ─── Jobs List ────────────────────────────────────────────────────────────────
 function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById }) {
-  const create = () => { const j=initialJob(rates); setJobs(p=>[j,...p]); setCurrentJob(j); setView("inspect"); };
-  const open   = (job) => { setCurrentJob(job); setView("inspect"); };
-  const remove = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
+  const create   = () => { const j=initialJob(rates); setJobs(p=>[j,...p]); setCurrentJob(j); setView("inspect"); };
+  const open     = (job) => { setCurrentJob(job); setView("inspect"); };
+  const remove   = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
   const schedule = (job, date) => updateJobById(job.id, j => ({...j, scheduledDate:date, status: date ? "scheduled" : j.status==="scheduled" ? "draft" : j.status}));
+  const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
+
+  const STATUSES = ["draft","sent","booked","scheduled","completed","paid","signed"];
 
   return (
     <div style={S.page}>
@@ -1019,6 +1026,16 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
             </div>
             <div style={S.jobCardActions}>
               <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
+              {/* Status selector */}
+              <select
+                value={j.status}
+                onChange={e => setStatus(j, e.target.value)}
+                onClick={e => e.stopPropagation()}
+                style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, minWidth:0}}>
+                {STATUSES.map(s => (
+                  <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+                ))}
+              </select>
               <div style={{display:"flex", alignItems:"center", gap:6}}>
                 <input type="date" defaultValue={j.scheduledDate||""}
                   onChange={e => schedule(j, e.target.value)}
