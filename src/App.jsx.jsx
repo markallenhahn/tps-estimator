@@ -868,18 +868,31 @@ function LeafletMap({ jobs, onOpenJob, getDirectionsUrl }) {
         if (!addr.trim()) continue;
 
         setStatus("Locating " + (i+1) + " of " + jobs.length + "...");
+        console.log("Geocoding:", addr);
 
         try {
-          // Use Photon (Komoot) — CORS-friendly, no API key needed
-          const url = "https://photon.komoot.io/api/?q=" + encodeURIComponent(addr) + "&limit=1&lang=en";
-          const res  = await fetch(url);
-          const data = await res.json();
-          if (cancelled) return;
+          let lat = null, lng = null;
 
-          const feature = data?.features?.[0];
-          if (!feature) { console.warn("No result for:", addr); continue; }
+          // Try geocoder 1: Photon (Komoot)
+          try {
+            const url = "https://photon.komoot.io/api/?q=" + encodeURIComponent(addr) + "&limit=1&lang=en";
+            const res  = await fetch(url);
+            const data = await res.json();
+            const f = data?.features?.[0];
+            if (f) { lng = f.geometry.coordinates[0]; lat = f.geometry.coordinates[1]; }
+          } catch(e1) { console.warn("Photon failed:", e1); }
 
-          const [lng, lat] = feature.geometry.coordinates;
+          // Try geocoder 2: Nominatim (fallback)
+          if (lat === null) {
+            try {
+              const url2 = "https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(addr) + "&limit=1&countrycodes=us";
+              const res2 = await fetch(url2, { headers:{"Accept":"application/json"} });
+              const data2 = await res2.json();
+              if (data2?.[0]) { lat = Number(data2[0].lat); lng = Number(data2[0].lon); }
+            } catch(e2) { console.warn("Nominatim failed:", e2); }
+          }
+
+          if (lat === null) { console.warn("All geocoders failed for:", addr); continue; }
           bounds.push([lat, lng]);
           pinCount++;
 
@@ -912,8 +925,8 @@ function LeafletMap({ jobs, onOpenJob, getDirectionsUrl }) {
           console.warn("Geocode error for", addr, e);
         }
 
-        // Small delay to be polite to the geocoder
-        await new Promise(r => setTimeout(r, 300));
+        // Delay between requests to avoid rate limiting
+        await new Promise(r => setTimeout(r, 500));
       }
 
       if (cancelled) return;
