@@ -1095,6 +1095,11 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
                   onChange={e => schedule(j, e.target.value)}
                   style={{...S.input, fontSize:11, padding:"4px 6px", width:130}}
                   title="Schedule date"/>
+                {j.scheduledDate && (
+                  <button style={{...S.btnSmall, padding:"4px 8px", background:"#2a1a1a", color:C.danger, border:`1px solid ${C.danger}`}}
+                    onClick={() => schedule(j, "")}
+                    title="Clear scheduled date">✕</button>
+                )}
               </div>
               <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
             </div>
