@@ -655,9 +655,27 @@ function InvoiceView({ currentJob, updateJob, rates }) {
         y += 44;
       }
 
-      // Thank you
+      // Thank you + closing language
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
       doc.text("Thank you for your business! " + COMPANY + " | " + PHONE, PW/2, y, {align:"center"});
+      y += 14;
+
+      if (!isPaid) {
+        const closingLines = [
+          "Please make checks payable to \"TPS Asphalt Maintenance, LLC\" and mailed to PO Box 728, Bartonsville, PA 18321.",
+          "",
+          "Thank you for your business. We welcome your feedback and would love to hear from you.",
+          "Please email Mark@TPS-Asphalt.com with any comments or concerns.",
+          "",
+          "Also, we would greatly appreciate your review on Google as it helps our business reach other customers!",
+        ];
+        doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+        closingLines.forEach(line => {
+          if (line === "") { y += 5; return; }
+          const wrapped = doc.splitTextToSize(line, usable);
+          wrapped.forEach(l => { doc.text(l, PW/2, y, {align:"center"}); y += 11; });
+        });
+      }
 
       // Save
       const filename = "TPS_" + (isPaid ? "PaidInvoice" : "Invoice") + "_" + invNum + ".pdf";
