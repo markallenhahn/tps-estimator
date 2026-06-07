@@ -111,6 +111,7 @@ const S = {
   statusBadge:{ fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:20, textTransform:"uppercase" },
   status_draft:{ background:"#2a2a1a", color:"#ca8a04" },
   status_sent:{ background:"#1a2a1a", color:C.green },
+  status_signed:{ background:"#14532d", color:"#4ade80" },
   areaList:{ display:"flex", flexDirection:"column", gap:8 },
   areaRow:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 12px", display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 },
   areaRowMain:{ flex:1 }, areaName:{ fontWeight:600, fontSize:14 },
@@ -175,10 +176,35 @@ const S = {
   toggleBtn:{ flex:1, background:C.surface2, border:`1px solid ${C.border}`, color:C.textMuted, borderRadius:8, padding:"12px 0", fontSize:14, fontWeight:600, cursor:"pointer" },
   toggleBtnActive:{ background:"#2a2a1a", border:`1px solid ${C.accent}`, color:C.accent },
   toggleBtnPaid:{ background:"#14532d", border:"1px solid #16a34a", color:"#4ade80" },
-  // Signature pad
+  // Schedule / Calendar
+  calNav:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 },
+  calNavBtn:{ background:C.surface2, border:`1px solid ${C.border}`, color:C.text, borderRadius:8, width:36, height:36, fontSize:20, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" },
+  calMonthLabel:{ fontWeight:700, fontSize:16, color:C.text },
+  calGrid:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 },
+  calDayHeader:{ textAlign:"center", fontSize:11, fontWeight:600, color:C.textMuted, padding:"4px 0", textTransform:"uppercase" },
+  calCell:{ minHeight:44, borderRadius:8, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"flex-start", padding:"4px 2px", cursor:"pointer", background:"transparent", border:"1px solid transparent", userSelect:"none" },
+  calCellEmpty:{ cursor:"default" },
+  calCellToday:{ border:`1px solid ${C.accent}` },
+  calCellSelected:{ background:C.accent },
+  calCellHasJobs:{ background:C.surface2 },
+  calDayNum:{ fontSize:13, fontWeight:500, lineHeight:1, marginBottom:2 },
+  calDots:{ display:"flex", gap:2, alignItems:"center" },
+  calDot:{ width:5, height:5, borderRadius:"50%", background:C.accent, flexShrink:0 },
+  calDotMore:{ fontSize:9, color:C.accent, fontWeight:700 },
+  schedJobCard:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", marginBottom:10, cursor:"pointer" },
+  schedJobName:{ fontWeight:700, fontSize:15, marginBottom:2 },
+  schedJobAddr:{ fontSize:12, color:C.textMuted, marginBottom:3 },
+  schedJobMeta:{ fontSize:11, color:C.textDim },
+  schedJobNotes:{ fontSize:11, color:C.textMuted, fontStyle:"italic", marginTop:4 },
+  jobScheduledDate:{ fontSize:11, color:C.accent, marginTop:3, fontWeight:600 },
+  status_scheduled:{ background:"#1a2a3a", color:"#60a5fa" },
   sigWrap:{ position:"relative", borderRadius:8, overflow:"hidden", border:`1px solid ${C.border}` },
   sigCanvas:{ display:"block", width:"100%", height:120, background:C.surface2, cursor:"crosshair", touchAction:"none" },
   sigSavedBadge:{ position:"absolute", top:6, right:8, fontSize:11, color:C.green, fontWeight:700 },
+  // Signed banner
+  signedBanner:{ background:"#14532d", border:"1px solid #16a34a", borderRadius:10, padding:"14px 16px" },
+  signedBannerTitle:{ fontWeight:700, fontSize:15, color:"#4ade80" },
+  signedBannerSub:{ fontSize:12, color:"#86efac", marginTop:3 },
   calcHeader:{ display:"flex", alignItems:"center", gap:6, marginBottom:6, paddingBottom:6, borderBottom:`1px solid ${C.border}` },
   calcHeaderLabel:{ flex:1, fontSize:11, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.06em" },
   calcHeaderX:{ fontSize:13, color:C.textDim, width:16, textAlign:"center" },
@@ -229,8 +255,8 @@ function TopNav({ view, setView }) {
   const tabsRef = useRef(null);
   const tabs = [
     {key:"jobs",     label:"Jobs",     icon:"📋"},
+    {key:"schedule", label:"Schedule", icon:"📅"},
     {key:"inspect",  label:"Inspect",  icon:"🔍"},
-    {key:"calc",     label:"Calc",     icon:"📏"},
     {key:"measure",  label:"Measure",  icon:"📐"},
     {key:"media",    label:"Media",    icon:"🖼️"},
     {key:"estimate", label:"Estimate", icon:"💰"},
@@ -399,141 +425,9 @@ function MediaView({ currentJob, updateJob }) {
     </div>
   );
 }
-
-// ─── Area Calculator View ──────────────────────────────────────────────────────
-function CalcView({ currentJob, updateJob, rates, setView }) {
-  const [rows,        setRows]        = useState([{id:1, l:"", w:""}]);
-  const [areaName,    setAreaName]    = useState("");
-  const [serviceType, setServiceType] = useState("sealcoat");
-  const [condition,   setCondition]   = useState("fair");
-  const [notes,       setNotes]       = useState("");
-
-  const addRow    = () => setRows(r => [...r, {id: Date.now(), l:"", w:""}]);
-  const removeRow = (id) => setRows(r => r.filter(x => x.id !== id));
-  const updateRow = (id, field, val) => setRows(r => r.map(x => x.id===id ? {...x,[field]:val} : x));
-
-  const areas     = rows.map(r => ({...r, area: Number(r.l||0) * Number(r.w||0)}));
-  const totalSqFt = areas.reduce((sum, r) => sum + r.area, 0);
-
-  const sendToMeasure = () => {
-    if (!currentJob) { alert("Please open a job first."); return; }
-    if (!areaName)   { alert("Please enter an area name."); return; }
-    if (totalSqFt === 0) { alert("Total area is 0 — check your measurements."); return; }
-    const newArea = {
-      id: Date.now(),
-      name: areaName,
-      serviceType,
-      measurement: String(Math.round(totalSqFt)),
-      condition,
-      notes,
-    };
-    updateJob(j => ({...j, areas:[...(j.areas||[]), newArea]}));
-    // reset
-    setRows([{id:1, l:"", w:""}]);
-    setAreaName("");
-    setNotes("");
-    setView("measure");
-  };
-
-  return (
-    <div style={S.page}>
-      <h1 style={S.h1}>Area Calculator</h1>
-      <p style={S.subhead}>Enter L × W for each rectangle — totals auto-calculate</p>
-
-      <section style={S.section}>
-        <h2 style={S.h2}>Rectangles</h2>
-
-        {/* Column headers */}
-        <div style={S.calcHeader}>
-          <span style={S.calcHeaderLabel}>#</span>
-          <span style={{...S.calcHeaderLabel, flex:2}}>Length (ft)</span>
-          <span style={S.calcHeaderX}>×</span>
-          <span style={{...S.calcHeaderLabel, flex:2}}>Width (ft)</span>
-          <span style={{...S.calcHeaderLabel, flex:2, textAlign:"right"}}>Sq Ft</span>
-          <span style={{width:28}}/>
-        </div>
-
-        {areas.map((r, i) => (
-          <div key={r.id} style={S.calcRow}>
-            <span style={S.calcRowNum}>{i+1}</span>
-            <input
-              type="number" min="0" placeholder="0"
-              value={r.l}
-              onChange={e => updateRow(r.id, "l", e.target.value)}
-              style={{...S.input, ...S.calcInput}}
-            />
-            <span style={S.calcX}>×</span>
-            <input
-              type="number" min="0" placeholder="0"
-              value={r.w}
-              onChange={e => updateRow(r.id, "w", e.target.value)}
-              style={{...S.input, ...S.calcInput}}
-            />
-            <div style={S.calcResult}>
-              {r.area > 0 ? r.area.toLocaleString() : "—"}
-              <span style={S.calcResultUnit}> sq ft</span>
-            </div>
-            {rows.length > 1 ? (
-              <button style={S.calcDeleteBtn} onClick={() => removeRow(r.id)}>✕</button>
-            ) : (
-              <span style={{width:28}}/>
-            )}
-          </div>
-        ))}
-
-        <button style={{...S.btnSecondary, marginTop:12}} onClick={addRow}>+ Add to Total</button>
-      </section>
-
-      {/* Total */}
-      <section style={S.section}>
-        <div style={S.calcTotalRow}>
-          <span style={S.calcTotalLabel}>Total Area</span>
-          <span style={S.calcTotalValue}>{totalSqFt.toLocaleString()} sq ft</span>
-        </div>
-      </section>
-
-      {/* Send to Measure */}
-      <section style={S.section}>
-        <h2 style={S.h2}>Add to Job</h2>
-        {!currentJob && (
-          <div style={{color:C.danger, fontSize:13, marginBottom:10}}>⚠️ Open a job first to add measurements.</div>
-        )}
-        <div style={S.formGrid}>
-          <label style={{...S.formLabel, gridColumn:"1 / -1"}}>Area / Zone Name *
-            <input value={areaName} onChange={e => setAreaName(e.target.value)}
-              style={S.input} placeholder="e.g. Main Driveway, Left Lane"/>
-          </label>
-          <label style={S.formLabel}>Service Type
-            <select value={serviceType} onChange={e => setServiceType(e.target.value)} style={S.input}>
-              {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
-          </label>
-          <label style={S.formLabel}>Condition
-            <select value={condition} onChange={e => setCondition(e.target.value)} style={S.input}>
-              {["good","fair","poor","failed"].map(c =>
-                <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
-            </select>
-          </label>
-        </div>
-        <label style={{...S.formLabel, marginTop:10}}>Notes
-          <input value={notes} onChange={e => setNotes(e.target.value)}
-            style={S.input} placeholder="Optional notes..."/>
-        </label>
-
-        <button
-          style={{...S.btnPrimary, marginTop:16, opacity: (!currentJob||totalSqFt===0||!areaName) ? 0.4 : 1}}
-          onClick={sendToMeasure}
-          disabled={!currentJob || totalSqFt===0 || !areaName}>
-          ➕ Add {totalSqFt > 0 ? totalSqFt.toLocaleString() + " sq ft" : ""} to Measurements
-        </button>
-      </section>
-    </div>
-  );
-}
-
 // ─── Invoice View ─────────────────────────────────────────────────────────────
 function InvoiceView({ currentJob, updateJob, rates }) {
-  const [invoiceType, setInvoiceType] = useState("due"); // "due" | "paid"
+  const [invoiceType, setInvoiceType] = useState("due");
   const [pdfLoading,  setPdfLoading]  = useState(false);
   const [sent,        setSent]        = useState(false);
   const [invoiceNum,  setInvoiceNum]  = useState("");
@@ -907,11 +801,172 @@ function InvoiceView({ currentJob, updateJob, rates }) {
   );
 }
 
+// ─── Schedule View ────────────────────────────────────────────────────────────
+function ScheduleView({ jobs, setCurrentJob, setView }) {
+  const today    = new Date();
+  const [year,   setYear]   = useState(today.getFullYear());
+  const [month,  setMonth]  = useState(today.getMonth()); // 0-indexed
+  const [selectedDay, setSelectedDay] = useState(null); // "YYYY-MM-DD"
+
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const DAYS   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+  const prevMonth = () => { if (month===0) { setMonth(11); setYear(y=>y-1); } else setMonth(m=>m-1); setSelectedDay(null); };
+  const nextMonth = () => { if (month===11) { setMonth(0);  setYear(y=>y+1); } else setMonth(m=>m+1); setSelectedDay(null); };
+
+  // Build calendar grid
+  const firstDay   = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const cells = [];
+  for (let i=0; i<firstDay; i++) cells.push(null);
+  for (let d=1; d<=daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  // Map scheduledDate → jobs
+  const jobsByDate = {};
+  jobs.forEach(j => {
+    if (!j.scheduledDate) return;
+    if (!jobsByDate[j.scheduledDate]) jobsByDate[j.scheduledDate] = [];
+    jobsByDate[j.scheduledDate].push(j);
+  });
+
+  const pad    = n => String(n).padStart(2,"0");
+  const dateKey = d => d ? `${year}-${pad(month+1)}-${pad(d)}` : null;
+  const todayKey = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+
+  const selectedJobs = selectedDay ? (jobsByDate[selectedDay]||[]) : [];
+
+  const openJob = (job) => { setCurrentJob(job); setView("invoice"); };
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Schedule</h1>
+
+      {/* Month navigator */}
+      <div style={S.calNav}>
+        <button style={S.calNavBtn} onClick={prevMonth}>‹</button>
+        <span style={S.calMonthLabel}>{MONTHS[month]} {year}</span>
+        <button style={S.calNavBtn} onClick={nextMonth}>›</button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div style={S.calGrid}>
+        {DAYS.map(d => <div key={d} style={S.calDayHeader}>{d}</div>)}
+
+        {cells.map((d, i) => {
+          const key    = dateKey(d);
+          const hasJobs = key && jobsByDate[key]?.length > 0;
+          const isToday = key === todayKey;
+          const isSel   = key === selectedDay;
+          const count   = hasJobs ? jobsByDate[key].length : 0;
+
+          return (
+            <div key={i} style={{
+              ...S.calCell,
+              ...(isToday ? S.calCellToday : {}),
+              ...(isSel   ? S.calCellSelected : {}),
+              ...(d===null ? S.calCellEmpty : {}),
+              ...(hasJobs && !isSel ? S.calCellHasJobs : {}),
+            }}
+              onClick={() => d && setSelectedDay(isSel ? null : key)}>
+              {d && <>
+                <span style={S.calDayNum}>{d}</span>
+                {hasJobs && (
+                  <div style={S.calDots}>
+                    {Array.from({length:Math.min(count,3)}).map((_,i) =>
+                      <span key={i} style={{...S.calDot, ...(isSel?{background:"#fff"}:{})}}/>
+                    )}
+                    {count>3 && <span style={{...S.calDotMore, ...(isSel?{color:"#fff"}:{})}}>+{count-3}</span>}
+                  </div>
+                )}
+              </>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Selected day job list */}
+      {selectedDay && (
+        <section style={{...S.section, marginTop:20}}>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+            <h2 style={{...S.h2, margin:0}}>
+              {new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
+            </h2>
+            <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => setSelectedDay(null)}>✕</button>
+          </div>
+
+          {selectedJobs.length === 0 ? (
+            <p style={{color:C.textMuted, fontSize:13}}>No jobs scheduled for this day.</p>
+          ) : (
+            selectedJobs.map(j => {
+              const total = (j.areas||[]).reduce((sum,a) => {
+                const svc = (j.rates||{})[a.serviceType] || {};
+                const qty = Number(a.measurement||0);
+                const tons = a.serviceType==="patch" ? (qty*3)/180 : 0;
+                return sum + (a.serviceType==="patch" ? tons*(svc.rate||650) : qty*(svc.rate||0));
+              }, 0);
+              return (
+                <div key={j.id} style={S.schedJobCard} onClick={() => openJob(j)}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                    <div>
+                      <div style={S.schedJobName}>{j.clientName||"Unnamed Client"}</div>
+                      <div style={S.schedJobAddr}>{j.address||"No address"}{j.city ? ", "+j.city : ""}</div>
+                      <div style={S.schedJobMeta}>
+                        {j.areas.length} area{j.areas.length!==1?"s":""} · {j.photos.length} photo{j.photos.length!==1?"s":""}
+                        {total>0 ? " · $"+total.toFixed(0) : ""}
+                      </div>
+                      {j.notes && <div style={S.schedJobNotes}>{j.notes}</div>}
+                    </div>
+                    <div style={{display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6}}>
+                      <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
+                      <span style={{fontSize:11, color:C.accent}}>Open →</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </section>
+      )}
+
+      {/* Upcoming jobs list */}
+      {!selectedDay && (() => {
+        const upcoming = jobs
+          .filter(j => j.scheduledDate && j.scheduledDate >= todayKey)
+          .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate))
+          .slice(0, 10);
+        if (!upcoming.length) return null;
+        return (
+          <section style={{...S.section, marginTop:20}}>
+            <h2 style={S.h2}>Upcoming</h2>
+            {upcoming.map(j => (
+              <div key={j.id} style={S.schedJobCard} onClick={() => openJob(j)}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+                  <div>
+                    <div style={S.schedJobName}>{j.clientName||"Unnamed Client"}</div>
+                    <div style={S.schedJobAddr}>{j.address||"No address"}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:13, fontWeight:700, color:C.accent}}>{new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
+                    <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </section>
+        );
+      })()}
+    </div>
+  );
+}
+
 // ─── Jobs List ────────────────────────────────────────────────────────────────
-function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates }) {
+function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById }) {
   const create = () => { const j=initialJob(rates); setJobs(p=>[j,...p]); setCurrentJob(j); setView("inspect"); };
   const open   = (job) => { setCurrentJob(job); setView("inspect"); };
   const remove = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
+  const schedule = (job, date) => updateJobById(job.id, j => ({...j, scheduledDate:date, status: date ? "scheduled" : j.status==="scheduled" ? "draft" : j.status}));
+
   return (
     <div style={S.page}>
       <div style={S.pageHeader}>
@@ -928,15 +983,24 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates }) {
         {jobs.map(j => (
           <div key={j.id} style={S.jobCard}>
             <div style={S.jobCardTop} onClick={() => open(j)}>
-              <div>
+              <div style={{flex:1, minWidth:0}}>
                 <div style={S.jobCardName}>{j.clientName||"Unnamed Client"}</div>
                 <div style={S.jobCardAddr}>{j.address||"No address"}</div>
                 <div style={S.jobCardMeta}>{j.date} · {j.areas.length} area{j.areas.length!==1?"s":""} · {j.photos.length} photo{j.photos.length!==1?"s":""}</div>
+                {j.scheduledDate && (
+                  <div style={S.jobScheduledDate}>📅 {j.scheduledDate}</div>
+                )}
               </div>
               <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
             </div>
             <div style={S.jobCardActions}>
               <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
+              <div style={{display:"flex", alignItems:"center", gap:6}}>
+                <input type="date" defaultValue={j.scheduledDate||""}
+                  onChange={e => schedule(j, e.target.value)}
+                  style={{...S.input, fontSize:11, padding:"4px 6px", width:130}}
+                  title="Schedule date"/>
+              </div>
               <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
             </div>
           </div>
@@ -1140,13 +1204,32 @@ function InspectView({ currentJob, updateJob }) {
 
 // ─── Measure View ─────────────────────────────────────────────────────────────
 function MeasureView({ currentJob, updateJob, rates }) {
-  const [newArea, setNewArea] = useState(initialArea());
+  const [newArea,    setNewArea]    = useState(initialArea());
+  const [useCalc,    setUseCalc]    = useState(false);
+  const [calcRows,   setCalcRows]   = useState([{id:1, l:"", w:""}]);
+
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+
+  // Calc helpers
+  const calcAreas   = calcRows.map(r => ({...r, area: Number(r.l||0) * Number(r.w||0)}));
+  const calcTotal   = calcAreas.reduce((sum, r) => sum + r.area, 0);
+  const addCalcRow  = () => setCalcRows(r => [...r, {id:Date.now(), l:"", w:""}]);
+  const removeCalcRow = (id) => setCalcRows(r => r.filter(x => x.id !== id));
+  const updateCalcRow = (id, field, val) => setCalcRows(r => r.map(x => x.id===id ? {...x,[field]:val} : x));
+  const applyCalc   = () => {
+    if (calcTotal > 0) {
+      setNewArea(p => ({...p, measurement:String(Math.round(calcTotal))}));
+      setUseCalc(false);
+      setCalcRows([{id:1, l:"", w:""}]);
+    }
+  };
 
   const addArea = () => {
     if (!newArea.name || !newArea.measurement) { alert("Name and measurement are required."); return; }
     updateJob(j => ({...j, areas:[...j.areas, {...newArea, id:Date.now()}]}));
     setNewArea(initialArea());
+    setCalcRows([{id:1, l:"", w:""}]);
+    setUseCalc(false);
   };
   const removeArea = (id) => updateJob(j => ({...j, areas:j.areas.filter(a => a.id!==id)}));
   const totalBySvc = currentJob.areas.reduce((acc, a) => {
@@ -1164,29 +1247,82 @@ function MeasureView({ currentJob, updateJob, rates }) {
         <div style={S.formGrid}>
           <label style={S.formLabel}>Area / Zone Name *
             <input value={newArea.name} onChange={e => setNewArea(p => ({...p, name:e.target.value}))}
-              style={S.input} placeholder="e.g. Main lot, Driveway, Row 3 crack"/>
+              style={S.input} placeholder="e.g. Main lot, Driveway, Row 3"/>
           </label>
           <label style={S.formLabel}>Service Type *
             <select value={newArea.serviceType} onChange={e => setNewArea(p => ({...p, serviceType:e.target.value}))} style={S.input}>
               {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
           </label>
-          <label style={S.formLabel}>
-            {newArea.serviceType==="patch" ? "Square Feet * (tons auto-calc)" : rates[newArea.serviceType]?.unit==="sqft" ? "Square Feet *" : "Linear Feet *"}
-            <input type="number" value={newArea.measurement} min="0"
-              onChange={e => setNewArea(p => ({...p, measurement:e.target.value}))} style={S.input} placeholder="0"/>
-          </label>
           <label style={S.formLabel}>Condition
             <select value={newArea.condition} onChange={e => setNewArea(p => ({...p, condition:e.target.value}))} style={S.input}>
               {["good","fair","poor","failed"].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
             </select>
           </label>
+          <label style={S.formLabel}>
+            {newArea.serviceType==="patch" ? "Sq Ft * (tons auto-calc)" : rates[newArea.serviceType]?.unit==="sqft" ? "Square Feet *" : "Linear Feet *"}
+            <div style={{display:"flex", gap:8, alignItems:"center"}}>
+              <input type="number" value={newArea.measurement} min="0"
+                onChange={e => setNewArea(p => ({...p, measurement:e.target.value}))}
+                style={{...S.input, flex:1}} placeholder="0"/>
+              {rates[newArea.serviceType]?.unit !== "linft" && (
+                <button style={{...S.btnSecondary, fontSize:11, padding:"6px 10px", whiteSpace:"nowrap"}}
+                  onClick={() => setUseCalc(v => !v)}>
+                  {useCalc ? "▲ Hide Calc" : "📐 L×W"}
+                </button>
+              )}
+            </div>
+          </label>
         </div>
+
+        {/* Inline L×W Calculator */}
+        {useCalc && (
+          <div style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", marginTop:10}}>
+            <div style={S.calcHeader}>
+              <span style={S.calcHeaderLabel}>#</span>
+              <span style={{...S.calcHeaderLabel, flex:2}}>Length (ft)</span>
+              <span style={S.calcHeaderX}>×</span>
+              <span style={{...S.calcHeaderLabel, flex:2}}>Width (ft)</span>
+              <span style={{...S.calcHeaderLabel, flex:2, textAlign:"right"}}>Sq Ft</span>
+              <span style={{width:28}}/>
+            </div>
+            {calcAreas.map((r, i) => (
+              <div key={r.id} style={S.calcRow}>
+                <span style={S.calcRowNum}>{i+1}</span>
+                <input type="number" min="0" placeholder="0" value={r.l}
+                  onChange={e => updateCalcRow(r.id,"l",e.target.value)}
+                  style={{...S.input, ...S.calcInput}}/>
+                <span style={S.calcX}>×</span>
+                <input type="number" min="0" placeholder="0" value={r.w}
+                  onChange={e => updateCalcRow(r.id,"w",e.target.value)}
+                  style={{...S.input, ...S.calcInput}}/>
+                <div style={S.calcResult}>
+                  {r.area > 0 ? r.area.toLocaleString() : "—"}
+                  <span style={S.calcResultUnit}> sf</span>
+                </div>
+                {calcRows.length > 1
+                  ? <button style={S.calcDeleteBtn} onClick={() => removeCalcRow(r.id)}>✕</button>
+                  : <span style={{width:28}}/>}
+              </div>
+            ))}
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:10}}>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={addCalcRow}>+ Add to Total</button>
+              <div style={{display:"flex", alignItems:"center", gap:12}}>
+                <span style={{fontWeight:800, fontSize:16, color:C.accent}}>{calcTotal.toLocaleString()} sq ft</span>
+                <button style={{...S.btnPrimary, fontSize:12, padding:"6px 14px"}}
+                  onClick={applyCalc} disabled={calcTotal===0}>
+                  Use This →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {newArea.serviceType==="patch" && Number(newArea.measurement)>0 && (
           <div style={S.patchPreview}>
             {Number(newArea.measurement).toLocaleString()} sq ft →{" "}
             <strong>{calcPatchTons(newArea.measurement).toFixed(2)} tons</strong> →{" "}
-            <strong style={{color:C.accent}}>{formatCurrency(calcPatchTons(newArea.measurement)*rates.patch.rate)}</strong>
+            <strong style={{color:C.accent}}>{formatCurrency(calcPatchTons(newArea.measurement)*(rates.patch?.rate||650))}</strong>
           </div>
         )}
         <label style={{...S.formLabel, marginTop:10}}>Notes
@@ -1253,19 +1389,80 @@ function MeasureView({ currentJob, updateJob, rates }) {
 function EstimateView({ currentJob, updateJob, rates }) {
   const [sent,       setSent]       = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const clientSigRef  = useRef(null);
+  const clientDrawing = useRef(false);
 
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
+  const isSigned = !!currentJob.clientSignature;
+  const isLocked = isSigned;
+
   const margin   = Number(currentJob.margin   || 0);
   const discount = Number(currentJob.discount || 0);
-  const setMargin   = val => updateJob(j => ({...j, margin:   Number(val)}));
-  const setDiscount = val => updateJob(j => ({...j, discount: Number(val)}));
+  const setMargin   = val => { if (isLocked) return; updateJob(j => ({...j, margin:   Number(val)})); };
+  const setDiscount = val => { if (isLocked) return; updateJob(j => ({...j, discount: Number(val)})); };
 
   const subtotal    = currentJob.areas.reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
   const marginAmt   = subtotal * (margin/100);
   const discountAmt = (subtotal + marginAmt) * (discount/100);
   const total       = subtotal + marginAmt - discountAmt;
   const cityLine    = [currentJob.city, currentJob.state].filter(Boolean).join(", ") + (currentJob.zip ? " " + currentJob.zip : "");
+
+  // ── Client signature pad ──
+  const getPos = (e, c) => {
+    const rect = c.getBoundingClientRect();
+    const src  = e.touches ? e.touches[0] : e;
+    return { x:(src.clientX-rect.left)*(c.width/rect.width), y:(src.clientY-rect.top)*(c.height/rect.height) };
+  };
+  const cSigStart = (e) => {
+    if (isLocked) return; e.preventDefault();
+    const c = clientSigRef.current; if (!c) return;
+    const pos = getPos(e,c); c.getContext("2d").beginPath(); c.getContext("2d").moveTo(pos.x,pos.y);
+    clientDrawing.current = true;
+  };
+  const cSigMove = (e) => {
+    if (isLocked || !clientDrawing.current) return; e.preventDefault();
+    const c = clientSigRef.current; if (!c) return;
+    const ctx = c.getContext("2d"); const pos = getPos(e,c);
+    ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.strokeStyle="#f5f5f5";
+    ctx.lineTo(pos.x,pos.y); ctx.stroke();
+  };
+  const cSigEnd = (e) => { e.preventDefault(); clientDrawing.current = false; };
+  const clearClientSig = () => {
+    if (isLocked) return;
+    const c = clientSigRef.current; if (!c) return;
+    c.getContext("2d").clearRect(0,0,c.width,c.height);
+  };
+
+  // Restore client signature on canvas if already signed
+  useEffect(() => {
+    if (!currentJob?.clientSignature || !clientSigRef.current) return;
+    const img = new Image();
+    img.onload = () => clientSigRef.current?.getContext("2d").drawImage(img,0,0);
+    img.src = currentJob.clientSignature;
+  }, [currentJob?.id, currentJob?.clientSignature]);
+
+  const acceptAndSign = async () => {
+    const c = clientSigRef.current;
+    if (!c) return;
+    // Check canvas isn't blank
+    const px = c.getContext("2d").getImageData(0,0,c.width,c.height).data;
+    const hasInk = Array.from(px).some((v,i) => i%4===3 && v>0);
+    if (!hasInk) { alert("Please have the client sign before accepting."); return; }
+    const sigData   = c.toDataURL("image/png");
+    const signedAt  = new Date().toLocaleString();
+    const printName = currentJob.clientName || "";
+    updateJob(j => ({...j, clientSignature:sigData, clientSignedAt:signedAt, clientPrintName:printName, status:"signed"}));
+    // Auto-generate PDF after a short delay so state settles
+    setTimeout(() => generatePDF(sigData, signedAt, printName), 600);
+  };
+
+  const unsign = () => {
+    if (!confirm("Remove client signature and unlock estimate?")) return;
+    const c = clientSigRef.current;
+    if (c) c.getContext("2d").clearRect(0,0,c.width,c.height);
+    updateJob(j => ({...j, clientSignature:null, clientSignedAt:null, clientPrintName:null, status:"draft"}));
+  };
 
   const buildEmailBody = () => [
     "ESTIMATE", "",
@@ -1300,7 +1497,7 @@ function EstimateView({ currentJob, updateJob, rates }) {
   const copyEstimate = () => { navigator.clipboard.writeText(buildEmailBody()); alert("Copied to clipboard."); };
 
   // ── PDF via jsPDF (pure browser, no API) ──────────────────────────────────
-  const generatePDF = async () => {
+  const generatePDF = async (clientSigOverride, signedAtOverride, printNameOverride) => {
     if (currentJob.areas.length === 0) { alert("Add at least one line item before generating a PDF."); return; }
     setPdfLoading(true);
 
@@ -1498,6 +1695,10 @@ function EstimateView({ currentJob, updateJob, rates }) {
       y += 14;
 
       // ── Signature block — 2 rows × 2 cols ──
+      const clientSig  = clientSigOverride  || currentJob.clientSignature  || null;
+      const signedAt   = signedAtOverride   || currentJob.clientSignedAt   || null;
+      const printName  = printNameOverride  || currentJob.clientPrintName  || null;
+
       const sigLabels = ["Client Signature", "Print Name", "Date", COMPANY + " Authorized Representative"];
       const sigW = (usable - 30) / 2;
       const sigRowH = 52;
@@ -1510,11 +1711,25 @@ function EstimateView({ currentJob, updateJob, rates }) {
           const sx = ML + col * (sigW + 30);
           doc.line(sx, lineY, sx + sigW, lineY);
           doc.text(sigLabels[si], sx, lineY + 11);
-          // Draw saved signature above the TPS rep line (index 3)
+          // Client signature image
+          if (si === 0 && clientSig) {
+            try { doc.addImage(clientSig, "PNG", sx, lineY - 28, sigW, 26); } catch(e) {}
+          }
+          // Print name pre-filled
+          if (si === 1 && printName) {
+            doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+            doc.setFontSize(10); doc.text(printName, sx, lineY - 8);
+            doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY); doc.setFontSize(8);
+          }
+          // Signed date
+          if (si === 2 && signedAt) {
+            doc.setFont("helvetica","normal"); doc.setTextColor(...BLACK);
+            doc.setFontSize(9); doc.text(signedAt, sx, lineY - 8);
+            doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY); doc.setFontSize(8);
+          }
+          // TPS rep signature
           if (si === 3 && currentJob.signature) {
-            try {
-              doc.addImage(currentJob.signature, "PNG", sx, lineY - 28, sigW, 26);
-            } catch(e) {}
+            try { doc.addImage(currentJob.signature, "PNG", sx, lineY - 28, sigW, 26); } catch(e) {}
           }
         });
       });
@@ -1619,6 +1834,48 @@ function EstimateView({ currentJob, updateJob, rates }) {
           </div>
         )}
         <div style={S.estimateFooter}>Valid 30 days · 25% deposit to schedule · Balance due on completion</div>
+      </section>
+
+      {/* Client Acceptance */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Client Acceptance</h2>
+
+        {isSigned ? (
+          <div style={S.signedBanner}>
+            <div style={S.signedBannerTitle}>✅ Signed by {currentJob.clientPrintName||currentJob.clientName}</div>
+            <div style={S.signedBannerSub}>{currentJob.clientSignedAt}</div>
+            <img src={currentJob.clientSignature} alt="Client Signature"
+              style={{display:"block", maxWidth:260, marginTop:10, borderRadius:6, border:`1px solid ${C.border}`}}/>
+            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={unsign}>🔓 Remove Signature</button>
+          </div>
+        ) : (
+          <>
+            <p style={{fontSize:12, color:C.textMuted, marginBottom:14, marginTop:-8}}>
+              Hand the phone to the client to review and sign below.
+            </p>
+            <label style={S.formLabel}>Print Name
+              <input value={currentJob.clientPrintName ?? currentJob.clientName ?? ""}
+                onChange={e => updateJob(j => ({...j, clientPrintName:e.target.value}))}
+                style={S.input} placeholder="Client full name"/>
+            </label>
+            <div style={{marginTop:12, marginBottom:6, fontSize:12, color:C.textMuted}}>Signature</div>
+            <div style={S.sigWrap}>
+              <canvas
+                ref={clientSigRef}
+                width={560} height={140}
+                style={{...S.sigCanvas, cursor: isLocked ? "not-allowed" : "crosshair"}}
+                onMouseDown={cSigStart} onMouseMove={cSigMove} onMouseUp={cSigEnd} onMouseLeave={cSigEnd}
+                onTouchStart={cSigStart} onTouchMove={cSigMove} onTouchEnd={cSigEnd}
+              />
+            </div>
+            <div style={{display:"flex", gap:10, marginTop:10}}>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearClientSig}>🗑 Clear</button>
+              <button style={{...S.btnPrimary, flex:1}} onClick={acceptAndSign}>
+                ✍️ Accept &amp; Sign Estimate
+              </button>
+            </div>
+          </>
+        )}
       </section>
 
       {currentJob.photos.length > 0 && (
@@ -1764,6 +2021,23 @@ export default function App() {
     });
   };
 
+  // Update any job by ID (used for scheduling from JobsView)
+  const updateJobById = (id, fn) => {
+    setJobs(prev => {
+      const next = prev.map(j => j.id===id ? fn(j) : j);
+      const updated = next.find(j => j.id===id);
+      if (updated) {
+        pendingSyncRef.current[updated.id] = updated;
+        clearTimeout(syncTimerRef.current[updated.id]);
+        syncTimerRef.current[updated.id] = setTimeout(() => {
+          const toSync = pendingSyncRef.current[updated.id];
+          if (toSync) syncJob(toSync);
+        }, 800);
+      }
+      return next;
+    });
+  };
+
   const setCurrentJob = job => setCurrentJobId(job.id);
 
   const handleSetRates = (r) => { setRates(r); syncRates(r); };
@@ -1787,10 +2061,13 @@ export default function App() {
 
   if (loading) return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
-      <div style={{textAlign:"center"}}>
-        <div style={{fontSize:32, marginBottom:12}}>⬛</div>
-        <div style={{color:C.accent, fontWeight:700, fontSize:16}}>TPS</div>
-        <div style={{color:C.textMuted, fontSize:13, marginTop:6}}>Loading...</div>
+      <div style={{textAlign:"center", padding:"0 40px"}}>
+        <img
+          src={"data:image/png;base64," + LOGO_B64}
+          alt="TPS Asphalt Maintenance"
+          style={{width:"100%", maxWidth:280, display:"block", margin:"0 auto"}}
+        />
+        <div style={{color:C.textMuted, fontSize:13, marginTop:20, letterSpacing:"0.08em"}}>Loading...</div>
       </div>
     </div>
   );
@@ -1806,9 +2083,9 @@ export default function App() {
         }}>{syncStatus}</div>
       )}
       <div style={S.content}>
-        {view==="jobs"     && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates}/>}
+        {view==="jobs"     && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById}/>}
+        {view==="schedule" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="inspect"  && <InspectView currentJob={currentJob} updateJob={updateJob}/>}
-        {view==="calc"     && <CalcView    currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates} setView={setView}/>}
         {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates}/>}
         {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
         {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates}/>}
