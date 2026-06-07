@@ -13,6 +13,7 @@ const DEFAULT_RATES = {
   crackfill: { label:"Crack Fill",    unit:"linft", rate:1.50, rateLabel:"$/lin ft" },
   patch:     { label:"Patching",      unit:"sqft",  rate:650,  rateLabel:"$/ton"    },
   striping:  { label:"Line Striping", unit:"linft", rate:1.25, rateLabel:"$/lin ft" },
+  other:     { label:"Other",         unit:"flat",  rate:0,    rateLabel:"flat $"   },
 };
 
 const initialJob = (rates) => ({
@@ -38,7 +39,9 @@ function calcLineAmt(area, rates) {
   const svc = rates[area.serviceType];
   if (!svc) return 0;
   const qty = Number(area.measurement || 0);
-  return area.serviceType === "patch" ? calcPatchTons(qty) * svc.rate : qty * svc.rate;
+  if (area.serviceType === "patch") return calcPatchTons(qty) * svc.rate;
+  if (area.serviceType === "other") return qty; // measurement IS the price for other
+  return qty * svc.rate;
 }
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -1436,8 +1439,12 @@ function MeasureView({ currentJob, updateJob, rates }) {
   const [newArea,    setNewArea]    = useState(initialArea());
   const [useCalc,    setUseCalc]    = useState(false);
   const [calcRows,   setCalcRows]   = useState([{id:1, l:"", w:""}]);
+  const [editingId,  setEditingId]  = useState(null); // id of line item being edited
+  const [editArea,   setEditArea]   = useState(null); // copy of area being edited
 
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+
+  const isOther = (svcType) => svcType === "other";
 
   // Calc helpers
   const calcAreas   = calcRows.map(r => ({...r, area: Number(r.l||0) * Number(r.w||0)}));
@@ -1460,11 +1467,33 @@ function MeasureView({ currentJob, updateJob, rates }) {
     setCalcRows([{id:1, l:"", w:""}]);
     setUseCalc(false);
   };
+
   const removeArea = (id) => updateJob(j => ({...j, areas:j.areas.filter(a => a.id!==id)}));
+
+  const startEdit = (a) => { setEditingId(a.id); setEditArea({...a}); };
+  const cancelEdit = () => { setEditingId(null); setEditArea(null); };
+  const saveEdit = () => {
+    if (!editArea.name || !editArea.measurement) { alert("Name and amount are required."); return; }
+    updateJob(j => ({...j, areas: j.areas.map(a => a.id===editingId ? {...editArea} : a)}));
+    setEditingId(null); setEditArea(null);
+  };
+
   const totalBySvc = currentJob.areas.reduce((acc, a) => {
-    acc[a.serviceType] = (acc[a.serviceType]||0) + Number(a.measurement||0);
+    if (a.serviceType === "other") {
+      acc["other"] = (acc["other"]||0) + Number(a.measurement||0);
+    } else {
+      acc[a.serviceType] = (acc[a.serviceType]||0) + Number(a.measurement||0);
+    }
     return acc;
   }, {});
+
+  // Measurement field label
+  const measureLabel = (svcType) => {
+    if (svcType === "other")   return "Amount ($) *";
+    if (svcType === "patch")   return "Sq Ft * (tons auto-calc)";
+    if (rates[svcType]?.unit === "sqft")  return "Square Feet *";
+    return "Linear Feet *";
+  };
 
   return (
     <div style={S.page}>
@@ -1479,22 +1508,25 @@ function MeasureView({ currentJob, updateJob, rates }) {
               style={S.input} placeholder="e.g. Main lot, Driveway, Row 3"/>
           </label>
           <label style={S.formLabel}>Service Type *
-            <select value={newArea.serviceType} onChange={e => setNewArea(p => ({...p, serviceType:e.target.value}))} style={S.input}>
+            <select value={newArea.serviceType} onChange={e => setNewArea(p => ({...p, serviceType:e.target.value, measurement:""}))} style={S.input}>
               {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
           </label>
-          <label style={S.formLabel}>Condition
-            <select value={newArea.condition} onChange={e => setNewArea(p => ({...p, condition:e.target.value}))} style={S.input}>
-              {["good","fair","poor","failed"].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
-            </select>
-          </label>
+          {!isOther(newArea.serviceType) && (
+            <label style={S.formLabel}>Condition
+              <select value={newArea.condition} onChange={e => setNewArea(p => ({...p, condition:e.target.value}))} style={S.input}>
+                {["good","fair","poor","failed"].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+              </select>
+            </label>
+          )}
           <label style={S.formLabel}>
-            {newArea.serviceType==="patch" ? "Sq Ft * (tons auto-calc)" : rates[newArea.serviceType]?.unit==="sqft" ? "Square Feet *" : "Linear Feet *"}
+            {measureLabel(newArea.serviceType)}
             <div style={{display:"flex", gap:8, alignItems:"center"}}>
+              {isOther(newArea.serviceType) && <span style={{color:C.textMuted, fontSize:14, lineHeight:"36px"}}>$</span>}
               <input type="number" value={newArea.measurement} min="0"
                 onChange={e => setNewArea(p => ({...p, measurement:e.target.value}))}
                 style={{...S.input, flex:1}} placeholder="0"/>
-              {rates[newArea.serviceType]?.unit !== "linft" && (
+              {!isOther(newArea.serviceType) && rates[newArea.serviceType]?.unit !== "linft" && (
                 <button style={{...S.btnSecondary, fontSize:11, padding:"6px 10px", whiteSpace:"nowrap"}}
                   onClick={() => setUseCalc(v => !v)}>
                   {useCalc ? "▲ Hide Calc" : "📐 L×W"}
@@ -1505,7 +1537,7 @@ function MeasureView({ currentJob, updateJob, rates }) {
         </div>
 
         {/* Inline L×W Calculator */}
-        {useCalc && (
+        {useCalc && !isOther(newArea.serviceType) && (
           <div style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", marginTop:10}}>
             <div style={S.calcHeader}>
               <span style={S.calcHeaderLabel}>#</span>
@@ -1539,9 +1571,7 @@ function MeasureView({ currentJob, updateJob, rates }) {
               <div style={{display:"flex", alignItems:"center", gap:12}}>
                 <span style={{fontWeight:800, fontSize:16, color:C.accent}}>{calcTotal.toLocaleString()} sq ft</span>
                 <button style={{...S.btnPrimary, fontSize:12, padding:"6px 14px"}}
-                  onClick={applyCalc} disabled={calcTotal===0}>
-                  Use This →
-                </button>
+                  onClick={applyCalc} disabled={calcTotal===0}>Use This →</button>
               </div>
             </div>
           </div>
@@ -1566,14 +1596,15 @@ function MeasureView({ currentJob, updateJob, rates }) {
           <h2 style={S.h2}>Running Totals</h2>
           <div style={S.totalsGrid}>
             {Object.entries(totalBySvc).map(([svc,qty]) => {
-              const amt = svc==="patch" ? calcPatchTons(qty)*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
+              const amt = svc==="other" ? qty : svc==="patch" ? calcPatchTons(qty)*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
               return (
                 <div key={svc} style={S.totalCard}>
                   <div style={S.totalSvc}>{rates[svc]?.label||svc}</div>
-                  <div style={S.totalQty}>{qty.toLocaleString()} {svc==="patch"?"sq ft":rates[svc]?.unit}
+                  <div style={S.totalQty}>
+                    {svc==="other" ? formatCurrency(qty) : qty.toLocaleString() + " " + (svc==="patch"?"sq ft":rates[svc]?.unit||"")}
                     {svc==="patch" && <span style={S.totalTons}> = {calcPatchTons(qty).toFixed(2)} tons</span>}
                   </div>
-                  <div style={S.totalAmt}>{formatCurrency(amt)}</div>
+                  <div style={S.totalAmt}>{svc==="other" ? "" : formatCurrency(amt)}</div>
                 </div>
               );
             })}
@@ -1588,18 +1619,64 @@ function MeasureView({ currentJob, updateJob, rates }) {
             {currentJob.areas.map(a => {
               const amt = calcLineAmt(a, rates);
               const svc = rates[a.serviceType];
+              const isEdit = editingId === a.id;
+
+              if (isEdit && editArea) {
+                // ── Inline edit form ──
+                return (
+                  <div key={a.id} style={{...S.areaRow, flexDirection:"column", gap:10, padding:"12px 14px", border:`1px solid ${C.accent}`}}>
+                    <div style={{fontWeight:700, fontSize:12, color:C.accent, marginBottom:2}}>Editing Line Item</div>
+                    <div style={S.formGrid}>
+                      <label style={S.formLabel}>Name
+                        <input value={editArea.name} onChange={e => setEditArea(p => ({...p, name:e.target.value}))} style={S.input}/>
+                      </label>
+                      <label style={S.formLabel}>Service Type
+                        <select value={editArea.serviceType} onChange={e => setEditArea(p => ({...p, serviceType:e.target.value}))} style={S.input}>
+                          {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>
+                      </label>
+                      <label style={S.formLabel}>
+                        {measureLabel(editArea.serviceType)}
+                        <input type="number" value={editArea.measurement} min="0"
+                          onChange={e => setEditArea(p => ({...p, measurement:e.target.value}))} style={S.input}/>
+                      </label>
+                      {!isOther(editArea.serviceType) && (
+                        <label style={S.formLabel}>Condition
+                          <select value={editArea.condition} onChange={e => setEditArea(p => ({...p, condition:e.target.value}))} style={S.input}>
+                            {["good","fair","poor","failed"].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+                          </select>
+                        </label>
+                      )}
+                      <label style={{...S.formLabel, gridColumn:"1 / -1"}}>Notes
+                        <input value={editArea.notes||""} onChange={e => setEditArea(p => ({...p, notes:e.target.value}))} style={S.input}/>
+                      </label>
+                    </div>
+                    <div style={{display:"flex", gap:8}}>
+                      <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}>💾 Save</button>
+                      <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ── Normal display row ──
               return (
                 <div key={a.id} style={S.areaRow}>
                   <div style={S.areaRowMain}>
                     <div style={S.areaName}>{a.name}</div>
-                    <div style={S.areaMeta}>{svc?.label} · {Number(a.measurement).toLocaleString()} {svc?.unit==="linft"?"lin ft":"sq ft"}
+                    <div style={S.areaMeta}>
+                      {svc?.label}
+                      {a.serviceType==="other"
+                        ? " · " + formatCurrency(Number(a.measurement||0))
+                        : " · " + Number(a.measurement).toLocaleString() + " " + (svc?.unit==="linft"?"lin ft":"sq ft")}
                       {a.serviceType==="patch" && ` → ${calcPatchTons(a.measurement).toFixed(2)} tons`}
                     </div>
                     {a.notes && <div style={S.areaNotes}>{a.notes}</div>}
                   </div>
                   <div style={S.areaRowRight}>
-                    <span style={{...S.condBadge,...S[`cond_${a.condition}`]}}>{a.condition}</span>
+                    {!isOther(a.serviceType) && <span style={{...S.condBadge,...S[`cond_${a.condition}`]}}>{a.condition}</span>}
                     <div style={S.areaAmt}>{formatCurrency(amt)}</div>
+                    <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(a)}>✎</button>
                     <button style={S.btnSmallDanger} onClick={() => removeArea(a.id)}>✕</button>
                   </div>
                 </div>
