@@ -1424,7 +1424,7 @@ function EstimateView({ currentJob, updateJob, rates }) {
     if (isLocked || !clientDrawing.current) return; e.preventDefault();
     const c = clientSigRef.current; if (!c) return;
     const ctx = c.getContext("2d"); const pos = getPos(e,c);
-    ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.strokeStyle="#f5f5f5";
+    ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.strokeStyle="#111111";
     ctx.lineTo(pos.x,pos.y); ctx.stroke();
   };
   const cSigEnd = (e) => { e.preventDefault(); clientDrawing.current = false; };
@@ -1445,16 +1445,15 @@ function EstimateView({ currentJob, updateJob, rates }) {
   const acceptAndSign = async () => {
     const c = clientSigRef.current;
     if (!c) return;
-    // Check canvas isn't blank
     const px = c.getContext("2d").getImageData(0,0,c.width,c.height).data;
     const hasInk = Array.from(px).some((v,i) => i%4===3 && v>0);
     if (!hasInk) { alert("Please have the client sign before accepting."); return; }
     const sigData   = c.toDataURL("image/png");
     const signedAt  = new Date().toLocaleString();
-    const printName = currentJob.clientName || "";
+    const printName = currentJob.clientPrintName || currentJob.clientName || "";
     updateJob(j => ({...j, clientSignature:sigData, clientSignedAt:signedAt, clientPrintName:printName, status:"signed"}));
-    // Auto-generate PDF after a short delay so state settles
-    setTimeout(() => generatePDF(sigData, signedAt, printName), 600);
+    // Pass data directly as overrides — no need to wait for state update
+    await generatePDF(sigData, signedAt, printName);
   };
 
   const unsign = () => {
@@ -1863,7 +1862,7 @@ function EstimateView({ currentJob, updateJob, rates }) {
               <canvas
                 ref={clientSigRef}
                 width={560} height={140}
-                style={{...S.sigCanvas, cursor: isLocked ? "not-allowed" : "crosshair"}}
+                style={{...S.sigCanvas, background:"#ffffff", cursor: isLocked ? "not-allowed" : "crosshair"}}
                 onMouseDown={cSigStart} onMouseMove={cSigMove} onMouseUp={cSigEnd} onMouseLeave={cSigEnd}
                 onTouchStart={cSigStart} onTouchMove={cSigMove} onTouchEnd={cSigEnd}
               />
