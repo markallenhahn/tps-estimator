@@ -272,7 +272,9 @@ function TopNav({ view, setView }) {
 
   return (
     <nav style={S.nav}>
-      <div style={S.navBrand}><span style={S.navTitle}>TPS</span></div>
+      <div style={S.navBrand}>
+        <img src={"data:image/png;base64," + LOGO_B64} alt="TPS" style={{height:32, width:"auto", display:"block"}}/>
+      </div>
       <div ref={tabsRef} className="tps-nav-tabs" style={S.navTabs}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setView(t.key)}
