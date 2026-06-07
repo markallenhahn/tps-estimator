@@ -655,11 +655,8 @@ function InvoiceView({ currentJob, updateJob, rates }) {
         y += 44;
       }
 
-      // Thank you + closing language
-      doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
-      doc.text("Thank you for your business! " + COMPANY + " | " + PHONE, PW/2, y, {align:"center"});
-      y += 14;
-
+      // Closing language (due invoices only)
+      y += 8;
       if (!isPaid) {
         const closingLines = [
           "Please make checks payable to \"TPS Asphalt Maintenance, LLC\" and mailed to PO Box 728, Bartonsville, PA 18321.",
