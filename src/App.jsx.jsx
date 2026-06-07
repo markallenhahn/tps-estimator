@@ -2340,10 +2340,10 @@ export default function App() {
         {view==="jobs"     && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById}/>}
         {view==="schedule" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="inspect"  && <InspectView currentJob={currentJob} updateJob={updateJob}/>}
-        {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates}/>}
+        {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
-        {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates}/>}
-        {view==="invoice"  && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={currentJob?.rates||rates}/>}
+        {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="invoice"  && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="rates"    && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
       </div>
     </div>
