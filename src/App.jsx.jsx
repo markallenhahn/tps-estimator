@@ -111,7 +111,7 @@ const S = {
   jobCardAddr:{ color:C.textMuted, fontSize:13, marginBottom:4 },
   jobCardMeta:{ color:C.textDim, fontSize:12 },
   jobCardActions:{ borderTop:`1px solid ${C.border}`, padding:"8px 12px", display:"flex", flexWrap:"wrap", gap:6 },
-  statusBadge:{ fontSize:11, fontWeight:700, padding:\"3px 8px\", borderRadius:20, textTransform:\"uppercase\" },
+  statusBadge:{ fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:20, textTransform:"uppercase" },
   status_draft:{     background:"#2a2a1a", color:"#ca8a04" },
   status_sent:{      background:"#1a1a2a", color:"#a78bfa" },
   status_signed:{    background:"#14532d", color:"#4ade80" },
@@ -254,7 +254,7 @@ const S = {
 if (typeof document !== "undefined" && !document.getElementById("tps-nav-css")) {
   const style = document.createElement("style");
   style.id = "tps-nav-css";
-  style.textContent = ".tps-nav-tabs::-webkit-scrollbar{display:none}";
+  style.textContent = ".tps-nav-tabs::-webkit-scrollbar{display:none} select{color-scheme:dark} select option{color:#000;background:#fff}";
   document.head.appendChild(style);
 }
 
@@ -997,7 +997,7 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
   const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
 
   const STATUSES = ["draft","sent","booked","scheduled","completed","paid","signed"];
-  const safeStatus = (s) => STATUSES.includes(s) ? s : "draft";
+  const safeStatus = (s) => (s && STATUSES.includes(s)) ? s : "draft";
 
   return (
     <div style={S.page}>
@@ -1019,39 +1019,37 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
                 <div style={S.jobCardName}>{j.clientName||"Unnamed Client"}</div>
                 <div style={S.jobCardAddr}>{j.address||"No address"}</div>
                 <div style={S.jobCardMeta}>{j.date} · {j.areas.length} area{j.areas.length!==1?"s":""} · {j.photos.length} photo{j.photos.length!==1?"s":""}</div>
-                {j.scheduledDate && (
-                  <div style={S.jobScheduledDate}>📅 {j.scheduledDate}</div>
-                )}
+                {j.scheduledDate && <div style={S.jobScheduledDate}>📅 {j.scheduledDate}</div>}
               </div>
-              <span style={{...S.statusBadge,...(S[`status_${safeStatus(j.status)}`]||S.status_draft)}}>{safeStatus(j.status)}</span>
+              <span style={{...S.statusBadge,...(S[`status_${safeStatus(j.status)}`]||S.status_draft)}}>
+                {safeStatus(j.status)}
+              </span>
             </div>
             <div style={S.jobCardActions}>
-              {/* Row 1: Open + Status + Delete */}
-              <div style={{display:"flex", gap:6, width:"100%", alignItems:"center"}}>
-                <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
-                <select
-                  value={safeStatus(j.status)}
-                  onChange={e => setStatus(j, e.target.value)}
-                  onClick={e => e.stopPropagation()}
-                  style={{...S.input, fontSize:12, padding:"4px 8px", flex:1}}>
-                  {STATUSES.map(s => (
-                    <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
-                  ))}
-                </select>
-                <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
-              </div>
-              {/* Row 2: Schedule date */}
-              <div style={{display:"flex", alignItems:"center", gap:6, width:"100%"}}>
-                <input type="date" defaultValue={j.scheduledDate||""}
-                  onChange={e => schedule(j, e.target.value)}
-                  style={{...S.input, fontSize:11, padding:"4px 6px", flex:1}}
-                  title="Schedule date"/>
-                {j.scheduledDate && (
-                  <button style={{...S.btnSmall, padding:"4px 8px", background:"#2a1a1a", color:C.danger, border:`1px solid ${C.danger}`}}
-                    onClick={() => schedule(j, "")}
-                    title="Clear scheduled date">✕</button>
-                )}
-              </div>
+              <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
+              <select
+                value={safeStatus(j.status) || "draft"}
+                onChange={e => { e.stopPropagation(); setStatus(j, e.target.value); }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
+                  padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text,
+                  cursor:"pointer", outline:"none", flex:1,
+                }}>
+                {STATUSES.map(s => (
+                  <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+                ))}
+              </select>
+              <input type="date" defaultValue={j.scheduledDate||""}
+                onChange={e => schedule(j, e.target.value)}
+                style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, width:"auto"}}
+                title="Schedule date"/>
+              {j.scheduledDate && (
+                <button style={{...S.btnSmall, padding:"4px 8px", background:"#2a1a1a", color:C.danger, border:`1px solid ${C.danger}`}}
+                  onClick={() => schedule(j, "")}
+                  title="Clear scheduled date">✕</button>
+              )}
+              <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
             </div>
           </div>
         ))}
