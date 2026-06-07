@@ -997,6 +997,7 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
   const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
 
   const STATUSES = ["draft","sent","booked","scheduled","completed","paid","signed"];
+  const safeStatus = (s) => STATUSES.includes(s) ? s : "draft";
 
   return (
     <div style={S.page}>
@@ -1022,13 +1023,13 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
                   <div style={S.jobScheduledDate}>📅 {j.scheduledDate}</div>
                 )}
               </div>
-              <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
+              <span style={{...S.statusBadge,...(S[`status_${safeStatus(j.status)}`]||S.status_draft)}}>{safeStatus(j.status)}</span>
             </div>
             <div style={S.jobCardActions}>
               <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
               {/* Status selector */}
               <select
-                value={j.status}
+                value={safeStatus(j.status)}
                 onChange={e => setStatus(j, e.target.value)}
                 onClick={e => e.stopPropagation()}
                 style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, minWidth:0}}>
