@@ -807,100 +807,138 @@ function InvoiceView({ currentJob, updateJob, rates }) {
 function LeafletMap({ jobs, onOpenJob, getDirectionsUrl }) {
   const mapDivRef = useRef(null);
   const mapObjRef = useRef(null);
+  const [status, setStatus] = useState("Loading map...");
 
   useEffect(() => {
-    // Load Leaflet CSS + JS if not already loaded
-    const loadLeaflet = async () => {
+    let cancelled = false;
+
+    const loadMap = async () => {
+      setStatus("Loading map...");
+
+      // Load Leaflet CSS
       if (!document.getElementById("leaflet-css")) {
         const link = document.createElement("link");
-        link.id   = "leaflet-css";
-        link.rel  = "stylesheet";
+        link.id = "leaflet-css"; link.rel = "stylesheet";
         link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
         document.head.appendChild(link);
       }
+
+      // Load Leaflet JS
       if (!window.L) {
-        await new Promise((resolve, reject) => {
+        await new Promise((res, rej) => {
           const s = document.createElement("script");
           s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-          s.onload = resolve; s.onerror = reject;
+          s.onload = res; s.onerror = rej;
           document.head.appendChild(s);
         });
       }
 
-      if (!mapDivRef.current) return;
+      if (cancelled || !mapDivRef.current) return;
 
-      // Destroy previous map instance if any
-      if (mapObjRef.current) {
-        mapObjRef.current.remove();
-        mapObjRef.current = null;
-      }
+      // Destroy old map
+      if (mapObjRef.current) { mapObjRef.current.remove(); mapObjRef.current = null; }
 
       const L = window.L;
-      const map = L.map(mapDivRef.current, { zoomControl:true });
+
+      // Fix default icon paths broken by bundlers
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      });
+
+      const map = L.map(mapDivRef.current, { zoomControl: true });
       mapObjRef.current = map;
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap contributors",
-        maxZoom: 19,
+        attribution: "© OpenStreetMap contributors", maxZoom: 19,
       }).addTo(map);
 
-      // Geocode each job address using Nominatim (free, no key)
+      // Default view — Pocono area — while geocoding
+      map.setView([41.05, -75.35], 11);
+
       const bounds = [];
+      let pinCount = 0;
+
       for (let i = 0; i < jobs.length; i++) {
+        if (cancelled) return;
         const j = jobs[i];
         const addr = [j.address, j.city, j.state, j.zip].filter(Boolean).join(", ");
-        try {
-          const res  = await fetch("https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(addr) + "&limit=1", {
-            headers: { "Accept-Language": "en" }
-          });
-          const data = await res.json();
-          if (!data[0]) continue;
-          const lat = Number(data[0].lat);
-          const lng = Number(data[0].lon);
-          bounds.push([lat, lng]);
+        if (!addr.trim()) continue;
 
-          // Numbered gold pin
+        setStatus("Locating " + (i+1) + " of " + jobs.length + "...");
+
+        try {
+          // Use Photon (Komoot) — CORS-friendly, no API key needed
+          const url = "https://photon.komoot.io/api/?q=" + encodeURIComponent(addr) + "&limit=1&lang=en";
+          const res  = await fetch(url);
+          const data = await res.json();
+          if (cancelled) return;
+
+          const feature = data?.features?.[0];
+          if (!feature) { console.warn("No result for:", addr); continue; }
+
+          const [lng, lat] = feature.geometry.coordinates;
+          bounds.push([lat, lng]);
+          pinCount++;
+
           const icon = L.divIcon({
             className: "",
-            html: `<div style="width:28px;height:28px;border-radius:50%;background:#f59e0b;color:#000;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)">${i+1}</div>`,
-            iconSize: [28,28], iconAnchor: [14,14], popupAnchor: [0,-16],
+            html: `<div style="width:30px;height:30px;border-radius:50%;background:#f59e0b;color:#000;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);line-height:1">${i+1}</div>`,
+            iconSize: [30,30], iconAnchor: [15,15], popupAnchor: [0,-18],
           });
 
           const dateStr = new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
-          const marker = L.marker([lat, lng], {icon}).addTo(map);
-          marker.bindPopup(`
-            <div style="font-family:sans-serif;min-width:160px">
-              <div style="font-weight:700;font-size:14px;margin-bottom:4px">${j.clientName||"Unnamed"}</div>
-              <div style="font-size:12px;color:#555;margin-bottom:4px">${addr}</div>
-              <div style="font-size:11px;color:#888;margin-bottom:8px">📅 ${dateStr}</div>
-              <a href="${getDirectionsUrl(j)}" target="_blank"
-                style="display:block;background:#1d4ed8;color:#fff;text-align:center;padding:5px 10px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">
-                🧭 Directions
+          const dirUrl  = getDirectionsUrl(j);
+
+          L.marker([lat, lng], {icon}).addTo(map).bindPopup(`
+            <div style="font-family:system-ui,sans-serif;min-width:170px;padding:4px 0">
+              <div style="font-weight:700;font-size:14px;margin-bottom:3px">${j.clientName||"Unnamed"}</div>
+              <div style="font-size:12px;color:#444;margin-bottom:3px">${addr}</div>
+              <div style="font-size:11px;color:#888;margin-bottom:10px">📅 ${dateStr}</div>
+              <a href="${dirUrl}" target="_blank"
+                style="display:block;background:#1d4ed8;color:#fff;text-align:center;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">
+                🧭 Get Directions
               </a>
             </div>
           `);
-        } catch(e) { console.warn("Geocode failed for", addr, e); }
+
+          // Fit bounds after each pin so map updates progressively
+          if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+          }
+        } catch(e) {
+          console.warn("Geocode error for", addr, e);
+        }
+
+        // Small delay to be polite to the geocoder
+        await new Promise(r => setTimeout(r, 300));
       }
 
-      if (bounds.length > 0) {
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-      } else {
-        // Default to Pocono area
-        map.setView([41.05, -75.35], 11);
-      }
+      if (cancelled) return;
+      setStatus(pinCount > 0 ? "" : "Could not locate addresses — check that full addresses are entered.");
     };
 
-    loadLeaflet();
-
+    loadMap();
     return () => {
+      cancelled = true;
       if (mapObjRef.current) { mapObjRef.current.remove(); mapObjRef.current = null; }
     };
-  }, [jobs.map(j=>j.id+j.scheduledDate).join(",")]);
+  }, [jobs.map(j => j.id + "|" + j.scheduledDate).join(",")]);
 
   return (
-    <div style={{borderRadius:12, overflow:"hidden", border:`1px solid #2e2e2e`, marginBottom:16, height:320, position:"relative"}}>
-      <div ref={mapDivRef} style={{width:"100%", height:"100%"}}/>
-      <div style={{position:"absolute", top:8, left:8, background:"rgba(0,0,0,.65)", color:"#fff", fontSize:11, padding:"4px 8px", borderRadius:6, zIndex:1000, pointerEvents:"none"}}>
+    <div style={{borderRadius:12, overflow:"hidden", border:`1px solid #2e2e2e`, marginBottom:16, position:"relative"}}>
+      <div ref={mapDivRef} style={{width:"100%", height:320}}/>
+      {status && (
+        <div style={{position:"absolute", bottom:8, left:"50%", transform:"translateX(-50%)",
+          background:"rgba(0,0,0,.75)", color:"#fff", fontSize:11, padding:"5px 12px",
+          borderRadius:20, zIndex:1000, whiteSpace:"nowrap", pointerEvents:"none"}}>
+          {status}
+        </div>
+      )}
+      <div style={{position:"absolute", top:8, left:8, background:"rgba(0,0,0,.65)", color:"#fff",
+        fontSize:11, padding:"4px 8px", borderRadius:6, zIndex:1000, pointerEvents:"none"}}>
         Tap a pin for details
       </div>
     </div>
