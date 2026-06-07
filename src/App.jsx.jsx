@@ -110,7 +110,7 @@ const S = {
   jobCardName:{ fontWeight:700, fontSize:16, marginBottom:2 },
   jobCardAddr:{ color:C.textMuted, fontSize:13, marginBottom:4 },
   jobCardMeta:{ color:C.textDim, fontSize:12 },
-  jobCardActions:{ borderTop:`1px solid ${C.border}`, padding:"8px 16px", display:"flex", gap:8 },
+  jobCardActions:{ borderTop:`1px solid ${C.border}`, padding:"8px 12px", display:"flex", flexWrap:"wrap", gap:6 },
   statusBadge:{ fontSize:11, fontWeight:700, padding:\"3px 8px\", borderRadius:20, textTransform:\"uppercase\" },
   status_draft:{     background:"#2a2a1a", color:"#ca8a04" },
   status_sent:{      background:"#1a1a2a", color:"#a78bfa" },
@@ -1026,21 +1026,25 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
               <span style={{...S.statusBadge,...(S[`status_${safeStatus(j.status)}`]||S.status_draft)}}>{safeStatus(j.status)}</span>
             </div>
             <div style={S.jobCardActions}>
-              <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
-              {/* Status selector */}
-              <select
-                value={safeStatus(j.status)}
-                onChange={e => setStatus(j, e.target.value)}
-                onClick={e => e.stopPropagation()}
-                style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, minWidth:0}}>
-                {STATUSES.map(s => (
-                  <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
-                ))}
-              </select>
-              <div style={{display:"flex", alignItems:"center", gap:6}}>
+              {/* Row 1: Open + Status + Delete */}
+              <div style={{display:"flex", gap:6, width:"100%", alignItems:"center"}}>
+                <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
+                <select
+                  value={safeStatus(j.status)}
+                  onChange={e => setStatus(j, e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  style={{...S.input, fontSize:12, padding:"4px 8px", flex:1}}>
+                  {STATUSES.map(s => (
+                    <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+                  ))}
+                </select>
+                <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
+              </div>
+              {/* Row 2: Schedule date */}
+              <div style={{display:"flex", alignItems:"center", gap:6, width:"100%"}}>
                 <input type="date" defaultValue={j.scheduledDate||""}
                   onChange={e => schedule(j, e.target.value)}
-                  style={{...S.input, fontSize:11, padding:"4px 6px", width:130}}
+                  style={{...S.input, fontSize:11, padding:"4px 6px", flex:1}}
                   title="Schedule date"/>
                 {j.scheduledDate && (
                   <button style={{...S.btnSmall, padding:"4px 8px", background:"#2a1a1a", color:C.danger, border:`1px solid ${C.danger}`}}
@@ -1048,7 +1052,6 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
                     title="Clear scheduled date">✕</button>
                 )}
               </div>
-              <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
             </div>
           </div>
         ))}
