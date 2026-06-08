@@ -23,7 +23,7 @@ const initialJob = (rates) => ({
   date: new Date().toLocaleDateString(),
   estimateNum: `EST-${Date.now().toString().slice(-5)}`,
   notes:"", areas:[], photos:[],
-  status:"draft",
+  status:"estimate",
   rates: rates ? {...rates} : null,
 });
 
@@ -116,6 +116,7 @@ const S = {
   jobCardMeta:{ color:C.textDim, fontSize:12 },
   jobCardActions:{ borderTop:`1px solid ${C.border}`, padding:"8px 12px", display:"flex", flexWrap:"wrap", gap:6 },
   statusBadge:{ fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:20, textTransform:"uppercase" },
+  status_estimate:{ background:"#1a2535", color:"#67e8f9" },
   status_draft:{     background:"#2a2a1a", color:"#ca8a04" },
   status_sent:{      background:"#1a1a2a", color:"#a78bfa" },
   status_signed:{    background:"#14532d", color:"#4ade80" },
@@ -855,9 +856,11 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
 
   const jobsByDate = {};
   jobs.forEach(j => {
-    if (!j.scheduledDate) return;
-    if (!jobsByDate[j.scheduledDate]) jobsByDate[j.scheduledDate] = [];
-    jobsByDate[j.scheduledDate].push(j);
+    const days = j.scheduleDays?.filter(d=>d.date) || (j.scheduledDate ? [{date:j.scheduledDate, label:""}] : []);
+    days.forEach(day => {
+      if (!jobsByDate[day.date]) jobsByDate[day.date] = [];
+      if (!jobsByDate[day.date].find(x=>x.id===j.id)) jobsByDate[day.date].push(j);
+    });
   });
   const dateKey     = d => d ? `${year}-${pad(month+1)}-${pad(d)}` : null;
   const selectedJobs = selectedDay ? (jobsByDate[selectedDay]||[]) : [];
@@ -956,8 +959,13 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
       )}
 
       {!selectedDay && (() => {
-        const upcoming = jobs.filter(j=>j.scheduledDate&&j.scheduledDate>=todayKey)
-          .sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate)).slice(0,10);
+        const upcoming = jobs
+          .filter(j => (j.scheduleDays||[]).some(d=>d.date&&d.date>=todayKey) || (j.scheduledDate&&j.scheduledDate>=todayKey))
+          .sort((a,b) => {
+            const aDate = (a.scheduleDays||[]).filter(d=>d.date).map(d=>d.date).sort()[0] || a.scheduledDate || "";
+            const bDate = (b.scheduleDays||[]).filter(d=>d.date).map(d=>d.date).sort()[0] || b.scheduledDate || "";
+            return aDate.localeCompare(bDate);
+          }).slice(0,10);
         if (!upcoming.length) return <div style={{...S.empty, marginTop:20}}><p style={S.emptyText}>No upcoming scheduled jobs.</p></div>;
         return (
           <section style={{...S.section, marginTop:20}}>
@@ -968,13 +976,20 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
                   <div style={{flex:1, minWidth:0, marginRight:8}}>
                     <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
                     <div style={S.schedJobAddr}>{j.address||"No address"}</div>
-                  </div>
-                  <div style={{textAlign:"right", flexShrink:0}}>
-                    <div style={{fontSize:13, fontWeight:700, color:C.accent}}>
-                      {new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                    <div style={{marginTop:4}}>
+                      {(j.scheduleDays||[]).filter(d=>d.date).map((day,di) => (
+                        <div key={day.id||di} style={{...S.schedJobMeta, color:C.accent, fontWeight:600}}>
+                          📅 Day {di+1}{day.label?" — "+day.label:""}: {new Date(day.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                        </div>
+                      ))}
+                      {!(j.scheduleDays||[]).length && j.scheduledDate && (
+                        <div style={{...S.schedJobMeta, color:C.accent, fontWeight:600}}>
+                          📅 {new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                        </div>
+                      )}
                     </div>
-                    <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
                   </div>
+                  <span style={{...S.statusBadge,...(S[`status_${j.status}`]||S.status_draft)}}>{j.status}</span>
                 </div>
                 <div style={{display:"flex", gap:8, marginTop:8}}>
                   <button style={{...S.btnSmall, flex:1}} onClick={() => openJob(j)}>Open Job</button>
@@ -1004,9 +1019,9 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
   const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
   const restore   = (job) => updateJobById(job.id, j => ({...j, status:"draft"}));
 
-  const STATUS_ORDER    = ["draft","sent","signed","scheduled","completed","paid","lost"];
+  const STATUS_ORDER    = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
   const ARCHIVE_STATUSES = ["completed","paid","lost"];
-  const safeStatus = (s) => (s && STATUS_ORDER.includes(s)) ? s : "draft";
+  const safeStatus = (s) => (s && STATUS_ORDER.includes(s)) ? s : "estimate";
 
   const activeJobs = jobs
     .filter(j => !ARCHIVE_STATUSES.includes(safeStatus(j.status)))
@@ -1022,10 +1037,14 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
           <div style={S.jobCardName}>{j.clientName||"Unnamed Client"}</div>
           <div style={S.jobCardAddr}>{j.address||"No address"}</div>
           <div style={S.jobCardMeta}>{j.date} · {j.areas.length} area{j.areas.length!==1?"s":""}</div>
-          {j.scheduledDate && <div style={S.jobScheduledDate}>📅 {j.scheduledDate}</div>}
+          {(j.scheduleDays||[]).filter(d=>d.date).map((day,di) => (
+            <div key={day.id} style={S.jobScheduledDate}>
+              📅 Day {di+1}{day.label ? " — "+day.label : ""}: {day.date}
+            </div>
+          ))}
         </div>
-        <span style={{...S.statusBadge,...(S[`status_${safeStatus(j.status)}`]||S.status_draft)}}>
-          {safeStatus(j.status)}
+        <span style={{...S.statusBadge,...(S[`status_${safeStatus(j.status)}`]||S.status_estimate)}}>
+          {safeStatus(j.status)==="estimate" ? "Estimate" : safeStatus(j.status)}
         </span>
       </div>
       <div style={S.jobCardActions}>
@@ -1038,19 +1057,42 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
             style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
               padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text, cursor:"pointer", outline:"none", flex:1}}>
             {STATUS_ORDER.map(s => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+              <option key={s} value={s}>{s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1)}</option>
             ))}
           </select>
         )}
         {!isArchived && (
           <>
-            <input type="date" defaultValue={j.scheduledDate||""}
-              onChange={e => schedule(j, e.target.value)}
-              style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, width:"auto"}} title="Schedule date"/>
-            {j.scheduledDate && (
-              <button style={{...S.btnSmall, padding:"4px 8px", background:"#2a1a1a", color:C.danger, border:`1px solid ${C.danger}`}}
-                onClick={() => schedule(j, "")} title="Clear date">✕</button>
-            )}
+            {/* Multi-day scheduler */}
+            <div style={{width:"100%", marginTop:4}}>
+              {(j.scheduleDays||[]).map((day, di) => (
+                <div key={day.id} style={{display:"flex", gap:6, alignItems:"center", marginBottom:4}}>
+                  <input type="date" value={day.date||""}
+                    onChange={e => {
+                      const days = (j.scheduleDays||[]).map(d => d.id===day.id ? {...d, date:e.target.value} : d);
+                      updateJobById(j.id, jj => ({...jj, scheduleDays:days, scheduledDate: days[0]?.date||""}));
+                    }}
+                    style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, width:"auto"}}/>
+                  <input type="text" value={day.label||""}
+                    onChange={e => {
+                      const days = (j.scheduleDays||[]).map(d => d.id===day.id ? {...d, label:e.target.value} : d);
+                      updateJobById(j.id, jj => ({...jj, scheduleDays:days}));
+                    }}
+                    placeholder={"Day "+(di+1)+" label"}
+                    style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, width:"auto"}}/>
+                  <button style={{...S.btnSmall, padding:"4px 8px", background:"#2a1a1a", color:C.danger, border:`1px solid ${C.danger}`, flexShrink:0}}
+                    onClick={() => {
+                      const days = (j.scheduleDays||[]).filter(d => d.id!==day.id);
+                      updateJobById(j.id, jj => ({...jj, scheduleDays:days, scheduledDate: days[0]?.date||""}));
+                    }}>✕</button>
+                </div>
+              ))}
+              <button style={{...S.btnSecondary, fontSize:11, padding:"4px 10px", marginTop:2}}
+                onClick={() => {
+                  const days = [...(j.scheduleDays||[]), {id:Date.now(), date:"", label:""}];
+                  updateJobById(j.id, jj => ({...jj, scheduleDays:days}));
+                }}>+ Add Day</button>
+            </div>
           </>
         )}
         {isArchived && (
