@@ -450,7 +450,9 @@ function InvoiceView({ currentJob, updateJob, rates }) {
   const subtotal    = (currentJob.areas||[]).reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
   const marginAmt   = subtotal * (margin/100);
   const discountAmt = (subtotal + marginAmt) * (discount/100);
-  const total       = subtotal + marginAmt - discountAmt;
+  const calcTotal   = subtotal + marginAmt - discountAmt;
+  const hasOverride = currentJob.priceOverride !== undefined && currentJob.priceOverride !== null && currentJob.priceOverride !== "";
+  const total       = hasOverride ? Number(currentJob.priceOverride) : calcTotal;
   const cityLine    = [currentJob.city, currentJob.state].filter(Boolean).join(", ") + (currentJob.zip ? " " + currentJob.zip : "");
   const isPaid      = invoiceType === "paid";
   const invoiceLabel = isPaid ? "PAID INVOICE" : "INVOICE";
@@ -1558,8 +1560,14 @@ function EstimateView({ currentJob, updateJob, rates }) {
   const subtotal    = currentJob.areas.reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
   const marginAmt   = subtotal * (margin/100);
   const discountAmt = (subtotal + marginAmt) * (discount/100);
-  const total       = subtotal + marginAmt - discountAmt;
-  const cityLine    = [currentJob.city, currentJob.state].filter(Boolean).join(", ") + (currentJob.zip ? " " + currentJob.zip : "");
+  const calcTotal   = subtotal + marginAmt - discountAmt;
+
+  // Price override — when set, replaces calculated total everywhere
+  const hasOverride  = currentJob.priceOverride !== undefined && currentJob.priceOverride !== null && currentJob.priceOverride !== "";
+  const finalTotal   = hasOverride ? Number(currentJob.priceOverride) : calcTotal;
+  const setPriceOverride = val => updateJob(j => ({...j, priceOverride: val === "" ? null : val}));
+
+  const cityLine = [currentJob.city, currentJob.state].filter(Boolean).join(", ") + (currentJob.zip ? " " + currentJob.zip : "");
 
   // ── Client signature pad ──
   const getPos = (e, c) => {
@@ -1632,7 +1640,7 @@ function EstimateView({ currentJob, updateJob, rates }) {
     "", "─────────────────────────",
     "Subtotal: " + formatCurrency(subtotal),
     discount>0 ? ("Discount (" + discount + "%): -" + formatCurrency(discountAmt)) : null,
-    "TOTAL: " + formatCurrency(total), "─────────────────────────", "",
+    "TOTAL: " + formatCurrency(finalTotal), "─────────────────────────", "",
     currentJob.notes ? ("Site Notes: " + currentJob.notes) : null, "",
     "This estimate is valid for 30 days. A 25% deposit is required to schedule. Balance due upon completion.",
     COMPANY + " | " + PHONE + " | " + EMAIL,
@@ -1802,7 +1810,7 @@ function EstimateView({ currentJob, updateJob, rates }) {
       doc.line(ML, y, ML+usable, y);
       doc.setFontSize(12); doc.setFont("helvetica","bold"); doc.setTextColor(...GOLD);
       doc.text("TOTAL DUE", ML+10, y+19);
-      doc.text(formatCurrency(total), PW-MR-6, y+19, { align:"right" });
+      doc.text(formatCurrency(finalTotal), PW-MR-6, y+19, { align:"right" });
       y += totalBarH + 14;
 
       // ── Site notes ──
@@ -1974,7 +1982,34 @@ function EstimateView({ currentJob, updateJob, rates }) {
             <div style={S.totalsBox}>
               <div style={S.totalLine}><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
               {discount>0 && <div style={{...S.totalLine, color:C.danger, fontWeight:700}}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
-              <div style={S.totalLineBold}><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
+              <div style={S.totalLineBold}><span>TOTAL</span><span>{formatCurrency(finalTotal)}</span></div>
+              {/* Price override */}
+              <div style={{marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}`}}>
+                <div style={{fontSize:12, color:C.textMuted, marginBottom:6}}>
+                  Override Total {hasOverride && <span style={{color:C.accent, fontWeight:700}}>· Active</span>}
+                </div>
+                <div style={{display:"flex", gap:8, alignItems:"center"}}>
+                  <span style={{color:C.textMuted, fontSize:14}}>$</span>
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={hasOverride ? currentJob.priceOverride : ""}
+                    onChange={e => setPriceOverride(e.target.value)}
+                    placeholder={calcTotal.toFixed(2)}
+                    style={{...S.input, flex:1}}
+                  />
+                  {hasOverride && (
+                    <button style={{...S.btnSecondary, fontSize:12, padding:"6px 10px"}}
+                      onClick={() => setPriceOverride("")}>
+                      ✕ Clear
+                    </button>
+                  )}
+                </div>
+                {hasOverride && (
+                  <div style={{fontSize:11, color:C.textMuted, marginTop:4}}>
+                    Calculated: {formatCurrency(calcTotal)} · Override: {formatCurrency(finalTotal)}
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}
