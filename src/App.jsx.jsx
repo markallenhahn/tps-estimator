@@ -36,11 +36,15 @@ function formatCurrency(n) {
   return "$" + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 function calcLineAmt(area, rates) {
+  // Per-line-item price override takes priority
+  if (area.priceOverride !== undefined && area.priceOverride !== null && area.priceOverride !== "") {
+    return Number(area.priceOverride);
+  }
   const svc = rates[area.serviceType];
   if (!svc) return 0;
   const qty = Number(area.measurement || 0);
   if (area.serviceType === "patch") return calcPatchTons(qty) * svc.rate;
-  if (area.serviceType === "other") return qty; // measurement IS the price for other
+  if (area.serviceType === "other") return qty;
   return qty * svc.rate;
 }
 
@@ -1437,6 +1441,16 @@ function MeasureView({ currentJob, updateJob, rates }) {
           <input value={newArea.notes} onChange={e => setNewArea(p => ({...p, notes:e.target.value}))}
             style={S.input} placeholder="Additional notes..."/>
         </label>
+        <label style={{...S.formLabel, marginTop:10}}>
+          Price Override <span style={{color:C.textMuted, fontWeight:400}}>(optional — overrides calculated price)</span>
+          <div style={{display:"flex", gap:6, alignItems:"center"}}>
+            <span style={{color:C.textMuted, fontSize:14}}>$</span>
+            <input type="number" min="0" step="0.01"
+              value={newArea.priceOverride||""}
+              onChange={e => setNewArea(p => ({...p, priceOverride: e.target.value}))}
+              style={{...S.input, flex:1}} placeholder="Leave blank to use calculated price"/>
+          </div>
+        </label>
         <button style={{...S.btnPrimary, marginTop:12}} onClick={addArea}>+ Add to Job</button>
       </section>
 
@@ -1499,6 +1513,16 @@ function MeasureView({ currentJob, updateJob, rates }) {
                       <label style={{...S.formLabel, gridColumn:"1 / -1"}}>Notes
                         <input value={editArea.notes||""} onChange={e => setEditArea(p => ({...p, notes:e.target.value}))} style={S.input}/>
                       </label>
+                      <label style={{...S.formLabel, gridColumn:"1 / -1"}}>
+                        Price Override <span style={{color:C.textMuted, fontWeight:400}}>(leave blank to use calculated)</span>
+                        <div style={{display:"flex", gap:6, alignItems:"center"}}>
+                          <span style={{color:C.textMuted, fontSize:14}}>$</span>
+                          <input type="number" min="0" step="0.01"
+                            value={editArea.priceOverride||""}
+                            onChange={e => setEditArea(p => ({...p, priceOverride: e.target.value}))}
+                            style={{...S.input, flex:1}} placeholder="Leave blank to use calculated"/>
+                        </div>
+                      </label>
                     </div>
                     <div style={{display:"flex", gap:8}}>
                       <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}>💾 Save</button>
@@ -1509,6 +1533,7 @@ function MeasureView({ currentJob, updateJob, rates }) {
               }
 
               // ── Normal display row ──
+              const hasLineOverride = a.priceOverride !== undefined && a.priceOverride !== null && a.priceOverride !== "";
               return (
                 <div key={a.id} style={S.areaRow}>
                   <div style={S.areaRowMain}>
@@ -1521,10 +1546,11 @@ function MeasureView({ currentJob, updateJob, rates }) {
                       {a.serviceType==="patch" && ` → ${calcPatchTons(a.measurement).toFixed(2)} tons`}
                     </div>
                     {a.notes && <div style={S.areaNotes}>{a.notes}</div>}
+                    {hasLineOverride && <div style={{fontSize:11, color:C.accent, marginTop:2}}>✎ Price overridden</div>}
                   </div>
                   <div style={S.areaRowRight}>
                     {!isOther(a.serviceType) && <span style={{...S.condBadge,...S[`cond_${a.condition}`]}}>{a.condition}</span>}
-                    <div style={S.areaAmt}>{formatCurrency(amt)}</div>
+                    <div style={{...S.areaAmt, ...(hasLineOverride ? {color:C.accent} : {})}}>{formatCurrency(amt)}</div>
                     <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(a)}>✎</button>
                     <button style={S.btnSmallDanger} onClick={() => removeArea(a.id)}>✕</button>
                   </div>
