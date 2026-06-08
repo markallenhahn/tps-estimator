@@ -116,9 +116,9 @@ const S = {
   status_sent:{      background:"#1a1a2a", color:"#a78bfa" },
   status_signed:{    background:"#14532d", color:"#4ade80" },
   status_scheduled:{ background:"#1a2a3a", color:"#60a5fa" },
-  status_booked:{    background:"#1a2535", color:"#38bdf8" },
   status_completed:{ background:"#1a2a1a", color:"#86efac" },
   status_paid:{      background:"#14532d", color:"#4ade80" },
+  status_lost:{      background:"#2a1a1a", color:"#f87171" },
   areaList:{ display:"flex", flexDirection:"column", gap:8 },
   areaRow:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 12px", display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 },
   areaRowMain:{ flex:1 }, areaName:{ fontWeight:600, fontSize:14 },
@@ -990,14 +990,71 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
 
 // ─── Jobs List ────────────────────────────────────────────────────────────────
 function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById }) {
-  const create   = () => { const j=initialJob(rates); setJobs(p=>[j,...p]); setCurrentJob(j); setView("inspect"); };
-  const open     = (job) => { setCurrentJob(job); setView("inspect"); };
-  const remove   = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
-  const schedule = (job, date) => updateJobById(job.id, j => ({...j, scheduledDate:date, status: date ? "scheduled" : j.status==="scheduled" ? "draft" : j.status}));
+  const [showArchive, setShowArchive] = useState(false);
+  const create    = () => { const j=initialJob(rates); setJobs(p=>[j,...p]); setCurrentJob(j); setView("inspect"); };
+  const open      = (job) => { setCurrentJob(job); setView("inspect"); };
+  const remove    = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
+  const schedule  = (job, date) => updateJobById(job.id, j => ({...j, scheduledDate:date, status: date ? "scheduled" : j.status==="scheduled" ? "draft" : j.status}));
   const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
+  const restore   = (job) => updateJobById(job.id, j => ({...j, status:"draft"}));
 
-  const STATUSES = ["draft","sent","booked","scheduled","completed","paid","signed"];
-  const safeStatus = (s) => (s && STATUSES.includes(s)) ? s : "draft";
+  const STATUS_ORDER    = ["draft","sent","signed","scheduled","completed","paid","lost"];
+  const ARCHIVE_STATUSES = ["completed","paid","lost"];
+  const safeStatus = (s) => (s && STATUS_ORDER.includes(s)) ? s : "draft";
+
+  const activeJobs = jobs
+    .filter(j => !ARCHIVE_STATUSES.includes(safeStatus(j.status)))
+    .sort((a,b) => STATUS_ORDER.indexOf(safeStatus(a.status)) - STATUS_ORDER.indexOf(safeStatus(b.status)));
+  const archivedJobs = jobs
+    .filter(j => ARCHIVE_STATUSES.includes(safeStatus(j.status)))
+    .sort((a,b) => STATUS_ORDER.indexOf(safeStatus(a.status)) - STATUS_ORDER.indexOf(safeStatus(b.status)));
+
+  const renderCard = (j, isArchived) => (
+    <div key={j.id} style={S.jobCard}>
+      <div style={S.jobCardTop} onClick={() => open(j)}>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={S.jobCardName}>{j.clientName||"Unnamed Client"}</div>
+          <div style={S.jobCardAddr}>{j.address||"No address"}</div>
+          <div style={S.jobCardMeta}>{j.date} · {j.areas.length} area{j.areas.length!==1?"s":""}</div>
+          {j.scheduledDate && <div style={S.jobScheduledDate}>📅 {j.scheduledDate}</div>}
+        </div>
+        <span style={{...S.statusBadge,...(S[`status_${safeStatus(j.status)}`]||S.status_draft)}}>
+          {safeStatus(j.status)}
+        </span>
+      </div>
+      <div style={S.jobCardActions}>
+        <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
+        {!isArchived && (
+          <select
+            value={safeStatus(j.status)}
+            onChange={e => { e.stopPropagation(); setStatus(j, e.target.value); }}
+            onClick={e => e.stopPropagation()}
+            style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
+              padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text, cursor:"pointer", outline:"none", flex:1}}>
+            {STATUS_ORDER.map(s => (
+              <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+            ))}
+          </select>
+        )}
+        {!isArchived && (
+          <>
+            <input type="date" defaultValue={j.scheduledDate||""}
+              onChange={e => schedule(j, e.target.value)}
+              style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, width:"auto"}} title="Schedule date"/>
+            {j.scheduledDate && (
+              <button style={{...S.btnSmall, padding:"4px 8px", background:"#2a1a1a", color:C.danger, border:`1px solid ${C.danger}`}}
+                onClick={() => schedule(j, "")} title="Clear date">✕</button>
+            )}
+          </>
+        )}
+        {isArchived && (
+          <button style={{...S.btnSmall, flex:1, background:"#1a2a1a", color:C.green, border:`1px solid ${C.green}`}}
+            onClick={() => restore(j)}>↩ Restore</button>
+        )}
+        <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
+      </div>
+    </div>
+  );
 
   return (
     <div style={S.page}>
@@ -1005,60 +1062,34 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
         <h1 style={S.h1}>Jobs</h1>
         <button onClick={create} style={S.btnPrimary}>+ New Job</button>
       </div>
-      {jobs.length===0 && (
+      {activeJobs.length === 0 && (
         <div style={S.empty}>
           <div style={S.emptyIcon}>📋</div>
-          <p style={S.emptyText}>No jobs yet. Tap <strong>+ New Job</strong> to start.</p>
+          <p style={S.emptyText}>No active jobs. Tap <strong>+ New Job</strong> to start.</p>
         </div>
       )}
-      <div style={S.cardGrid}>
-        {jobs.map(j => (
-          <div key={j.id} style={S.jobCard}>
-            <div style={S.jobCardTop} onClick={() => open(j)}>
-              <div style={{flex:1, minWidth:0}}>
-                <div style={S.jobCardName}>{j.clientName||"Unnamed Client"}</div>
-                <div style={S.jobCardAddr}>{j.address||"No address"}</div>
-                <div style={S.jobCardMeta}>{j.date} · {j.areas.length} area{j.areas.length!==1?"s":""} · {j.photos.length} photo{j.photos.length!==1?"s":""}</div>
-                {j.scheduledDate && <div style={S.jobScheduledDate}>📅 {j.scheduledDate}</div>}
+      <div style={S.cardGrid}>{activeJobs.map(j => renderCard(j, false))}</div>
+      {archivedJobs.length > 0 && (
+        <div style={{marginTop:24}}>
+          <button style={{...S.btnSecondary, width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center"}}
+            onClick={() => setShowArchive(v => !v)}>
+            <span>🗄 Archive ({archivedJobs.length} job{archivedJobs.length!==1?"s":""})</span>
+            <span>{showArchive ? "▲" : "▼"}</span>
+          </button>
+          {showArchive && (
+            <div style={{marginTop:12}}>
+              <div style={{fontSize:12, color:C.textMuted, marginBottom:8}}>
+                Completed, paid, and lost jobs. Tap Restore to move back to active.
               </div>
-              <span style={{...S.statusBadge,...(S[`status_${safeStatus(j.status)}`]||S.status_draft)}}>
-                {safeStatus(j.status)}
-              </span>
+              <div style={S.cardGrid}>{archivedJobs.map(j => renderCard(j, true))}</div>
             </div>
-            <div style={S.jobCardActions}>
-              <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
-              <select
-                value={safeStatus(j.status) || "draft"}
-                onChange={e => { e.stopPropagation(); setStatus(j, e.target.value); }}
-                onClick={e => e.stopPropagation()}
-                style={{
-                  background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
-                  padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text,
-                  cursor:"pointer", outline:"none", flex:1,
-                }}>
-                {STATUSES.map(s => (
-                  <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
-                ))}
-              </select>
-              <input type="date" defaultValue={j.scheduledDate||""}
-                onChange={e => schedule(j, e.target.value)}
-                style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, width:"auto"}}
-                title="Schedule date"/>
-              {j.scheduledDate && (
-                <button style={{...S.btnSmall, padding:"4px 8px", background:"#2a1a1a", color:C.danger, border:`1px solid ${C.danger}`}}
-                  onClick={() => schedule(j, "")}
-                  title="Clear scheduled date">✕</button>
-              )}
-              <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
-            </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Inspect View ─────────────────────────────────────────────────────────────
 function InspectView({ currentJob, updateJob }) {
   const [capturing, setCapturing] = useState(null);
   const [stream,    setStream]    = useState(null);
