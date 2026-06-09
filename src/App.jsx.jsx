@@ -272,7 +272,9 @@ function TopNav({ view, setView }) {
     {key:"measure",  label:"Measure",  icon:"📐"},
     {key:"media",    label:"Media",    icon:"🖼️"},
     {key:"estimate", label:"Estimate", icon:"💰"},
+    {key:"costs",    label:"Costs",    icon:"🧮"},
     {key:"invoice",  label:"Invoice",  icon:"🧾"},
+    {key:"reports",  label:"Reports",  icon:"📊"},
     {key:"rates",    label:"Rates",    icon:"⚙️"},
   ];
 
@@ -1005,6 +1007,474 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
           </section>
         );
       })()}
+    </div>
+  );
+}
+
+// ─── Shared cost calculator (used by CostsView and ReportsView) ───────────────
+function calcJobFinancials(job, rates) {
+  const SEALCOAT_PRICE_PER_GAL = 4.33;
+  const SEALCOAT_SQFT_PER_GAL  = 70;
+  const CRACKFILL_PER_LINFT    = 0.14;
+  const ASPHALT_PER_TON        = 80;
+  const STONE_PER_TON          = 20;
+  const FUEL_PCT               = 0.05;
+  const TARGET_MARGIN          = 0.52;
+
+  const areas = job.areas || [];
+  const sealcoatSqFt   = areas.filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const crackFillLinFt = areas.filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const patchSqFt      = areas.filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const patchTons      = calcPatchTons(patchSqFt);
+
+  const subtotal    = areas.reduce((sum,a)=>sum+calcLineAmt(a,rates),0);
+  const margin      = Number(job.margin||0);
+  const discount    = Number(job.discount||0);
+  const marginAmt   = subtotal*(margin/100);
+  const discountAmt = (subtotal+marginAmt)*(discount/100);
+  const calcTotal   = subtotal+marginAmt-discountAmt;
+  const hasOverride = job.priceOverride!==undefined&&job.priceOverride!==null&&job.priceOverride!=="";
+  const revenue     = hasOverride ? Number(job.priceOverride) : calcTotal;
+
+  const costs = job.costs || {};
+  const sealcoatCost  = (sealcoatSqFt/SEALCOAT_SQFT_PER_GAL)*SEALCOAT_PRICE_PER_GAL;
+  const crackFillCost = crackFillLinFt*CRACKFILL_PER_LINFT;
+  const asphaltCost   = patchTons*ASPHALT_PER_TON;
+  const fuelCost      = revenue*FUEL_PCT;
+  const stoneCost     = Number(costs.stoneTons||0)*STONE_PER_TON;
+  const otherCost     = Number(costs.otherCost||0);
+  const laborCost      = revenue * 0.16;
+  const totalMaterials = sealcoatCost+crackFillCost+asphaltCost+stoneCost+otherCost;
+  const totalCosts     = totalMaterials+fuelCost+laborCost;
+  const grossProfit    = revenue-totalCosts;
+  const actualMargin   = revenue>0 ? (grossProfit/revenue)*100 : 0;
+  const targetGP       = revenue*TARGET_MARGIN;
+  const OVERHEAD_PCT   = 0.1645;
+  const overhead       = revenue * OVERHEAD_PCT;
+  const netProfit      = grossProfit - overhead;
+  const netMargin      = revenue>0 ? (netProfit/revenue)*100 : 0;
+
+  return { revenue, totalMaterials, fuelCost, laborCost, totalCosts, grossProfit, actualMargin, targetGP, overhead, netProfit, netMargin };
+}
+
+// ─── Reports View ─────────────────────────────────────────────────────────────
+function ReportsView({ jobs, rates, setCurrentJob, setView }) {
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [pdfLoading,   setPdfLoading]   = useState(false);
+
+  const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
+
+  // Filter jobs that have any revenue
+  const reportJobs = jobs
+    .filter(j => {
+      const f = calcJobFinancials(j, allRates);
+      if (f.revenue === 0) return false;
+      if (filterStatus !== "all" && j.status !== filterStatus) return false;
+      return true;
+    })
+    .sort((a,b) => (b.date||"").localeCompare(a.date||""));
+
+  // Summary totals
+  const totals = reportJobs.reduce((acc, j) => {
+    const f = calcJobFinancials(j, allRates);
+    acc.revenue        += f.revenue;
+    acc.totalCosts     += f.totalCosts;
+    acc.grossProfit    += f.grossProfit;
+    acc.laborCost      += f.laborCost;
+    acc.fuelCost       += f.fuelCost;
+    acc.totalMaterials += f.totalMaterials;
+    acc.overhead       += f.overhead;
+    acc.netProfit      += f.netProfit;
+    return acc;
+  }, {revenue:0, totalCosts:0, grossProfit:0, laborCost:0, fuelCost:0, totalMaterials:0, overhead:0, netProfit:0});
+  const overallMargin  = totals.revenue>0 ? (totals.grossProfit/totals.revenue)*100 : 0;
+  const overallNetMargin = totals.revenue>0 ? (totals.netProfit/totals.revenue)*100 : 0;
+
+  const printReport = async () => {
+    setPdfLoading(true);
+    try {
+      await new Promise((resolve, reject) => {
+        if (window.jspdf) { resolve(); return; }
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit:"pt", format:"letter" });
+      const PW=612, ML=40, MR=40, usable=PW-ML-MR;
+      let y=40;
+
+      const GOLD=[201,162,39], BLACK=[17,17,17], DGRAY=[85,85,85], LGRAY=[244,244,244], MGRAY=[221,221,221], HDRBLK=[26,26,26], GREEN=[34,197,94], RED=[239,68,68];
+
+      // Logo
+      try { doc.addImage("data:image/png;base64,"+LOGO_B64,"PNG",(PW-200)/2,y,200,62); } catch(e){}
+      y+=72;
+      doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+      doc.text(COMPANY+" · "+PHONE, PW/2, y, {align:"center"}); y+=14;
+      doc.setDrawColor(...GOLD); doc.setLineWidth(2); doc.line(ML,y,PW-MR,y); y+=14;
+      doc.setFontSize(16); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+      doc.text("PROFITABILITY REPORT", PW/2, y, {align:"center"}); y+=10;
+      doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+      doc.text("Generated "+new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}), PW/2, y+8, {align:"center"}); y+=22;
+
+      // Summary box
+      doc.setFillColor(...LGRAY); doc.setDrawColor(...MGRAY); doc.setLineWidth(0.5);
+      doc.roundedRect(ML,y,usable,52,3,3,"FD");
+      const cols4 = usable/4;
+      [
+        ["Total Revenue",  formatCurrency(totals.revenue),        null],
+        ["Gross Profit",   formatCurrency(totals.grossProfit),     totals.grossProfit>=0?GREEN:RED],
+        ["Overhead (16.45%)", formatCurrency(totals.overhead),     DGRAY],
+        ["Net Profit",     formatCurrency(totals.netProfit),       totals.netProfit>=0?GREEN:RED],
+      ].forEach(([label,val,color],i) => {
+        const x = ML+i*cols4+cols4/2;
+        doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
+        doc.text(label.toUpperCase(), x, y+14, {align:"center"});
+        doc.setFontSize(12); doc.setFont("helvetica","bold");
+        doc.setTextColor(...(color||BLACK));
+        doc.text(val, x, y+32, {align:"center"});
+      });
+      y+=62;
+
+      // Table header
+      const cw = [115,58,58,48,48,52,52,52]; // name,revenue,materials,fuel,labor,gp,overhead,net
+      const hdrs = ["Job / Client","Revenue","Materials","Fuel","Labor","Gross P","Ovhd","Net P"];
+      doc.setFillColor(...HDRBLK); doc.rect(ML,y,usable,20,"F");
+      doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...GOLD);
+      let cx=ML;
+      hdrs.forEach((h,i)=>{
+        const right=i>0;
+        doc.text(h, right?cx+cw[i]-4:cx+4, y+13, {align:right?"right":"left"});
+        cx+=cw[i];
+      });
+      y+=20;
+
+      // Rows
+      reportJobs.forEach((j,idx)=>{
+        const f = calcJobFinancials(j, allRates);
+        if (y>720) { doc.addPage(); y=40; }
+        doc.setFillColor(...(idx%2===0?[255,255,255]:LGRAY));
+        doc.rect(ML,y,usable,18,"F");
+        doc.setDrawColor(...MGRAY); doc.setLineWidth(0.2);
+        doc.line(ML,y+18,ML+usable,y+18);
+
+        doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...BLACK);
+        cx=ML;
+        const nameStr = doc.splitTextToSize((j.clientName||"Unnamed")+(j.address?" · "+j.address:""), cw[0]-8);
+        doc.text(nameStr[0], cx+4, y+12);
+        cx+=cw[0];
+        const nums = [
+          [formatCurrency(f.revenue),        BLACK],
+          [formatCurrency(f.totalMaterials),  DGRAY],
+          [formatCurrency(f.fuelCost),        DGRAY],
+          [f.laborCost>0?formatCurrency(f.laborCost):"—", f.laborCost>0?BLACK:DGRAY],
+          [formatCurrency(f.grossProfit),     f.grossProfit>=0?GREEN:RED],
+          [formatCurrency(f.overhead),        DGRAY],
+          [formatCurrency(f.netProfit),       f.netProfit>=0?GREEN:RED],
+        ];
+        nums.forEach(([n,color],i)=>{
+          doc.setTextColor(...color);
+          doc.text(n, cx+cw[i+1]-4, y+12, {align:"right"});
+          cx+=cw[i+1];
+        });
+        y+=18;
+      });
+
+      // Footer line
+      y+=8;
+      doc.setDrawColor(...GOLD); doc.setLineWidth(1); doc.line(ML,y,PW-MR,y); y+=10;
+      doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+      cx=ML;
+      [
+        ["TOTALS",                                    BLACK],
+        [formatCurrency(totals.revenue),              BLACK],
+        [formatCurrency(totals.totalMaterials),       DGRAY],
+        [formatCurrency(totals.fuelCost),             DGRAY],
+        [formatCurrency(totals.laborCost),          BLACK],
+        [formatCurrency(totals.grossProfit),          totals.grossProfit>=0?GREEN:RED],
+        [formatCurrency(totals.overhead),             DGRAY],
+        [formatCurrency(totals.netProfit),            totals.netProfit>=0?GREEN:RED],
+      ].forEach(([v,color],i)=>{
+        doc.setTextColor(...color);
+        doc.text(v, i===0?cx+4:cx+cw[i]-4, y+10, {align:i===0?"left":"right"});
+        cx+=cw[i];
+      });
+
+      doc.save("TPS_Profitability_Report_"+new Date().toISOString().slice(0,10)+".pdf");
+    } catch(e) {
+      console.error(e);
+      alert("PDF generation failed: "+e.message);
+    }
+    setPdfLoading(false);
+  };
+
+  const STATUS_OPTS = ["all","estimate","draft","sent","signed","scheduled","completed","paid","lost"];
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Reports</h1>
+      <p style={S.subhead}>Profitability across all jobs</p>
+
+      {/* Filters + print */}
+      <section style={S.section}>
+        <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
+          <label style={{...S.formLabel, flex:1, minWidth:120, margin:0}}>
+            Filter by Status
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
+              style={{...S.input, marginTop:4}}>
+              {STATUS_OPTS.map(s=><option key={s} value={s}>{s==="all"?"All Jobs":s==="estimate"?"Estimate":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+            </select>
+          </label>
+          <button style={{...S.btnPrimary, alignSelf:"flex-end", opacity:pdfLoading?.5:1}}
+            onClick={printReport} disabled={pdfLoading}>
+            {pdfLoading?"⏳ Generating...":"📄 Download PDF"}
+          </button>
+        </div>
+      </section>
+
+      {/* Summary cards */}
+      {reportJobs.length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Summary ({reportJobs.length} jobs)</h2>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
+            {[
+              ["Total Revenue",    formatCurrency(totals.revenue),        C.text],
+              ["Total Costs",      formatCurrency(totals.totalCosts),      C.text],
+              ["Gross Profit",     formatCurrency(totals.grossProfit),     totals.grossProfit>=0?C.green:C.danger],
+              ["Gross Margin",     overallMargin.toFixed(1)+"%",           overallMargin>=52?C.green:C.danger],
+              ["Overhead (16.45%)",formatCurrency(totals.overhead),        C.textMuted],
+              ["Net Profit",       formatCurrency(totals.netProfit),       totals.netProfit>=0?C.green:C.danger],
+              ["Net Margin",       overallNetMargin.toFixed(1)+"%",        overallNetMargin>=0?C.green:C.danger],
+            ].map(([label,val,color])=>(
+              <div key={label} style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px"}}>
+                <div style={{fontSize:11, color:C.textMuted, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em"}}>{label}</div>
+                <div style={{fontSize:20, fontWeight:800, color}}>{val}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Job rows */}
+      {reportJobs.length === 0 ? (
+        <div style={S.empty}>
+          <div style={S.emptyIcon}>📊</div>
+          <p style={S.emptyText}>No jobs with revenue yet. Complete estimates to see profitability data here.</p>
+        </div>
+      ) : (
+        <section style={S.section}>
+          <h2 style={S.h2}>Job Breakdown</h2>
+          {reportJobs.map(j => {
+            const f = calcJobFinancials(j, allRates);
+            const marginColor = f.actualMargin>=52 ? C.green : f.actualMargin>0 ? C.accent : C.danger;
+            return (
+              <div key={j.id} style={{...S.schedJobCard, marginBottom:10}}
+                onClick={()=>{ setCurrentJob(j); setView("costs"); }}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8}}>
+                  <div style={{flex:1, minWidth:0, marginRight:8}}>
+                    <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                    <div style={S.schedJobAddr}>{j.address||"No address"} · {j.date}</div>
+                  </div>
+                  <span style={{...S.statusBadge,...(S[`status_${j.status}`]||S.status_draft)}}>{j.status}</span>
+                </div>
+                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6}}>
+                  {[
+                    ["Revenue",   formatCurrency(f.revenue),       C.text],
+                    ["Materials", formatCurrency(f.totalMaterials), C.textMuted],
+                    ["Fuel",      formatCurrency(f.fuelCost),       C.textMuted],
+                    ["Labor (16%)", formatCurrency(f.laborCost), C.textMuted],
+                    ["Gross Profit", formatCurrency(f.grossProfit), f.grossProfit>=0?C.green:C.danger],
+                    ["Gross Margin", f.actualMargin.toFixed(1)+"%", f.actualMargin>=52?C.green:C.danger],
+                    ["Overhead",  formatCurrency(f.overhead),       C.textMuted],
+                    ["Net Profit",formatCurrency(f.netProfit),      f.netProfit>=0?C.green:C.danger],
+                    ["Net Margin",f.netMargin.toFixed(1)+"%",       f.netMargin>=0?C.green:C.danger],
+                  ].map(([label,val,color])=>(
+                    <div key={label} style={{background:C.surface, borderRadius:6, padding:"6px 8px"}}>
+                      <div style={{fontSize:10, color:C.textDim, marginBottom:2}}>{label}</div>
+                      <div style={{fontSize:12, fontWeight:700, color}}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{fontSize:11, color:C.textMuted, marginTop:6}}>Tap to open costs →</div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+    </div>
+  );
+}
+
+// ─── Costs View ───────────────────────────────────────────────────────────────
+function CostsView({ currentJob, updateJob, rates }) {
+  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+
+  // ── Material cost constants ──
+  const SEALCOAT_PRICE_PER_GAL = 4.33;
+  const SEALCOAT_SQFT_PER_GAL  = 70;
+  const CRACKFILL_PER_LINFT    = 0.14;
+  const ASPHALT_PER_TON        = 80;
+  const STONE_PER_TON          = 20;
+  const FUEL_PCT               = 0.05;
+  const TARGET_MARGIN          = 0.52;
+
+  // ── Pull measurements from job line items ──
+  const sealcoatSqFt  = (currentJob.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const crackFillLinFt= (currentJob.areas||[]).filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const patchSqFt     = (currentJob.areas||[]).filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const patchTons     = calcPatchTons(patchSqFt);
+
+  // ── Revenue ──
+  const subtotal    = (currentJob.areas||[]).reduce((sum,a)=>sum+calcLineAmt(a,rates),0);
+  const margin      = Number(currentJob.margin||0);
+  const discount    = Number(currentJob.discount||0);
+  const marginAmt   = subtotal*(margin/100);
+  const discountAmt = (subtotal+marginAmt)*(discount/100);
+  const calcTotal   = subtotal+marginAmt-discountAmt;
+  const hasOverride = currentJob.priceOverride!==undefined&&currentJob.priceOverride!==null&&currentJob.priceOverride!=="";
+  const revenue     = hasOverride ? Number(currentJob.priceOverride) : calcTotal;
+
+  // ── Auto-calculated material costs ──
+  const sealcoatGals   = sealcoatSqFt / SEALCOAT_SQFT_PER_GAL;
+  const sealcoatCost   = sealcoatGals * SEALCOAT_PRICE_PER_GAL;
+  const crackFillCost  = crackFillLinFt * CRACKFILL_PER_LINFT;
+  const asphaltCost    = patchTons * ASPHALT_PER_TON;
+  const fuelCost       = revenue * FUEL_PCT;
+
+  // ── Manual cost overrides stored on job ──
+  const costs = currentJob.costs || {};
+  const stoneTons  = Number(costs.stoneTons || 0);
+  const stoneCost  = stoneTons * STONE_PER_TON;
+  const otherCost  = Number(costs.otherCost || 0);
+
+  const updateCosts = (patch) => updateJob(j => ({...j, costs:{...(j.costs||{}), ...patch}}));
+
+  // ── Totals ──
+  const totalMaterials = sealcoatCost + crackFillCost + asphaltCost + stoneCost + otherCost;
+  const totalCOGS      = totalMaterials + fuelCost;
+  const laborCost      = revenue * 0.16;
+  const targetGP       = revenue * TARGET_MARGIN;
+  const totalCosts     = totalCOGS + laborCost;
+  const grossProfit    = revenue - totalCosts;
+  const actualMargin   = revenue > 0 ? (grossProfit/revenue)*100 : 0;
+  const overhead       = revenue * 0.1645;
+  const netProfit      = grossProfit - overhead;
+  const netMargin      = revenue > 0 ? (netProfit/revenue)*100 : 0;
+
+  const row = (label, value, sub, highlight) => (
+    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${C.border}`}}>
+      <div>
+        <div style={{fontSize:13, color: highlight ? C.text : C.textMuted}}>{label}</div>
+        {sub && <div style={{fontSize:11, color:C.textDim, marginTop:1}}>{sub}</div>}
+      </div>
+      <div style={{fontWeight:highlight?700:400, fontSize:highlight?15:13, color:highlight?C.accent:C.textMuted}}>{value}</div>
+    </div>
+  );
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Job Costs</h1>
+      <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
+
+      {/* Revenue */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Revenue</h2>
+        {row("Job Total", formatCurrency(revenue), hasOverride?"Price override active":"Calculated from estimate", true)}
+        {row("Target Gross Profit (52%)", formatCurrency(targetGP), "Revenue × 52%", true)}
+      </section>
+
+      {/* Auto-calculated material costs */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Material Costs (Auto-Calculated)</h2>
+        {sealcoatSqFt > 0 && row(
+          "Sealcoat",
+          formatCurrency(sealcoatCost),
+          `${sealcoatSqFt.toLocaleString()} sq ft ÷ ${SEALCOAT_SQFT_PER_GAL} = ${sealcoatGals.toFixed(1)} gal × $${SEALCOAT_PRICE_PER_GAL}`
+        )}
+        {crackFillLinFt > 0 && row(
+          "Crack Fill",
+          formatCurrency(crackFillCost),
+          `${crackFillLinFt.toLocaleString()} lin ft × $${CRACKFILL_PER_LINFT}/ft`
+        )}
+        {patchTons > 0 && row(
+          "Asphalt (Patching)",
+          formatCurrency(asphaltCost),
+          `${patchTons.toFixed(2)} tons × $${ASPHALT_PER_TON}/ton`
+        )}
+        {row("Fuel (5% of revenue)", formatCurrency(fuelCost), `${formatCurrency(revenue)} × 5%`)}
+
+        {/* Stone — manual entry */}
+        <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+          <div style={{fontSize:13, color:C.textMuted, marginBottom:6}}>Stone <span style={{fontSize:11}}>($20/ton — enter tons needed)</span></div>
+          <div style={{display:"flex", gap:8, alignItems:"center"}}>
+            <input type="number" min="0" step="0.1" value={costs.stoneTons||""}
+              onChange={e => updateCosts({stoneTons:e.target.value})}
+              style={{...S.input, flex:1}} placeholder="0 tons"/>
+            <span style={{fontSize:13, color:C.textMuted, whiteSpace:"nowrap"}}>{formatCurrency(stoneCost)}</span>
+          </div>
+        </div>
+
+        {/* Other cost — manual entry */}
+        <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+          <div style={{fontSize:13, color:C.textMuted, marginBottom:6}}>Other Material Cost</div>
+          <div style={{display:"flex", gap:8}}>
+            <input type="text" value={costs.otherLabel||""}
+              onChange={e => updateCosts({otherLabel:e.target.value})}
+              style={{...S.input, flex:2}} placeholder="Description"/>
+            <div style={{display:"flex", alignItems:"center", gap:4, flex:1}}>
+              <span style={{color:C.textMuted}}>$</span>
+              <input type="number" min="0" step="0.01" value={costs.otherCost||""}
+                onChange={e => updateCosts({otherCost:e.target.value})}
+                style={{...S.input, flex:1}} placeholder="0.00"/>
+            </div>
+          </div>
+        </div>
+
+        {row("Total Materials + Fuel", formatCurrency(totalCOGS), "", true)}
+      </section>
+
+      {/* Labor — fixed 16% of revenue */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Labor (16% of Revenue)</h2>
+        {row(
+          "Estimated Labor Cost",
+          formatCurrency(laborCost),
+          `${formatCurrency(revenue)} × 16%`,
+          true
+        )}
+      </section>
+
+      {/* Summary */}
+      {totalCosts > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Summary</h2>
+          {row("Total Revenue", formatCurrency(revenue))}
+          {row("Total Costs", formatCurrency(totalCosts))}
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+            <div>
+              <div style={{fontSize:13, fontWeight:700}}>Gross Profit</div>
+              <div style={{fontSize:11, color:C.textMuted}}>Gross margin: {actualMargin.toFixed(1)}% {actualMargin>=52?"✓":"(target: 52%)"}</div>
+            </div>
+            <div style={{fontWeight:800, fontSize:16, color:grossProfit>=0?C.green:C.danger}}>{formatCurrency(grossProfit)}</div>
+          </div>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+            <div>
+              <div style={{fontSize:13, color:C.textMuted}}>Overhead (16.45% of revenue)</div>
+              <div style={{fontSize:11, color:C.textDim}}>{formatCurrency(revenue)} × 16.45%</div>
+            </div>
+            <div style={{fontSize:14, color:C.textMuted}}>−{formatCurrency(overhead)}</div>
+          </div>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0"}}>
+            <div>
+              <div style={{fontSize:14, fontWeight:800}}>Net Profit</div>
+              <div style={{fontSize:11, color:C.textMuted}}>Net margin: {netMargin.toFixed(1)}%</div>
+            </div>
+            <div style={{fontWeight:800, fontSize:20, color:netProfit>=0?C.green:C.danger}}>{formatCurrency(netProfit)}</div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -2344,7 +2814,9 @@ export default function App() {
         {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
         {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="costs"    && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="reports"  && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
       </div>
     </div>
