@@ -2095,7 +2095,7 @@ function MeasureView({ currentJob, updateJob, rates }) {
 }
 
 // ─── Estimate View ────────────────────────────────────────────────────────────
-function EstimateView({ currentJob, updateJob, rates }) {
+function EstimateView({ currentJob, updateJob, rates, syncJob }) {
   const [sent,       setSent]       = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const clientSigRef  = useRef(null);
@@ -2164,7 +2164,7 @@ function EstimateView({ currentJob, updateJob, rates }) {
     const px = ctx.getImageData(0,0,c.width,c.height).data;
     const hasInk = Array.from(px).some((v,i) => i%4===3 && v>0);
     if (!hasInk) { alert("Please have the client sign before accepting."); return; }
-    // Composite onto white background so PNG renders correctly in PDF
+    // Composite onto white background
     const offscreen = document.createElement("canvas");
     offscreen.width = c.width; offscreen.height = c.height;
     const octx = offscreen.getContext("2d");
@@ -2174,7 +2174,13 @@ function EstimateView({ currentJob, updateJob, rates }) {
     const sigData   = offscreen.toDataURL("image/png");
     const signedAt  = new Date().toLocaleString();
     const printName = currentJob.clientPrintName || currentJob.clientName || "";
-    updateJob(j => ({...j, clientSignature:sigData, clientSignedAt:signedAt, clientPrintName:printName, status:"signed"}));
+    // Build the updated job with signature
+    const updatedJob = {...currentJob, clientSignature:sigData, clientSignedAt:signedAt, clientPrintName:printName, status:"signed"};
+    // Update local state
+    updateJob(() => updatedJob);
+    // Immediately force sync to Supabase — don't wait for debounce
+    if (syncJob) await syncJob(updatedJob);
+    // Then generate PDF with the sig data directly
     await generatePDF(sigData, signedAt, printName);
   };
 
@@ -2834,7 +2840,7 @@ export default function App() {
         {view==="inspect"  && <InspectView currentJob={currentJob} updateJob={updateJob}/>}
         {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
-        {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}/>}
         {view==="costs"    && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="reports"  && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
