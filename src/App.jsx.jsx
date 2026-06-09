@@ -1674,9 +1674,6 @@ function InspectView({ currentJob, updateJob }) {
   const sigEnd = (e) => {
     e.preventDefault();
     sigDrawing.current = false;
-    const c = sigCanvasRef.current; if (!c) return;
-    // Save signature as dataURL on the job
-    updateJob(j => ({...j, signature: c.toDataURL("image/png")}));
   };
 
   const clearSig = () => {
@@ -1744,24 +1741,43 @@ function InspectView({ currentJob, updateJob }) {
       {/* Signature Pad */}
       <section style={S.section}>
         <h2 style={S.h2}>TPS Representative Signature</h2>
-        <p style={{fontSize:12, color:C.textMuted, marginBottom:10, marginTop:-8}}>
-          Draw your signature below — it will appear on the estimate PDF.
-        </p>
-        <div style={S.sigWrap}>
-          <canvas
-            ref={sigCanvasRef}
-            width={560} height={140}
-            style={S.sigCanvas}
-            onMouseDown={sigStart} onMouseMove={sigMove} onMouseUp={sigEnd} onMouseLeave={sigEnd}
-            onTouchStart={sigStart} onTouchMove={sigMove} onTouchEnd={sigEnd}
-          />
-          {currentJob.signature && (
-            <div style={S.sigSavedBadge}>✓ Saved</div>
-          )}
-        </div>
-        <button style={{...S.btnSecondary, marginTop:10, fontSize:12}} onClick={clearSig}>
-          🗑 Clear Signature
-        </button>
+
+        {currentJob.signature ? (
+          <div style={S.signedBanner}>
+            <div style={S.signedBannerTitle}>✅ Signature Saved</div>
+            <div style={S.signedBannerSub}>Appears on estimate PDF</div>
+            <img src={currentJob.signature} alt="TPS Signature"
+              style={{display:"block", maxWidth:260, marginTop:10, borderRadius:6, border:`1px solid ${C.border}`}}/>
+            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={clearSig}>
+              🗑 Remove Signature
+            </button>
+          </div>
+        ) : (
+          <>
+            <p style={{fontSize:12, color:C.textMuted, marginBottom:10, marginTop:-8}}>
+              Draw your signature below — it will appear on the estimate PDF.
+            </p>
+            <div style={S.sigWrap}>
+              <canvas
+                ref={sigCanvasRef}
+                width={560} height={140}
+                style={S.sigCanvas}
+                onMouseDown={sigStart} onMouseMove={sigMove} onMouseUp={sigEnd} onMouseLeave={sigEnd}
+                onTouchStart={sigStart} onTouchMove={sigMove} onTouchEnd={sigEnd}
+              />
+            </div>
+            <div style={{display:"flex", gap:10, marginTop:10}}>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearSig}>🗑 Clear</button>
+              <button style={{...S.btnPrimary, flex:1}} onClick={() => {
+                const c = sigCanvasRef.current; if (!c) return;
+                const px = c.getContext("2d").getImageData(0,0,c.width,c.height).data;
+                const hasInk = Array.from(px).some((v,i) => i%4===3 && v>0);
+                if (!hasInk) { alert("Please draw your signature first."); return; }
+                updateJob(j => ({...j, signature: c.toDataURL("image/png")}));
+              }}>✍️ Save Signature</button>
+            </div>
+          </>
+        )}
       </section>
 
       <section style={S.section}>
