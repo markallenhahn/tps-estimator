@@ -2144,14 +2144,21 @@ function EstimateView({ currentJob, updateJob, rates }) {
   const acceptAndSign = async () => {
     const c = clientSigRef.current;
     if (!c) return;
-    const px = c.getContext("2d").getImageData(0,0,c.width,c.height).data;
+    const ctx = c.getContext("2d");
+    const px = ctx.getImageData(0,0,c.width,c.height).data;
     const hasInk = Array.from(px).some((v,i) => i%4===3 && v>0);
     if (!hasInk) { alert("Please have the client sign before accepting."); return; }
-    const sigData   = c.toDataURL("image/png");
+    // Composite onto white background so PNG renders correctly in PDF
+    const offscreen = document.createElement("canvas");
+    offscreen.width = c.width; offscreen.height = c.height;
+    const octx = offscreen.getContext("2d");
+    octx.fillStyle = "#ffffff";
+    octx.fillRect(0,0,c.width,c.height);
+    octx.drawImage(c,0,0);
+    const sigData   = offscreen.toDataURL("image/jpeg", 0.95);
     const signedAt  = new Date().toLocaleString();
     const printName = currentJob.clientPrintName || currentJob.clientName || "";
     updateJob(j => ({...j, clientSignature:sigData, clientSignedAt:signedAt, clientPrintName:printName, status:"signed"}));
-    // Pass data directly as overrides — no need to wait for state update
     await generatePDF(sigData, signedAt, printName);
   };
 
@@ -2411,7 +2418,11 @@ function EstimateView({ currentJob, updateJob, rates }) {
           doc.text(sigLabels[si], sx, lineY + 11);
           // Client signature image
           if (si === 0 && clientSig) {
-            try { doc.addImage(clientSig, "PNG", sx, lineY - 28, sigW, 26); } catch(e) {}
+            try {
+              // Detect format from data URL
+              const fmt = clientSig.includes("data:image/jpeg") ? "JPEG" : "PNG";
+              doc.addImage(clientSig, fmt, sx, lineY - 28, sigW, 26);
+            } catch(e) { console.error("Client sig addImage failed:", e); }
           }
           // Print name pre-filled
           if (si === 1 && printName) {
@@ -2427,7 +2438,10 @@ function EstimateView({ currentJob, updateJob, rates }) {
           }
           // TPS rep signature
           if (si === 3 && currentJob.signature) {
-            try { doc.addImage(currentJob.signature, "PNG", sx, lineY - 28, sigW, 26); } catch(e) {}
+            try {
+              const fmt = currentJob.signature.includes("data:image/jpeg") ? "JPEG" : "PNG";
+              doc.addImage(currentJob.signature, fmt, sx, lineY - 28, sigW, 26);
+            } catch(e) { console.error("TPS sig addImage failed:", e); }
           }
         });
       });
