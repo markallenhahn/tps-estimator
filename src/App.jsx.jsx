@@ -2404,6 +2404,28 @@ function EstimateView({ currentJob, updateJob, rates }) {
       const signedAt   = signedAtOverride   || currentJob.clientSignedAt   || null;
       const printName  = printNameOverride  || currentJob.clientPrintName  || null;
 
+      // Pre-render signatures to canvas to get raw pixel data jsPDF can use reliably
+      const toImgData = (dataUrl) => new Promise(res => {
+        if (!dataUrl) { res(null); return; }
+        const img = new Image();
+        img.onload = () => {
+          const cv = document.createElement("canvas");
+          cv.width = img.width; cv.height = img.height;
+          const ctx2 = cv.getContext("2d");
+          ctx2.fillStyle = "#ffffff";
+          ctx2.fillRect(0,0,cv.width,cv.height);
+          ctx2.drawImage(img,0,0);
+          res(cv.toDataURL("image/jpeg",0.95));
+        };
+        img.onerror = () => res(null);
+        img.src = dataUrl;
+      });
+
+      const [clientSigReady, tpsSigReady] = await Promise.all([
+        toImgData(clientSig),
+        toImgData(currentJob.signature),
+      ]);
+
       const sigLabels = ["Client Signature", "Print Name", "Date", COMPANY + " Authorized Representative"];
       const sigW = (usable - 30) / 2;
       const sigRowH = 52;
@@ -2416,32 +2438,21 @@ function EstimateView({ currentJob, updateJob, rates }) {
           const sx = ML + col * (sigW + 30);
           doc.line(sx, lineY, sx + sigW, lineY);
           doc.text(sigLabels[si], sx, lineY + 11);
-          // Client signature image
-          if (si === 0 && clientSig) {
-            try {
-              // Detect format from data URL
-              const fmt = clientSig.includes("data:image/jpeg") ? "JPEG" : "PNG";
-              doc.addImage(clientSig, fmt, sx, lineY - 28, sigW, 26);
-            } catch(e) { console.error("Client sig addImage failed:", e); }
+          if (si === 0 && clientSigReady) {
+            try { doc.addImage(clientSigReady, "JPEG", sx, lineY - 28, sigW, 26); } catch(e) { console.error("clientSig:", e); }
           }
-          // Print name pre-filled
           if (si === 1 && printName) {
             doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
             doc.setFontSize(10); doc.text(printName, sx, lineY - 8);
             doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY); doc.setFontSize(8);
           }
-          // Signed date
           if (si === 2 && signedAt) {
             doc.setFont("helvetica","normal"); doc.setTextColor(...BLACK);
             doc.setFontSize(9); doc.text(signedAt, sx, lineY - 8);
             doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY); doc.setFontSize(8);
           }
-          // TPS rep signature
-          if (si === 3 && currentJob.signature) {
-            try {
-              const fmt = currentJob.signature.includes("data:image/jpeg") ? "JPEG" : "PNG";
-              doc.addImage(currentJob.signature, fmt, sx, lineY - 28, sigW, 26);
-            } catch(e) { console.error("TPS sig addImage failed:", e); }
+          if (si === 3 && tpsSigReady) {
+            try { doc.addImage(tpsSigReady, "JPEG", sx, lineY - 28, sigW, 26); } catch(e) { console.error("tpsSig:", e); }
           }
         });
       });
