@@ -2171,7 +2171,7 @@ function EstimateView({ currentJob, updateJob, rates }) {
     octx.fillStyle = "#ffffff";
     octx.fillRect(0,0,c.width,c.height);
     octx.drawImage(c,0,0);
-    const sigData   = offscreen.toDataURL("image/jpeg", 0.95);
+    const sigData   = offscreen.toDataURL("image/png");
     const signedAt  = new Date().toLocaleString();
     const printName = currentJob.clientPrintName || currentJob.clientName || "";
     updateJob(j => ({...j, clientSignature:sigData, clientSignedAt:signedAt, clientPrintName:printName, status:"signed"}));
@@ -2420,28 +2420,6 @@ function EstimateView({ currentJob, updateJob, rates }) {
       const signedAt   = signedAtOverride   || currentJob.clientSignedAt   || null;
       const printName  = printNameOverride  || currentJob.clientPrintName  || null;
 
-      // Pre-render signatures to canvas to get raw pixel data jsPDF can use reliably
-      const toImgData = (dataUrl) => new Promise(res => {
-        if (!dataUrl) { res(null); return; }
-        const img = new Image();
-        img.onload = () => {
-          const cv = document.createElement("canvas");
-          cv.width = img.width; cv.height = img.height;
-          const ctx2 = cv.getContext("2d");
-          ctx2.fillStyle = "#ffffff";
-          ctx2.fillRect(0,0,cv.width,cv.height);
-          ctx2.drawImage(img,0,0);
-          res(cv.toDataURL("image/jpeg",0.95));
-        };
-        img.onerror = () => res(null);
-        img.src = dataUrl;
-      });
-
-      const [clientSigReady, tpsSigReady] = await Promise.all([
-        toImgData(clientSig),
-        toImgData(currentJob.signature),
-      ]);
-
       const sigLabels = ["Client Signature", "Print Name", "Date", COMPANY + " Authorized Representative"];
       const sigW = (usable - 30) / 2;
       const sigRowH = 52;
@@ -2454,8 +2432,10 @@ function EstimateView({ currentJob, updateJob, rates }) {
           const sx = ML + col * (sigW + 30);
           doc.line(sx, lineY, sx + sigW, lineY);
           doc.text(sigLabels[si], sx, lineY + 11);
-          if (si === 0 && clientSigReady) {
-            try { doc.addImage(clientSigReady, "JPEG", sx, lineY - 28, sigW, 26); } catch(e) { console.error("clientSig:", e); }
+          if (si === 0 && clientSig) {
+            try { doc.addImage(clientSig, "JPEG", sx, lineY - 28, sigW, 26); } catch(e) {
+              try { doc.addImage(clientSig, "PNG", sx, lineY - 28, sigW, 26); } catch(e2) {}
+            }
           }
           if (si === 1 && printName) {
             doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
@@ -2467,8 +2447,8 @@ function EstimateView({ currentJob, updateJob, rates }) {
             doc.setFontSize(9); doc.text(signedAt, sx, lineY - 8);
             doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY); doc.setFontSize(8);
           }
-          if (si === 3 && tpsSigReady) {
-            try { doc.addImage(tpsSigReady, "JPEG", sx, lineY - 28, sigW, 26); } catch(e) { console.error("tpsSig:", e); }
+          if (si === 3 && currentJob.signature) {
+            try { doc.addImage(currentJob.signature, "PNG", sx, lineY - 28, sigW, 26); } catch(e) {}
           }
         });
       });
