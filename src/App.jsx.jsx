@@ -1036,14 +1036,27 @@ function calcJobFinancials(job, rates) {
   const hasOverride = job.priceOverride!==undefined&&job.priceOverride!==null&&job.priceOverride!=="";
   const revenue     = hasOverride ? Number(job.priceOverride) : calcTotal;
 
-  const costs = job.costs || {};
-  const sealcoatCost  = (sealcoatSqFt/SEALCOAT_SQFT_PER_GAL)*SEALCOAT_PRICE_PER_GAL;
-  const crackFillCost = crackFillLinFt*CRACKFILL_PER_LINFT;
-  const asphaltCost   = patchTons*ASPHALT_PER_TON;
-  const fuelCost      = revenue*FUEL_PCT;
-  const stoneCost     = Number(costs.stoneTons||0)*STONE_PER_TON;
-  const otherCost     = Number(costs.otherCost||0);
-  const laborCost      = revenue * 0.16;
+  const costs     = job.costs || {};
+  const actuals   = costs.actuals || {};
+  const actVal    = (key, est) => actuals[key]!=null && actuals[key]!=="" ? Number(actuals[key]) : est;
+
+  const estSealcoat  = (sealcoatSqFt/SEALCOAT_SQFT_PER_GAL)*SEALCOAT_PRICE_PER_GAL;
+  const estCrackFill = crackFillLinFt*CRACKFILL_PER_LINFT;
+  const estAsphalt   = patchTons*ASPHALT_PER_TON;
+  const estFuel      = revenue*FUEL_PCT;
+  const estStone     = Number(costs.stoneTons||0)*STONE_PER_TON;
+  const estOther     = Number(costs.otherCost||0);
+  const estLabor     = revenue*0.16;
+  const estTotal     = estSealcoat+estCrackFill+estAsphalt+estFuel+estStone+estOther+estLabor;
+
+  const sealcoatCost  = actVal("sealcoat",  estSealcoat);
+  const crackFillCost = actVal("crackfill", estCrackFill);
+  const asphaltCost   = actVal("asphalt",   estAsphalt);
+  const fuelCost      = actVal("fuel",      estFuel);
+  const stoneCost     = actVal("stone",     estStone);
+  const otherCost     = actVal("other",     estOther);
+  const laborCost     = actVal("labor",     estLabor);
+
   const totalMaterials = sealcoatCost+crackFillCost+asphaltCost+stoneCost+otherCost;
   const totalCosts     = totalMaterials+fuelCost+laborCost;
   const grossProfit    = revenue-totalCosts;
@@ -1054,7 +1067,7 @@ function calcJobFinancials(job, rates) {
   const netProfit      = grossProfit - overhead;
   const netMargin      = revenue>0 ? (netProfit/revenue)*100 : 0;
 
-  return { revenue, totalMaterials, fuelCost, laborCost, totalCosts, grossProfit, actualMargin, targetGP, overhead, netProfit, netMargin };
+  return { revenue, totalMaterials, fuelCost, laborCost, totalCosts, grossProfit, actualMargin, targetGP, overhead, netProfit, netMargin, estTotal, variance: totalCosts-estTotal };
 }
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
@@ -1281,15 +1294,15 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
                 </div>
                 <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6}}>
                   {[
-                    ["Revenue",   formatCurrency(f.revenue),       C.text],
-                    ["Materials", formatCurrency(f.totalMaterials), C.textMuted],
-                    ["Fuel",      formatCurrency(f.fuelCost),       C.textMuted],
-                    ["Labor (16%)", formatCurrency(f.laborCost), C.textMuted],
-                    ["Gross Profit", formatCurrency(f.grossProfit), f.grossProfit>=0?C.green:C.danger],
-                    ["Gross Margin", f.actualMargin.toFixed(1)+"%", f.actualMargin>=52?C.green:C.danger],
-                    ["Overhead",  formatCurrency(f.overhead),       C.textMuted],
-                    ["Net Profit",formatCurrency(f.netProfit),      f.netProfit>=0?C.green:C.danger],
-                    ["Net Margin",f.netMargin.toFixed(1)+"%",       f.netMargin>=0?C.green:C.danger],
+                    ["Revenue",      formatCurrency(f.revenue),        C.text],
+                    ["Labor (16%)",  formatCurrency(f.laborCost),      C.textMuted],
+                    ["Fuel (5%)",    formatCurrency(f.fuelCost),       C.textMuted],
+                    ["Total Costs",  formatCurrency(f.totalCosts),     C.text],
+                    ["Gross Profit", formatCurrency(f.grossProfit),    f.grossProfit>=0?C.green:C.danger],
+                    ["Gross Margin", f.actualMargin.toFixed(1)+"%",    f.actualMargin>=52?C.green:C.danger],
+                    ["Overhead",     formatCurrency(f.overhead),       C.textMuted],
+                    ["Net Profit",   formatCurrency(f.netProfit),      f.netProfit>=0?C.green:C.danger],
+                    ["Variance",     f.variance!==0?(f.variance>0?"+":"")+formatCurrency(f.variance):"On Est.", f.variance>0?C.danger:f.variance<0?C.green:C.textMuted],
                   ].map(([label,val,color])=>(
                     <div key={label} style={{background:C.surface, borderRadius:6, padding:"6px 8px"}}>
                       <div style={{fontSize:10, color:C.textDim, marginBottom:2}}>{label}</div>
@@ -1311,7 +1324,6 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
 function CostsView({ currentJob, updateJob, rates }) {
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
-  // ── Material cost constants ──
   const SEALCOAT_PRICE_PER_GAL = 4.33;
   const SEALCOAT_SQFT_PER_GAL  = 70;
   const CRACKFILL_PER_LINFT    = 0.14;
@@ -1320,13 +1332,11 @@ function CostsView({ currentJob, updateJob, rates }) {
   const FUEL_PCT               = 0.05;
   const TARGET_MARGIN          = 0.52;
 
-  // ── Pull measurements from job line items ──
-  const sealcoatSqFt  = (currentJob.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
-  const crackFillLinFt= (currentJob.areas||[]).filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
-  const patchSqFt     = (currentJob.areas||[]).filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
-  const patchTons     = calcPatchTons(patchSqFt);
+  const sealcoatSqFt   = (currentJob.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const crackFillLinFt = (currentJob.areas||[]).filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const patchSqFt      = (currentJob.areas||[]).filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const patchTons      = calcPatchTons(patchSqFt);
 
-  // ── Revenue ──
   const subtotal    = (currentJob.areas||[]).reduce((sum,a)=>sum+calcLineAmt(a,rates),0);
   const margin      = Number(currentJob.margin||0);
   const discount    = Number(currentJob.discount||0);
@@ -1336,42 +1346,77 @@ function CostsView({ currentJob, updateJob, rates }) {
   const hasOverride = currentJob.priceOverride!==undefined&&currentJob.priceOverride!==null&&currentJob.priceOverride!=="";
   const revenue     = hasOverride ? Number(currentJob.priceOverride) : calcTotal;
 
-  // ── Auto-calculated material costs ──
-  const sealcoatGals   = sealcoatSqFt / SEALCOAT_SQFT_PER_GAL;
-  const sealcoatCost   = sealcoatGals * SEALCOAT_PRICE_PER_GAL;
-  const crackFillCost  = crackFillLinFt * CRACKFILL_PER_LINFT;
-  const asphaltCost    = patchTons * ASPHALT_PER_TON;
-  const fuelCost       = revenue * FUEL_PCT;
+  // ── Estimated costs (auto-calculated) ──
+  const estSealcoatGals  = sealcoatSqFt / SEALCOAT_SQFT_PER_GAL;
+  const estSealcoat      = estSealcoatGals * SEALCOAT_PRICE_PER_GAL;
+  const estCrackFill     = crackFillLinFt * CRACKFILL_PER_LINFT;
+  const estAsphalt       = patchTons * ASPHALT_PER_TON;
+  const estFuel          = revenue * FUEL_PCT;
+  const estLabor         = revenue * 0.16;
+  const costs            = currentJob.costs || {};
+  const estStoneTons     = Number(costs.stoneTons || 0);
+  const estStone         = estStoneTons * STONE_PER_TON;
+  const estOther         = Number(costs.otherCost || 0);
+  const estTotal         = estSealcoat + estCrackFill + estAsphalt + estFuel + estLabor + estStone + estOther;
 
-  // ── Manual cost overrides stored on job ──
-  const costs = currentJob.costs || {};
-  const stoneTons  = Number(costs.stoneTons || 0);
-  const stoneCost  = stoneTons * STONE_PER_TON;
-  const otherCost  = Number(costs.otherCost || 0);
+  // ── Actual costs (editable, fall back to estimated if blank) ──
+  const actuals = costs.actuals || {};
+  const actVal  = (key, est) => actuals[key]!=null && actuals[key]!=="" ? Number(actuals[key]) : est;
+  const actSealcoat  = actVal("sealcoat",  estSealcoat);
+  const actCrackFill = actVal("crackfill", estCrackFill);
+  const actAsphalt   = actVal("asphalt",   estAsphalt);
+  const actFuel      = actVal("fuel",      estFuel);
+  const actLabor     = actVal("labor",     estLabor);
+  const actStone     = actVal("stone",     estStone);
+  const actOther     = actVal("other",     estOther);
+  const actTotal     = actSealcoat + actCrackFill + actAsphalt + actFuel + actLabor + actStone + actOther;
 
-  const updateCosts = (patch) => updateJob(j => ({...j, costs:{...(j.costs||{}), ...patch}}));
+  const updateActual = (key, val) => updateJob(j => ({...j, costs:{...(j.costs||{}), actuals:{...(j.costs?.actuals||{}), [key]:val}}}));
+  const updateCosts  = (patch) => updateJob(j => ({...j, costs:{...(j.costs||{}), ...patch}}));
 
-  // ── Totals ──
-  const totalMaterials = sealcoatCost + crackFillCost + asphaltCost + stoneCost + otherCost;
-  const totalCOGS      = totalMaterials + fuelCost;
-  const laborCost      = revenue * 0.16;
-  const targetGP       = revenue * TARGET_MARGIN;
-  const totalCosts     = totalCOGS + laborCost;
-  const grossProfit    = revenue - totalCosts;
-  const actualMargin   = revenue > 0 ? (grossProfit/revenue)*100 : 0;
-  const overhead       = revenue * 0.1645;
-  const netProfit      = grossProfit - overhead;
-  const netMargin      = revenue > 0 ? (netProfit/revenue)*100 : 0;
+  // ── Profitability using actuals ──
+  const grossProfit  = revenue - actTotal;
+  const grossMargin  = revenue > 0 ? (grossProfit/revenue)*100 : 0;
+  const overhead     = revenue * 0.1645;
+  const netProfit    = grossProfit - overhead;
+  const netMargin    = revenue > 0 ? (netProfit/revenue)*100 : 0;
 
-  const row = (label, value, sub, highlight) => (
-    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${C.border}`}}>
-      <div>
-        <div style={{fontSize:13, color: highlight ? C.text : C.textMuted}}>{label}</div>
-        {sub && <div style={{fontSize:11, color:C.textDim, marginTop:1}}>{sub}</div>}
+  const hasAnyActual = Object.values(actuals).some(v => v !== "" && v !== null);
+  const variance     = actTotal - estTotal;
+
+  // ── Row renderer ──
+  const costRow = (label, est, actKey, sub) => {
+    const actRaw  = actuals[actKey];
+    const hasAct  = actRaw !== undefined && actRaw !== null && actRaw !== "";
+    const actAmt  = hasAct ? Number(actRaw) : est;
+    const diff    = actAmt - est;
+    return (
+      <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
+          <div>
+            <div style={{fontSize:13, color:C.text, fontWeight:600}}>{label}</div>
+            {sub && <div style={{fontSize:11, color:C.textDim, marginTop:1}}>{sub}</div>}
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:11, color:C.textMuted}}>Est: {formatCurrency(est)}</div>
+            {hasAct && <div style={{fontSize:12, fontWeight:700, color: diff>0?C.danger:C.green}}>
+              Act: {formatCurrency(actAmt)} ({diff>0?"+":""}{formatCurrency(diff)})
+            </div>}
+          </div>
+        </div>
+        <div style={{display:"flex", gap:6, alignItems:"center"}}>
+          <span style={{fontSize:12, color:C.textMuted, flexShrink:0}}>Actual $</span>
+          <input type="number" min="0" step="0.01"
+            value={actRaw||""}
+            onChange={e => updateActual(actKey, e.target.value)}
+            placeholder={formatCurrency(est).replace("$","")}
+            style={{...S.input, flex:1, fontSize:12, padding:"5px 8px"}}/>
+          {hasAct && <button style={{...S.btnSmall, fontSize:11, padding:"4px 8px", background:"#2a1a1a", color:C.textMuted}}
+            onClick={() => updateActual(actKey, "")}>Reset</button>}
+        </div>
       </div>
-      <div style={{fontWeight:highlight?700:400, fontSize:highlight?15:13, color:highlight?C.accent:C.textMuted}}>{value}</div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div style={S.page}>
@@ -1381,100 +1426,119 @@ function CostsView({ currentJob, updateJob, rates }) {
       {/* Revenue */}
       <section style={S.section}>
         <h2 style={S.h2}>Revenue</h2>
-        {row("Job Total", formatCurrency(revenue), hasOverride?"Price override active":"Calculated from estimate", true)}
-        {row("Target Gross Profit (52%)", formatCurrency(targetGP), "Revenue × 52%", true)}
+        <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0"}}>
+          <span style={{color:C.textMuted, fontSize:13}}>Job Total</span>
+          <span style={{fontWeight:700, fontSize:15, color:C.accent}}>{formatCurrency(revenue)}</span>
+        </div>
+        <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", borderTop:`1px solid ${C.border}`}}>
+          <span style={{color:C.textMuted, fontSize:13}}>Target GP (52%)</span>
+          <span style={{fontWeight:700, color:C.accent}}>{formatCurrency(revenue*TARGET_MARGIN)}</span>
+        </div>
       </section>
 
-      {/* Auto-calculated material costs */}
+      {/* Cost lines — estimated vs actual */}
       <section style={S.section}>
-        <h2 style={S.h2}>Material Costs (Auto-Calculated)</h2>
-        {sealcoatSqFt > 0 && row(
+        <h2 style={S.h2}>Costs — Estimated vs Actual</h2>
+        <div style={{fontSize:12, color:C.textMuted, marginBottom:10, marginTop:-8}}>
+          Leave actual blank to use estimated. Changes sync to report.
+        </div>
+
+        {sealcoatSqFt > 0 && costRow(
           "Sealcoat",
-          formatCurrency(sealcoatCost),
-          `${sealcoatSqFt.toLocaleString()} sq ft ÷ ${SEALCOAT_SQFT_PER_GAL} = ${sealcoatGals.toFixed(1)} gal × $${SEALCOAT_PRICE_PER_GAL}`
+          estSealcoat, "sealcoat",
+          `${estSealcoatGals.toFixed(1)} gal × $${SEALCOAT_PRICE_PER_GAL}`
         )}
-        {crackFillLinFt > 0 && row(
+        {crackFillLinFt > 0 && costRow(
           "Crack Fill",
-          formatCurrency(crackFillCost),
+          estCrackFill, "crackfill",
           `${crackFillLinFt.toLocaleString()} lin ft × $${CRACKFILL_PER_LINFT}/ft`
         )}
-        {patchTons > 0 && row(
+        {patchTons > 0 && costRow(
           "Asphalt (Patching)",
-          formatCurrency(asphaltCost),
+          estAsphalt, "asphalt",
           `${patchTons.toFixed(2)} tons × $${ASPHALT_PER_TON}/ton`
         )}
-        {row("Fuel (5% of revenue)", formatCurrency(fuelCost), `${formatCurrency(revenue)} × 5%`)}
+        {costRow("Fuel (5%)", estFuel, "fuel", `${formatCurrency(revenue)} × 5%`)}
+        {costRow("Labor (16%)", estLabor, "labor", `${formatCurrency(revenue)} × 16%`)}
 
-        {/* Stone — manual entry */}
+        {/* Stone */}
         <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-          <div style={{fontSize:13, color:C.textMuted, marginBottom:6}}>Stone <span style={{fontSize:11}}>($20/ton — enter tons needed)</span></div>
-          <div style={{display:"flex", gap:8, alignItems:"center"}}>
+          <div style={{fontSize:13, color:C.text, fontWeight:600, marginBottom:6}}>Stone ($20/ton)</div>
+          <div style={{display:"flex", gap:6, marginBottom:6}}>
             <input type="number" min="0" step="0.1" value={costs.stoneTons||""}
               onChange={e => updateCosts({stoneTons:e.target.value})}
-              style={{...S.input, flex:1}} placeholder="0 tons"/>
-            <span style={{fontSize:13, color:C.textMuted, whiteSpace:"nowrap"}}>{formatCurrency(stoneCost)}</span>
+              style={{...S.input, flex:1, fontSize:12, padding:"5px 8px"}} placeholder="Est tons"/>
+            <span style={{fontSize:12, color:C.textMuted, alignSelf:"center", whiteSpace:"nowrap"}}>Est: {formatCurrency(estStone)}</span>
+          </div>
+          <div style={{display:"flex", gap:6, alignItems:"center"}}>
+            <span style={{fontSize:12, color:C.textMuted, flexShrink:0}}>Actual $</span>
+            <input type="number" min="0" step="0.01" value={actuals.stone||""}
+              onChange={e => updateActual("stone", e.target.value)}
+              style={{...S.input, flex:1, fontSize:12, padding:"5px 8px"}} placeholder={formatCurrency(estStone).replace("$","")}/>
           </div>
         </div>
 
-        {/* Other cost — manual entry */}
+        {/* Other */}
         <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-          <div style={{fontSize:13, color:C.textMuted, marginBottom:6}}>Other Material Cost</div>
-          <div style={{display:"flex", gap:8}}>
+          <div style={{fontSize:13, color:C.text, fontWeight:600, marginBottom:6}}>Other</div>
+          <div style={{display:"flex", gap:6, marginBottom:6}}>
             <input type="text" value={costs.otherLabel||""}
               onChange={e => updateCosts({otherLabel:e.target.value})}
-              style={{...S.input, flex:2}} placeholder="Description"/>
-            <div style={{display:"flex", alignItems:"center", gap:4, flex:1}}>
-              <span style={{color:C.textMuted}}>$</span>
+              style={{...S.input, flex:2, fontSize:12, padding:"5px 8px"}} placeholder="Description"/>
+            <div style={{display:"flex", gap:4, alignItems:"center", flex:1}}>
+              <span style={{color:C.textMuted, fontSize:12}}>Est $</span>
               <input type="number" min="0" step="0.01" value={costs.otherCost||""}
                 onChange={e => updateCosts({otherCost:e.target.value})}
-                style={{...S.input, flex:1}} placeholder="0.00"/>
+                style={{...S.input, flex:1, fontSize:12, padding:"5px 8px"}} placeholder="0.00"/>
             </div>
+          </div>
+          <div style={{display:"flex", gap:6, alignItems:"center"}}>
+            <span style={{fontSize:12, color:C.textMuted, flexShrink:0}}>Actual $</span>
+            <input type="number" min="0" step="0.01" value={actuals.other||""}
+              onChange={e => updateActual("other", e.target.value)}
+              style={{...S.input, flex:1, fontSize:12, padding:"5px 8px"}} placeholder={estOther>0?formatCurrency(estOther).replace("$",""):"0.00"}/>
           </div>
         </div>
 
-        {row("Total Materials + Fuel", formatCurrency(totalCOGS), "", true)}
-      </section>
-
-      {/* Labor — fixed 16% of revenue */}
-      <section style={S.section}>
-        <h2 style={S.h2}>Labor (16% of Revenue)</h2>
-        {row(
-          "Estimated Labor Cost",
-          formatCurrency(laborCost),
-          `${formatCurrency(revenue)} × 16%`,
-          true
-        )}
+        {/* Totals comparison */}
+        <div style={{marginTop:10, background:C.surface2, borderRadius:8, padding:"10px 12px"}}>
+          <div style={{display:"flex", justifyContent:"space-between", marginBottom:6}}>
+            <span style={{fontSize:12, color:C.textMuted}}>Est Total Costs</span>
+            <span style={{fontSize:13, fontWeight:600}}>{formatCurrency(estTotal)}</span>
+          </div>
+          {hasAnyActual && <>
+            <div style={{display:"flex", justifyContent:"space-between", marginBottom:6}}>
+              <span style={{fontSize:12, color:C.textMuted}}>Actual Total Costs</span>
+              <span style={{fontSize:13, fontWeight:700, color: actTotal>estTotal?C.danger:C.green}}>{formatCurrency(actTotal)}</span>
+            </div>
+            <div style={{display:"flex", justifyContent:"space-between"}}>
+              <span style={{fontSize:12, color:C.textMuted}}>Variance</span>
+              <span style={{fontSize:13, fontWeight:700, color: variance>0?C.danger:C.green}}>
+                {variance>0?"+":""}{formatCurrency(variance)}
+              </span>
+            </div>
+          </>}
+        </div>
       </section>
 
       {/* Summary */}
-      {totalCosts > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Summary</h2>
-          {row("Total Revenue", formatCurrency(revenue))}
-          {row("Total Costs", formatCurrency(totalCosts))}
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-            <div>
-              <div style={{fontSize:13, fontWeight:700}}>Gross Profit</div>
-              <div style={{fontSize:11, color:C.textMuted}}>Gross margin: {actualMargin.toFixed(1)}% {actualMargin>=52?"✓":"(target: 52%)"}</div>
-            </div>
-            <div style={{fontWeight:800, fontSize:16, color:grossProfit>=0?C.green:C.danger}}>{formatCurrency(grossProfit)}</div>
+      <section style={S.section}>
+        <h2 style={S.h2}>{hasAnyActual ? "Actual Profitability" : "Estimated Profitability"}</h2>
+        {[
+          ["Revenue", formatCurrency(revenue), C.text],
+          ["Total Costs", formatCurrency(actTotal), C.text],
+          ["Gross Profit", formatCurrency(grossProfit), grossProfit>=0?C.green:C.danger],
+          ["Gross Margin", grossMargin.toFixed(1)+"%", grossMargin>=52?C.green:C.danger],
+          ["Overhead (16.45%)", "− "+formatCurrency(overhead), C.textMuted],
+          ["Net Profit", formatCurrency(netProfit), netProfit>=0?C.green:C.danger],
+          ["Net Margin", netMargin.toFixed(1)+"%", netMargin>=0?C.green:C.danger],
+        ].map(([label, val, color]) => (
+          <div key={label} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:13, color:C.textMuted}}>{label}</span>
+            <span style={{fontWeight:700, fontSize:14, color}}>{val}</span>
           </div>
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-            <div>
-              <div style={{fontSize:13, color:C.textMuted}}>Overhead (16.45% of revenue)</div>
-              <div style={{fontSize:11, color:C.textDim}}>{formatCurrency(revenue)} × 16.45%</div>
-            </div>
-            <div style={{fontSize:14, color:C.textMuted}}>−{formatCurrency(overhead)}</div>
-          </div>
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0"}}>
-            <div>
-              <div style={{fontSize:14, fontWeight:800}}>Net Profit</div>
-              <div style={{fontSize:11, color:C.textMuted}}>Net margin: {netMargin.toFixed(1)}%</div>
-            </div>
-            <div style={{fontWeight:800, fontSize:20, color:netProfit>=0?C.green:C.danger}}>{formatCurrency(netProfit)}</div>
-          </div>
-        </section>
-      )}
+        ))}
+      </section>
     </div>
   );
 }
