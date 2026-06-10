@@ -1266,13 +1266,16 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
           <h2 style={S.h2}>Summary ({reportJobs.length} jobs)</h2>
           <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
             {[
-              ["Total Revenue",    formatCurrency(totals.revenue),        C.text],
-              ["Total Costs",      formatCurrency(totals.totalCosts),      C.text],
-              ["Gross Profit",     formatCurrency(totals.grossProfit),     totals.grossProfit>=0?C.green:C.danger],
-              ["Gross Margin",     overallMargin.toFixed(1)+"%",           overallMargin>=52?C.green:C.danger],
-              ["Overhead (16.45%)",formatCurrency(totals.overhead),        C.textMuted],
-              ["Net Profit",       formatCurrency(totals.netProfit),       totals.netProfit>=0?C.green:C.danger],
-              ["Net Margin",       overallNetMargin.toFixed(1)+"%",        overallNetMargin>=0?C.green:C.danger],
+              ["Total Revenue",    formatCurrency(totals.revenue),                C.text],
+              ["Total Costs",      formatCurrency(totals.totalCosts),              C.text],
+              ["Materials",        formatCurrency(totals.totalMaterials),          C.textMuted],
+              ["Fuel (5%)",        formatCurrency(totals.fuelCost),               C.textMuted],
+              ["Labor (16%)",      formatCurrency(totals.laborCost),              C.textMuted],
+              ["Gross Profit",     formatCurrency(totals.grossProfit),            totals.grossProfit>=0?C.green:C.danger],
+              ["Gross Margin",     overallMargin.toFixed(1)+"%",                  overallMargin>=52?C.green:C.danger],
+              ["Overhead (16.45%)",formatCurrency(totals.overhead),               C.textMuted],
+              ["Net Profit",       formatCurrency(totals.netProfit),              totals.netProfit>=0?C.green:C.danger],
+              ["Net Margin",       overallNetMargin.toFixed(1)+"%",               overallNetMargin>=0?C.green:C.danger],
             ].map(([label,val,color])=>(
               <div key={label} style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px"}}>
                 <div style={{fontSize:11, color:C.textMuted, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em"}}>{label}</div>
