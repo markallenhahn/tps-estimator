@@ -882,36 +882,88 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
   const [selectedDate, setSelectedDate] = useState(today);
   const [newName,      setNewName]      = useState("");
   const [newHours,     setNewHours]     = useState("");
+  const [editingId,    setEditingId]    = useState(null);
+  const [editName,     setEditName]     = useState("");
+  const [editHours,    setEditHours]    = useState("");
 
-  const dayEntries = laborEntries.filter(e => e.date === selectedDate)
+  // Get Sunday-Saturday week containing selectedDate
+  const getWeekRange = (dateStr) => {
+    const d = new Date(dateStr+"T12:00:00");
+    const day = d.getDay(); // 0=Sun
+    const sun = new Date(d); sun.setDate(d.getDate() - day);
+    const sat = new Date(d); sat.setDate(d.getDate() + (6 - day));
+    const fmt = (dt) => dt.toISOString().slice(0,10);
+    return { start: fmt(sun), end: fmt(sat) };
+  };
+
+  const { start: weekStart, end: weekEnd } = getWeekRange(selectedDate);
+
+  // All dates in the week Sun-Sat
+  const weekDates = [];
+  for (let i=0; i<7; i++) {
+    const d = new Date(weekStart+"T12:00:00");
+    d.setDate(d.getDate()+i);
+    weekDates.push(d.toISOString().slice(0,10));
+  }
+
+  const weekEntries  = laborEntries.filter(e => e.date >= weekStart && e.date <= weekEnd);
+  const dayEntries   = laborEntries.filter(e => e.date === selectedDate)
     .sort((a,b) => a.name.localeCompare(b.name));
+  const dayTotal     = dayEntries.reduce((s,e) => s+e.hours, 0);
 
-  // All unique dates sorted desc
-  const allDates = [...new Set(laborEntries.map(e => e.date))].sort((a,b) => b.localeCompare(a));
+  // Weekly summary by contractor
+  const weekByName = weekEntries.reduce((acc, e) => {
+    acc[e.name] = (acc[e.name]||0) + e.hours;
+    return acc;
+  }, {});
+  const weekTotal = weekEntries.reduce((s,e) => s+e.hours, 0);
 
   const addEntry = () => {
     if (!newName.trim()) { alert("Please enter a name."); return; }
     if (!newHours || isNaN(Number(newHours)) || Number(newHours) <= 0) { alert("Please enter valid hours."); return; }
-    const entry = { id: Date.now(), date: selectedDate, name: newName.trim(), hours: Number(newHours) };
-    addLaborEntry(entry);
+    addLaborEntry({ id: Date.now(), date: selectedDate, name: newName.trim(), hours: Number(newHours) });
     setNewName(""); setNewHours("");
   };
 
-  const dayTotal = dayEntries.reduce((s,e) => s+e.hours, 0);
+  const startEdit = (e) => { setEditingId(e.id); setEditName(e.name); setEditHours(String(e.hours)); };
+  const cancelEdit = () => { setEditingId(null); setEditName(""); setEditHours(""); };
+  const saveEdit = (entry) => {
+    if (!editName.trim() || !editHours || isNaN(Number(editHours))) return;
+    // Delete old, add updated
+    deleteLaborEntry(entry.id);
+    addLaborEntry({ id: Date.now(), date: entry.date, name: editName.trim(), hours: Number(editHours) });
+    cancelEdit();
+  };
 
-  // Group all entries by date
-  const byDate = laborEntries.reduce((acc, e) => {
-    if (!acc[e.date]) acc[e.date] = [];
-    acc[e.date].push(e);
-    return acc;
-  }, {});
+  const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
   return (
     <div style={S.page}>
       <h1 style={S.h1}>Labor Log</h1>
       <p style={S.subhead}>Track contractor hours by day</p>
 
-      {/* Date selector + Add entry combined */}
+      {/* Week summary */}
+      {Object.keys(weekByName).length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>
+            Week of {new Date(weekStart+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {new Date(weekEnd+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+          </h2>
+          {Object.entries(weekByName).sort((a,b)=>a[0].localeCompare(b[0])).map(([name,hrs])=>(
+            <div key={name} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"7px 10px", background:C.surface2, borderRadius:6, marginBottom:4}}>
+              <span style={{fontSize:13, fontWeight:600}}>{name}</span>
+              <span style={{fontSize:13, fontWeight:700, color:C.accent}}>{hrs} hr{hrs!==1?"s":""}</span>
+            </div>
+          ))}
+          <div style={{display:"flex", justifyContent:"space-between", padding:"8px 10px",
+            borderTop:`2px solid ${C.accent}`, marginTop:4}}>
+            <span style={{fontWeight:700, color:C.textMuted}}>Week Total</span>
+            <span style={{fontWeight:800, fontSize:16, color:C.accent}}>{weekTotal} hrs</span>
+          </div>
+        </section>
+      )}
+
+      {/* Date picker + add entry */}
       <section style={S.section}>
         <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:14}}>
           <input type="date" value={selectedDate}
@@ -934,13 +986,31 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
         {dayEntries.length > 0 ? (
           <>
             {dayEntries.map(e => (
-              <div key={e.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
-                padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:6}}>
-                <span style={{fontWeight:600, fontSize:14}}>{e.name}</span>
-                <div style={{display:"flex", alignItems:"center", gap:10}}>
-                  <span style={{fontSize:14, fontWeight:700, color:C.accent}}>{e.hours} hr{e.hours!==1?"s":""}</span>
-                  <button style={S.btnSmallDanger} onClick={() => deleteLaborEntry(e.id)}>✕</button>
-                </div>
+              <div key={e.id} style={{background:C.surface2, borderRadius:8, marginBottom:6,
+                border: editingId===e.id ? `1px solid ${C.accent}` : `1px solid transparent`, padding:"10px 12px"}}>
+                {editingId === e.id ? (
+                  <div>
+                    <div style={{display:"flex", gap:8, marginBottom:8}}>
+                      <input type="text" value={editName} onChange={e2 => setEditName(e2.target.value)}
+                        style={{...S.input, flex:2}} autoFocus/>
+                      <input type="number" value={editHours} onChange={e2 => setEditHours(e2.target.value)}
+                        min="0" step="0.5" style={{...S.input, flex:1}}/>
+                    </div>
+                    <div style={{display:"flex", gap:8}}>
+                      <button style={{...S.btnPrimary, flex:1, fontSize:12}} onClick={() => saveEdit(e)}>💾 Save</button>
+                      <button style={{...S.btnSecondary, flex:1, fontSize:12}} onClick={cancelEdit}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+                    <span style={{fontWeight:600, fontSize:14}}>{e.name}</span>
+                    <div style={{display:"flex", alignItems:"center", gap:8}}>
+                      <span style={{fontSize:14, fontWeight:700, color:C.accent}}>{e.hours} hr{e.hours!==1?"s":""}</span>
+                      <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(e)}>✎</button>
+                      <button style={S.btnSmallDanger} onClick={() => deleteLaborEntry(e.id)}>✕</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             <div style={{display:"flex", justifyContent:"space-between", padding:"8px 12px",
@@ -954,34 +1024,41 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
         )}
       </section>
 
-      {/* Full log by date */}
-      {allDates.length > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Full Log</h2>
-          {allDates.map(date => {
-            const entries = [...(byDate[date]||[])].sort((a,b)=>a.name.localeCompare(b.name));
-            const dtotal  = entries.reduce((s,e)=>s+e.hours, 0);
-            const isToday = date === today;
-            return (
-              <div key={date} style={{marginBottom:16}}>
-                <div style={{fontSize:12, fontWeight:700, color: isToday?C.accent:C.textMuted,
-                  textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6,
-                  display:"flex", justifyContent:"space-between"}}>
-                  <span>{new Date(date+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})}</span>
-                  <span>{dtotal} hrs total</span>
-                </div>
-                {entries.map(e => (
-                  <div key={e.id} style={{display:"flex", justifyContent:"space-between",
-                    padding:"6px 10px", background:C.surface2, borderRadius:6, marginBottom:3}}>
-                    <span style={{fontSize:13}}>{e.name}</span>
-                    <span style={{fontSize:13, fontWeight:600, color:C.accent}}>{e.hours} hr{e.hours!==1?"s":""}</span>
-                  </div>
-                ))}
+      {/* Weekly log — Sun through Sat */}
+      <section style={S.section}>
+        <h2 style={S.h2}>
+          Week of {new Date(weekStart+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {new Date(weekEnd+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+        </h2>
+        {weekDates.map((date, di) => {
+          const entries = laborEntries.filter(e => e.date===date).sort((a,b)=>a.name.localeCompare(b.name));
+          const dtotal  = entries.reduce((s,e)=>s+e.hours, 0);
+          const isSelected = date === selectedDate;
+          const isFuture = date > today;
+          return (
+            <div key={date} style={{marginBottom:10, opacity: isFuture ? 0.4 : 1}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+                padding:"5px 8px", borderRadius:6, cursor:"pointer",
+                background: isSelected ? C.accent+"22" : "transparent",
+                border: isSelected ? `1px solid ${C.accent}` : `1px solid transparent`}}
+                onClick={() => setSelectedDate(date)}>
+                <span style={{fontSize:12, fontWeight:700, color: isSelected ? C.accent : C.textMuted}}>
+                  {DAYS[di]} {new Date(date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                </span>
+                <span style={{fontSize:12, color: dtotal>0 ? C.accent : C.textDim}}>
+                  {dtotal>0 ? dtotal+" hrs" : "—"}
+                </span>
               </div>
-            );
-          })}
-        </section>
-      )}
+              {entries.map(e => (
+                <div key={e.id} style={{display:"flex", justifyContent:"space-between",
+                  padding:"5px 16px", fontSize:13}}>
+                  <span style={{color:C.textMuted}}>{e.name}</span>
+                  <span style={{color:C.accent, fontWeight:600}}>{e.hours} hr{e.hours!==1?"s":""}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </section>
     </div>
   );
 }
