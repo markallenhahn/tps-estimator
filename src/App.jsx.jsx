@@ -842,6 +842,34 @@ function InvoiceView({ currentJob, updateJob, rates }) {
           <button style={S.btnSecondary} onClick={copyInvoice}>📋 Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
+
+        {/* Google Review — only on paid invoices */}
+        {isPaid && (
+          <div style={{marginTop:16, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+            <div style={{fontSize:13, fontWeight:600, marginBottom:8}}>⭐ Request Google Review</div>
+            <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+              {currentJob.clientPhone && (
+                <a href={`sms:${currentJob.clientPhone.replace(/\D/g,"")}?body=${encodeURIComponent(
+                  `${currentJob.clientName || "Hi"}, Thank you for choosing TPS Asphalt Maintenance. We would love your feedback and would welcome a review on our Google profile. Regards, TPS Asphalt Maintenance. https://g.page/r/CbwYxYTHq4UyEBM/review`
+                )}`}
+                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#1a2535", color:"#60a5fa", border:`1px solid #2a3a4a`}}>
+                  💬 Text Review Request
+                </a>
+              )}
+              {currentJob.clientEmail && (
+                <a href={`mailto:${currentJob.clientEmail}?subject=${encodeURIComponent("We'd love your feedback!")}&body=${encodeURIComponent(
+                  `${currentJob.clientName || "Hi"},\n\nThank you for choosing TPS Asphalt Maintenance. We would love your feedback and would welcome a review on our Google profile.\n\nRegards,\nTPS Asphalt Maintenance\n\nhttps://g.page/r/CbwYxYTHq4UyEBM/review`
+                )}`}
+                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#1a2535", color:"#60a5fa", border:`1px solid #2a3a4a`}}>
+                  ✉️ Email Review Request
+                </a>
+              )}
+              {!currentJob.clientPhone && !currentJob.clientEmail && (
+                <div style={{fontSize:12, color:C.textMuted}}>Add a phone number or email to the job to send a review request.</div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
