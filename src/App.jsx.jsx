@@ -274,6 +274,7 @@ function TopNav({ view, setView }) {
     {key:"estimate", label:"Estimate", icon:"💰"},
     {key:"costs",    label:"Costs",    icon:"🧮"},
     {key:"invoice",  label:"Invoice",  icon:"🧾"},
+    {key:"labor",    label:"Labor",    icon:"👷"},
     {key:"reports",  label:"Reports",  icon:"📊"},
     {key:"rates",    label:"Rates",    icon:"⚙️"},
   ];
@@ -871,6 +872,130 @@ function InvoiceView({ currentJob, updateJob, rates }) {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+// ─── Labor View ───────────────────────────────────────────────────────────────
+function LaborView({ currentJob, updateJob }) {
+  const today = new Date().toISOString().slice(0,10);
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [newName,  setNewName]  = useState("");
+  const [newHours, setNewHours] = useState("");
+
+  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+
+  const laborLog = currentJob.laborLog || [];
+
+  // Entries for selected date
+  const dayEntries = laborLog.filter(e => e.date === selectedDate);
+
+  // All unique dates that have entries, sorted desc
+  const allDates = [...new Set(laborLog.map(e => e.date))].sort((a,b) => b.localeCompare(a));
+
+  const addEntry = () => {
+    if (!newName.trim()) { alert("Please enter a name."); return; }
+    if (!newHours || isNaN(Number(newHours)) || Number(newHours) <= 0) { alert("Please enter valid hours."); return; }
+    const entry = { id: Date.now(), date: selectedDate, name: newName.trim(), hours: Number(newHours) };
+    updateJob(j => ({...j, laborLog:[...(j.laborLog||[]), entry]}));
+    setNewName(""); setNewHours("");
+  };
+
+  const removeEntry = (id) => updateJob(j => ({...j, laborLog:(j.laborLog||[]).filter(e => e.id !== id)}));
+
+  const dayTotal   = dayEntries.reduce((s,e) => s+e.hours, 0);
+  const jobTotal   = laborLog.reduce((s,e) => s+e.hours, 0);
+
+  // Group all entries by date for the full log
+  const byDate = laborLog.reduce((acc, e) => {
+    if (!acc[e.date]) acc[e.date] = [];
+    acc[e.date].push(e);
+    return acc;
+  }, {});
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Labor Log</h1>
+      <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
+
+      {/* Date selector */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Select Day</h2>
+        <input type="date" value={selectedDate}
+          onChange={e => setSelectedDate(e.target.value)}
+          style={{...S.input, marginBottom:0}}/>
+      </section>
+
+      {/* Add entry */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Add Entry — {new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}</h2>
+        <div style={{display:"flex", gap:8, marginBottom:8}}>
+          <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
+            style={{...S.input, flex:2}} placeholder="Contractor name"/>
+          <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
+            min="0" step="0.5" style={{...S.input, flex:1}} placeholder="Hours"/>
+        </div>
+        <button style={S.btnPrimary} onClick={addEntry}>+ Add</button>
+
+        {/* Day entries */}
+        {dayEntries.length > 0 && (
+          <div style={{marginTop:14}}>
+            {dayEntries.map(e => (
+              <div key={e.id} style={{...S.areaRow, marginBottom:6}}>
+                <div style={S.areaRowMain}>
+                  <div style={{fontWeight:600, fontSize:14}}>{e.name}</div>
+                  <div style={{fontSize:12, color:C.textMuted}}>{e.hours} hr{e.hours!==1?"s":""}</div>
+                </div>
+                <div style={S.areaRowRight}>
+                  <button style={S.btnSmallDanger} onClick={() => removeEntry(e.id)}>✕</button>
+                </div>
+              </div>
+            ))}
+            <div style={{...S.totalLineBold, marginTop:8, paddingTop:8, borderTop:`1px solid ${C.border}`}}>
+              <span>Day Total</span>
+              <span style={{color:C.accent}}>{dayTotal} hrs</span>
+            </div>
+          </div>
+        )}
+        {dayEntries.length === 0 && (
+          <p style={{fontSize:12, color:C.textMuted, marginTop:10}}>No entries for this day yet.</p>
+        )}
+      </section>
+
+      {/* Full log */}
+      {allDates.length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Full Labor Log</h2>
+          <div style={{...S.totalLineBold, marginBottom:12}}>
+            <span>Total Job Hours</span>
+            <span style={{color:C.accent}}>{jobTotal} hrs</span>
+          </div>
+          {allDates.map(date => {
+            const entries = byDate[date];
+            const dtotal  = entries.reduce((s,e) => s+e.hours, 0);
+            return (
+              <div key={date} style={{marginBottom:14}}>
+                <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase",
+                  letterSpacing:"0.06em", marginBottom:6}}>
+                  {new Date(date+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})}
+                </div>
+                {entries.map(e => (
+                  <div key={e.id} style={{display:"flex", justifyContent:"space-between",
+                    padding:"6px 10px", background:C.surface2, borderRadius:6, marginBottom:4}}>
+                    <span style={{fontSize:13}}>{e.name}</span>
+                    <span style={{fontSize:13, fontWeight:600, color:C.accent}}>{e.hours} hr{e.hours!==1?"s":""}</span>
+                  </div>
+                ))}
+                <div style={{display:"flex", justifyContent:"space-between", fontSize:12,
+                  color:C.textMuted, padding:"4px 10px"}}>
+                  <span>Day total</span>
+                  <span style={{fontWeight:600}}>{dtotal} hrs</span>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
     </div>
   );
 }
@@ -2951,6 +3076,7 @@ export default function App() {
         {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}/>}
         {view==="costs"    && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="labor"    && <LaborView   currentJob={currentJob} updateJob={updateJob}/>}
         {view==="reports"  && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
       </div>
