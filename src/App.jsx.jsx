@@ -911,16 +911,13 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
       <h1 style={S.h1}>Labor Log</h1>
       <p style={S.subhead}>Track contractor hours by day</p>
 
-      {/* Date selector */}
+      {/* Date selector + Add entry combined */}
       <section style={S.section}>
-        <h2 style={S.h2}>Date</h2>
-        <input type="date" value={selectedDate}
-          onChange={e => setSelectedDate(e.target.value)}
-          style={S.input}/>
-      </section>
-
-      {/* Add entry for selected date */}
-      <section style={S.section}>
+        <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:14}}>
+          <input type="date" value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
+            style={{...S.input, flex:1, marginBottom:0}}/>
+        </div>
         <h2 style={S.h2}>
           {new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
         </h2>
