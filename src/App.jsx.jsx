@@ -305,13 +305,21 @@ function TopNav({ view, setView }) {
 
 // ─── Rates Editor ─────────────────────────────────────────────────────────────
 function RatesView({ rates, setRates, currentJob, updateJob }) {
-  // If a job is active, edit that job's rates. Otherwise edit global defaults.
-  const jobRates    = currentJob?.rates || null;
-  const activeRates = jobRates || rates;
-  const [editing, setEditing] = useState({...activeRates});
+  const OTHER_RATE = {label:"Other", unit:"flat", rate:0, rateLabel:"flat $"};
 
-  // Re-sync editing state if job changes
-  useEffect(() => { setEditing({...(currentJob?.rates || rates)}); }, [currentJob?.id]);
+  // Build the base rates to edit from — always include "other"
+  const baseRates = currentJob?.rates
+    ? {...currentJob.rates, other: currentJob.rates.other || OTHER_RATE}
+    : {...rates, other: rates.other || OTHER_RATE};
+
+  const [editing,   setEditing]   = useState({...baseRates});
+  const [jobId,     setJobId]     = useState(currentJob?.id || null);
+
+  // Only reset editing state when switching to a different job
+  if (currentJob?.id !== jobId) {
+    setJobId(currentJob?.id || null);
+    setEditing({...baseRates});
+  }
 
   const save = () => {
     for (const [k,v] of Object.entries(editing)) {
@@ -329,11 +337,16 @@ function RatesView({ rates, setRates, currentJob, updateJob }) {
   const reset = () => {
     if (currentJob) {
       if (confirm("Reset this job's rates to current defaults?")) {
-        setEditing({...rates});
-        updateJob(j => ({...j, rates: {...rates}}));
+        const r = {...rates, other: OTHER_RATE};
+        setEditing(r);
+        updateJob(j => ({...j, rates: r}));
       }
     } else {
-      if (confirm("Reset to built-in default rates?")) { setEditing({...DEFAULT_RATES}); setRates({...DEFAULT_RATES}); }
+      if (confirm("Reset to built-in default rates?")) {
+        const r = {...DEFAULT_RATES, other: OTHER_RATE};
+        setEditing(r);
+        setRates(r);
+      }
     }
   };
 
