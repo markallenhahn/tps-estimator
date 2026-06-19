@@ -59,7 +59,7 @@ const C = {
 const S = {
   app:{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'DM Sans','Segoe UI',sans-serif", display:"flex", flexDirection:"column" },
   nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"stretch", position:"sticky", top:0, zIndex:100, minHeight:56 },
-  navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0 },
+  navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0, cursor:"pointer", userSelect:"none" },
   navTitle:{ fontWeight:800, fontSize:14, color:C.accent, letterSpacing:"0.06em" },
   navTabs:{ display:"flex", overflowX:"auto", flex:1, scrollbarWidth:"none", msOverflowStyle:"none" },
   navTab:{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1, padding:"6px 10px", background:"none", border:"none", color:C.textMuted, cursor:"pointer", fontSize:10, borderBottom:"2px solid transparent", transition:"all .15s", flexShrink:0, minWidth:52 },
@@ -265,6 +265,8 @@ if (typeof document !== "undefined" && !document.getElementById("tps-nav-css")) 
 
 function TopNav({ view, setView }) {
   const tabsRef = useRef(null);
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef(null);
   const tabs = [
     {key:"jobs",     label:"Jobs",     icon:"📋"},
     {key:"schedule", label:"Schedule", icon:"📅"},
@@ -285,9 +287,20 @@ function TopNav({ view, setView }) {
     if (activeBtn) activeBtn.scrollIntoView({behavior:"smooth", block:"nearest", inline:"center"});
   }, [view]);
 
+  const handleLogoTap = () => {
+    tapCountRef.current += 1;
+    clearTimeout(tapTimerRef.current);
+    if (tapCountRef.current >= 5) {
+      tapCountRef.current = 0;
+      setView("export");
+      return;
+    }
+    tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 1500);
+  };
+
   return (
     <nav style={S.nav}>
-      <div style={S.navBrand}>
+      <div style={S.navBrand} onClick={handleLogoTap}>
         <img src={"data:image/png;base64," + LOGO_B64} alt="TPS" style={{height:32, width:"auto", display:"block"}}/>
       </div>
       <div ref={tabsRef} className="tps-nav-tabs" style={S.navTabs}>
@@ -1775,6 +1788,163 @@ function CostsView({ currentJob, updateJob, rates }) {
   );
 }
 
+// ─── Export View (secret) ──────────────────────────────────────────────────────
+function ExportView({ jobs, laborEntries, rates, setView }) {
+  const csvEscape = (val) => {
+    const s = String(val ?? "");
+    if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+
+  const downloadCSV = (filename, rows) => {
+    const csv = rows.map(row => row.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportJobsCSV = () => {
+    const headers = [
+      "Job ID","Status","Date Created","Scheduled Days","Client Name","Phone","Email",
+      "Street Address","City","State","ZIP","Full Address","Estimate #",
+      "Margin %","Discount %","Price Override","Revenue Total",
+      "Areas Count","Area Details","Notes",
+      "Client Signed","Client Signed At","Client Print Name",
+      "TPS Signed",
+    ];
+    const rows = [headers];
+
+    jobs.forEach(j => {
+      const allRates = {...DEFAULT_RATES, ...(j.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
+      const subtotal = (j.areas||[]).reduce((s,a)=>s+calcLineAmt(a,allRates),0);
+      const marginAmt = subtotal*(Number(j.margin||0)/100);
+      const discountAmt = (subtotal+marginAmt)*(Number(j.discount||0)/100);
+      const calcTotal = subtotal+marginAmt-discountAmt;
+      const hasOverride = j.priceOverride!==undefined && j.priceOverride!==null && j.priceOverride!=="";
+      const revenue = hasOverride ? Number(j.priceOverride) : calcTotal;
+
+      const fullAddress = [j.address, j.city, j.state, j.zip].filter(Boolean).join(", ");
+      const scheduleDays = (j.scheduleDays||[]).filter(d=>d.date).map(d=>d.date+(d.label?" ("+d.label+")":"")).join(" | ")
+        || j.scheduledDate || "";
+      const areaDetails = (j.areas||[]).map(a => `${a.name}: ${a.serviceType} ${a.measurement}${a.notes?" ["+a.notes+"]":""}`).join(" | ");
+
+      rows.push([
+        j.id, j.status||"", j.date||"", scheduleDays,
+        j.clientName||"", j.clientPhone||"", j.clientEmail||"",
+        j.address||"", j.city||"", j.state||"", j.zip||"", fullAddress,
+        j.estimateNum||"",
+        j.margin||0, j.discount||0, hasOverride?j.priceOverride:"", revenue.toFixed(2),
+        (j.areas||[]).length, areaDetails, j.notes||"",
+        j.clientSignature ? "Yes" : "No", j.clientSignedAt||"", j.clientPrintName||"",
+        j.signature ? "Yes" : "No",
+      ]);
+    });
+
+    downloadCSV("TPS_Jobs_Export_"+new Date().toISOString().slice(0,10)+".csv", rows);
+  };
+
+  const exportCostsCSV = () => {
+    const headers = [
+      "Job ID","Client Name","Full Address","Status","Revenue",
+      "Est Sealcoat","Act Sealcoat","Est CrackFill","Act CrackFill",
+      "Est Asphalt","Act Asphalt","Est Fuel","Act Fuel","Est Labor","Act Labor",
+      "Stone Tons","Act Stone","Other Label","Est Other","Act Other",
+      "Total Costs","Gross Profit","Gross Margin %","Overhead","Net Profit","Net Margin %",
+    ];
+    const rows = [headers];
+
+    jobs.forEach(j => {
+      const allRates = {...DEFAULT_RATES, ...(j.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
+      const f = calcJobFinancials(j, allRates);
+      const costs = j.costs || {};
+      const actuals = costs.actuals || {};
+      const fullAddress = [j.address, j.city, j.state, j.zip].filter(Boolean).join(", ");
+
+      const sealcoatSqFt   = (j.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
+      const crackFillLinFt = (j.areas||[]).filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
+      const patchSqFt      = (j.areas||[]).filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+      const patchTons      = calcPatchTons(patchSqFt);
+      const estSealcoat  = (sealcoatSqFt/70)*4.33;
+      const estCrackFill = crackFillLinFt*0.14;
+      const estAsphalt   = patchTons*80;
+      const estFuel      = f.revenue*0.05;
+      const estLabor     = f.revenue*0.16;
+      const estStone     = Number(costs.stoneTons||0)*20;
+      const estOther     = Number(costs.otherCost||0);
+
+      if (f.revenue === 0) return;
+
+      rows.push([
+        j.id, j.clientName||"", fullAddress, j.status||"", f.revenue.toFixed(2),
+        estSealcoat.toFixed(2), (actuals.sealcoat||"").toString(),
+        estCrackFill.toFixed(2), (actuals.crackfill||"").toString(),
+        estAsphalt.toFixed(2), (actuals.asphalt||"").toString(),
+        estFuel.toFixed(2), (actuals.fuel||"").toString(),
+        estLabor.toFixed(2), (actuals.labor||"").toString(),
+        costs.stoneTons||0, (actuals.stone||"").toString(),
+        costs.otherLabel||"", estOther.toFixed(2), (actuals.other||"").toString(),
+        f.totalCosts.toFixed(2), f.grossProfit.toFixed(2), f.actualMargin.toFixed(1),
+        f.overhead.toFixed(2), f.netProfit.toFixed(2), f.netMargin.toFixed(1),
+      ]);
+    });
+
+    downloadCSV("TPS_Costs_Export_"+new Date().toISOString().slice(0,10)+".csv", rows);
+  };
+
+  const exportLaborCSV = () => {
+    const headers = ["Date","Contractor Name","Hours"];
+    const rows = [headers];
+    [...laborEntries].sort((a,b)=>a.date.localeCompare(b.date)).forEach(e => {
+      rows.push([e.date, e.name, e.hours]);
+    });
+    downloadCSV("TPS_Labor_Export_"+new Date().toISOString().slice(0,10)+".csv", rows);
+  };
+
+  const exportAllCSV = () => { exportJobsCSV(); exportCostsCSV(); exportLaborCSV(); };
+
+  return (
+    <div style={S.page}>
+      <div style={S.pageHeader}>
+        <h1 style={S.h1}>🔓 Data Export</h1>
+        <button style={S.btnSecondary} onClick={() => setView("jobs")}>✕ Close</button>
+      </div>
+      <p style={S.subhead}>Hidden export tools — full data dumps including addresses</p>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Export CSV Files</h2>
+        <div style={{display:"flex", flexDirection:"column", gap:10}}>
+          <button style={S.btnPrimary} onClick={exportJobsCSV}>
+            📋 Export All Jobs ({jobs.length})
+          </button>
+          <button style={S.btnPrimary} onClick={exportCostsCSV}>
+            🧮 Export Job Costs & Margins
+          </button>
+          <button style={S.btnPrimary} onClick={exportLaborCSV}>
+            👷 Export Labor Log ({laborEntries.length} entries)
+          </button>
+          <button style={{...S.btnPrimary, background:"#16a34a", marginTop:6}} onClick={exportAllCSV}>
+            📦 Export Everything (3 files)
+          </button>
+        </div>
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>What's Included</h2>
+        <div style={{fontSize:12, color:C.textMuted, lineHeight:1.6}}>
+          <strong>Jobs export:</strong> client name, phone, email, full street address, city/state/zip, schedule, signatures, notes, line items, pricing.<br/><br/>
+          <strong>Costs export:</strong> estimated vs actual costs for every category, gross/net profit and margins per job.<br/><br/>
+          <strong>Labor export:</strong> every logged date, contractor name, and hours.
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // ─── Jobs List ────────────────────────────────────────────────────────────────
 function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById }) {
   const [showArchive, setShowArchive] = useState(false);
@@ -3167,6 +3337,7 @@ export default function App() {
         {view==="labor"    && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
         {view==="reports"  && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
+        {view==="export"   && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
       </div>
     </div>
   );
