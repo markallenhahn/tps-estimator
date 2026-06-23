@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const profilesRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?select=id,email,role,created_at&order=created_at.asc", {
+    const profilesRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?select=id,email,role,created_at,first_name,last_name,phone,date_of_birth&order=created_at.asc", {
       headers: {
         "apikey": serviceKey,
         "Authorization": "Bearer " + serviceKey,

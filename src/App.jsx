@@ -323,10 +323,10 @@ function TopNav({ view, setView, userRole, onLogout }) {
           </button>
         ))}
       </div>
-      <button onClick={() => setView("password")}
+      <button onClick={() => setView("settings")}
         style={{background:"none", border:"none", color:C.textMuted, fontSize:16, padding:"0 8px", cursor:"pointer", flexShrink:0}}
-        title="Change password">
-        🔑
+        title="User settings">
+        👤
       </button>
       <button onClick={() => { if(confirm("Sign out?")) onLogout(); }}
         style={{background:"none", border:"none", color:C.textMuted, fontSize:18, padding:"0 12px", cursor:"pointer", flexShrink:0}}
@@ -1808,36 +1808,128 @@ function CostsView({ currentJob, updateJob, rates }) {
   );
 }
 
-// ─── Change Password View (any logged-in user) ────────────────────────────────
-function ChangePasswordView({ accessToken, setView }) {
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState("");
-  const [message, setMessage] = useState("");
+// ─── User Settings View (any logged-in user) ───────────────────────────────────
+function UserSettingsView({ accessToken, userId, setView }) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName,  setLastName]  = useState("");
+  const [phone,     setPhone]     = useState("");
+  const [dob,       setDob]       = useState("");
+  const [loading,   setLoading]   = useState(true);
 
-  const handleSave = async () => {
-    setError(""); setMessage("");
-    if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
-    if (newPassword !== confirmPassword) { setError("Passwords do not match."); return; }
-    setSaving(true);
+  const [newPassword,     setNewPassword]     = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [savingProfile,  setSavingProfile]  = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [profileMsg,  setProfileMsg]  = useState("");
+  const [profileErr,  setProfileErr]  = useState("");
+  const [passwordMsg, setPasswordMsg] = useState("");
+  const [passwordErr, setPasswordErr] = useState("");
+
+  // Load existing profile fields
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await sbFetch(
+          "profiles?id=eq."+userId+"&select=first_name,last_name,phone,date_of_birth",
+          {}, accessToken
+        );
+        const data = await res.json();
+        if (Array.isArray(data) && data[0]) {
+          setFirstName(data[0].first_name || "");
+          setLastName(data[0].last_name || "");
+          setPhone(data[0].phone || "");
+          setDob(data[0].date_of_birth || "");
+        }
+      } catch(e) { console.error("load profile error:", e); }
+      setLoading(false);
+    };
+    load();
+  }, [userId]);
+
+  const saveProfile = async () => {
+    setProfileErr(""); setProfileMsg("");
+    setSavingProfile(true);
+    try {
+      const res = await sbFetch("profiles?id=eq."+userId, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({
+          first_name: firstName.trim() || null,
+          last_name:  lastName.trim()  || null,
+          phone:      phone.trim()     || null,
+          date_of_birth: dob || null,
+        }),
+      }, accessToken);
+      if (!res.ok) throw new Error(await res.text());
+      setProfileMsg("✅ Profile saved.");
+    } catch(e) {
+      setProfileErr("Could not save profile. " + e.message);
+    }
+    setSavingProfile(false);
+  };
+
+  const savePassword = async () => {
+    setPasswordErr(""); setPasswordMsg("");
+    if (!newPassword) { setPasswordErr("Enter a new password to update it."); return; }
+    if (newPassword.length < 6) { setPasswordErr("Password must be at least 6 characters."); return; }
+    if (newPassword !== confirmPassword) { setPasswordErr("Passwords do not match."); return; }
+    setSavingPassword(true);
     try {
       await authUpdatePassword(accessToken, newPassword);
-      setMessage("✅ Password updated successfully.");
+      setPasswordMsg("✅ Password updated.");
       setNewPassword(""); setConfirmPassword("");
     } catch(e) {
-      setError(e.message);
+      setPasswordErr(e.message);
     }
-    setSaving(false);
+    setSavingPassword(false);
   };
 
   return (
     <div style={S.page}>
       <div style={S.pageHeader}>
-        <h1 style={S.h1}>Change Password</h1>
+        <h1 style={S.h1}>User Settings</h1>
         <button style={S.btnSecondary} onClick={() => setView("jobs")}>✕ Close</button>
       </div>
+
       <section style={S.section}>
+        <h2 style={S.h2}>Your Info</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
+          All fields are optional. Visible to admins only.
+        </p>
+        {loading ? (
+          <p style={{fontSize:13, color:C.textMuted}}>Loading...</p>
+        ) : (
+          <>
+            <div style={S.formGrid}>
+              <label style={S.formLabel}>First Name
+                <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)}
+                  style={S.input} placeholder="First name"/>
+              </label>
+              <label style={S.formLabel}>Last Name
+                <input type="text" value={lastName} onChange={e => setLastName(e.target.value)}
+                  style={S.input} placeholder="Last name"/>
+              </label>
+            </div>
+            <label style={{...S.formLabel, marginTop:10}}>Phone Number
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                style={S.input} placeholder="(555) 555-5555"/>
+            </label>
+            <label style={{...S.formLabel, marginTop:10}}>Date of Birth
+              <input type="date" value={dob} onChange={e => setDob(e.target.value)}
+                style={S.input}/>
+            </label>
+            {profileErr && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{profileErr}</div>}
+            {profileMsg && <div style={{color:C.green, fontSize:13, marginTop:10}}>{profileMsg}</div>}
+            <button style={{...S.btnPrimary, marginTop:14, opacity:savingProfile?0.6:1}} onClick={saveProfile} disabled={savingProfile}>
+              {savingProfile ? "Saving..." : "💾 Save Info"}
+            </button>
+          </>
+        )}
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Password</h2>
         <label style={S.formLabel}>New Password
           <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
             style={S.input} placeholder="At least 6 characters"/>
@@ -1846,10 +1938,10 @@ function ChangePasswordView({ accessToken, setView }) {
           <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
             style={S.input} placeholder="Re-enter new password"/>
         </label>
-        {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
-        {message && <div style={{color:C.green, fontSize:13, marginTop:10}}>{message}</div>}
-        <button style={{...S.btnPrimary, marginTop:14, opacity:saving?0.6:1}} onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "💾 Update Password"}
+        {passwordErr && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{passwordErr}</div>}
+        {passwordMsg && <div style={{color:C.green, fontSize:13, marginTop:10}}>{passwordMsg}</div>}
+        <button style={{...S.btnPrimary, marginTop:14, opacity:savingPassword?0.6:1}} onClick={savePassword} disabled={savingPassword}>
+          {savingPassword ? "Saving..." : "🔑 Update Password"}
         </button>
       </section>
     </div>
@@ -1946,18 +2038,29 @@ function TeamView({ accessToken }) {
         ) : users.length === 0 ? (
           <p style={{fontSize:13, color:C.textMuted}}>No team members yet.</p>
         ) : (
-          users.map(u => (
-            <div key={u.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+          users.map(u => {
+            const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+            return (
+            <div key={u.id} style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start",
               padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:8}}>
-              <div>
-                <div style={{fontWeight:600, fontSize:14}}>{u.email}</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontWeight:600, fontSize:14}}>{fullName || u.email}</div>
+                {fullName && <div style={{fontSize:12, color:C.textMuted}}>{u.email}</div>}
                 <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>
                   {u.role === "admin" ? "👑 Admin" : u.role === "manager" ? "🛠 Manager" : "🔧 Crew"} · Added {new Date(u.created_at).toLocaleDateString()}
                 </div>
+                {(u.phone || u.date_of_birth) && (
+                  <div style={{fontSize:11, color:C.textDim, marginTop:2}}>
+                    {u.phone && <span>📞 {u.phone}</span>}
+                    {u.phone && u.date_of_birth && <span> · </span>}
+                    {u.date_of_birth && <span>🎂 {new Date(u.date_of_birth+"T12:00:00").toLocaleDateString()}</span>}
+                  </div>
+                )}
               </div>
-              <button style={S.btnSmallDanger} onClick={() => removeUser(u.id, u.email)}>Remove</button>
+              <button style={{...S.btnSmallDanger, flexShrink:0, marginLeft:8}} onClick={() => removeUser(u.id, u.email)}>Remove</button>
             </div>
-          ))
+            );
+          })
         )}
       </section>
     </div>
@@ -3682,7 +3785,7 @@ export default function App() {
         {view==="reports"  && (userRole==="admin"||userRole==="manager") && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && (userRole==="admin"||userRole==="manager") && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
         {view==="team"     && userRole==="admin" && <TeamView accessToken={session?.access_token}/>}
-        {view==="password" && <ChangePasswordView accessToken={session?.access_token} setView={setView}/>}
+        {view==="settings" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
       </div>
     </div>
