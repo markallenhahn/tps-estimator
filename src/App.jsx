@@ -57,7 +57,7 @@ const C = {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const S = {
-  app:{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'DM Sans','Segoe UI',sans-serif", display:"flex", flexDirection:"column" },
+  app:{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"column" },
   nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"stretch", position:"sticky", top:0, zIndex:100, minHeight:56 },
   navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0, cursor:"pointer", userSelect:"none" },
   navTitle:{ fontWeight:800, fontSize:14, color:C.accent, letterSpacing:"0.06em" },
@@ -68,7 +68,7 @@ const S = {
   content:{ flex:1 },
   page:{ maxWidth:700, margin:"0 auto", padding:"24px 16px 80px" },
   pageHeader:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 },
-  h1:{ fontSize:22, fontWeight:700, margin:"0 0 4px", lineHeight:1.2 },
+  h1:{ fontSize:22, fontWeight:800, margin:"0 0 4px", lineHeight:1.2, letterSpacing:"-0.01em" },
   h2:{ fontSize:13, fontWeight:600, margin:"0 0 12px", color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.08em" },
   subhead:{ margin:"0 0 20px", color:C.textMuted, fontSize:13, lineHeight:1.4 },
   section:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:16 },
@@ -255,31 +255,40 @@ const S = {
 };
 
 // ─── Top Nav ──────────────────────────────────────────────────────────────────
-// Inject scrollbar-hiding CSS once
+// Inject scrollbar-hiding CSS + Inter font once
 if (typeof document !== "undefined" && !document.getElementById("tps-nav-css")) {
   const style = document.createElement("style");
   style.id = "tps-nav-css";
   style.textContent = ".tps-nav-tabs::-webkit-scrollbar{display:none} select{color-scheme:dark} select option{color:#000;background:#fff}";
   document.head.appendChild(style);
 }
+if (typeof document !== "undefined" && !document.getElementById("tps-font-link")) {
+  const link = document.createElement("link");
+  link.id = "tps-font-link";
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap";
+  document.head.appendChild(link);
+}
 
-function TopNav({ view, setView }) {
+function TopNav({ view, setView, userRole, onLogout }) {
   const tabsRef = useRef(null);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef(null);
-  const tabs = [
-    {key:"jobs",     label:"Jobs",     icon:"📋"},
-    {key:"schedule", label:"Schedule", icon:"📅"},
-    {key:"inspect",  label:"Inspect",  icon:"🔍"},
-    {key:"measure",  label:"Measure",  icon:"📐"},
-    {key:"media",    label:"Media",    icon:"🖼️"},
-    {key:"estimate", label:"Estimate", icon:"💰"},
-    {key:"costs",    label:"Costs",    icon:"🧮"},
-    {key:"invoice",  label:"Invoice",  icon:"🧾"},
-    {key:"labor",    label:"Labor",    icon:"👷"},
-    {key:"reports",  label:"Reports",  icon:"📊"},
-    {key:"rates",    label:"Rates",    icon:"⚙️"},
+  const allTabs = [
+    {key:"jobs",     label:"Jobs",     icon:"📋", roles:["admin","manager","crew"]},
+    {key:"schedule", label:"Schedule", icon:"📅", roles:["admin","manager","crew"]},
+    {key:"inspect",  label:"Inspect",  icon:"🔍", roles:["admin","manager","crew"]},
+    {key:"measure",  label:"Measure",  icon:"📐", roles:["admin","manager","crew"]},
+    {key:"media",    label:"Media",    icon:"🖼️", roles:["admin","manager","crew"]},
+    {key:"estimate", label:"Estimate", icon:"💰", roles:["admin","manager","crew"]},
+    {key:"costs",    label:"Costs",    icon:"🧮", roles:["admin","manager"]},
+    {key:"invoice",  label:"Invoice",  icon:"🧾", roles:["admin","manager"]},
+    {key:"labor",    label:"Labor",    icon:"👷", roles:["admin","manager","crew"]},
+    {key:"reports",  label:"Reports",  icon:"📊", roles:["admin","manager"]},
+    {key:"rates",    label:"Rates",    icon:"⚙️", roles:["admin","manager"]},
+    {key:"team",     label:"Team",     icon:"👥", roles:["admin"]},
   ];
+  const tabs = allTabs.filter(t => t.roles.includes(userRole));
 
   useEffect(() => {
     if (!tabsRef.current) return;
@@ -288,6 +297,7 @@ function TopNav({ view, setView }) {
   }, [view]);
 
   const handleLogoTap = () => {
+    if (userRole !== "admin") return; // secret export is admin-only
     tapCountRef.current += 1;
     clearTimeout(tapTimerRef.current);
     if (tapCountRef.current >= 5) {
@@ -313,6 +323,11 @@ function TopNav({ view, setView }) {
           </button>
         ))}
       </div>
+      <button onClick={() => { if(confirm("Sign out?")) onLogout(); }}
+        style={{background:"none", border:"none", color:C.textMuted, fontSize:18, padding:"0 12px", cursor:"pointer", flexShrink:0}}
+        title="Sign out">
+        ⏻
+      </button>
     </nav>
   );
 }
@@ -1788,6 +1803,114 @@ function CostsView({ currentJob, updateJob, rates }) {
   );
 }
 
+// ─── Team View (admin only) ────────────────────────────────────────────────────
+function TeamView({ accessToken }) {
+  const [users,     setUsers]     = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [inviting,  setInviting]  = useState(false);
+  const [email,     setEmail]     = useState("");
+  const [role,      setRole]      = useState("crew");
+  const [message,   setMessage]   = useState("");
+  const [error,     setError]     = useState("");
+
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/list-users");
+      const data = await res.json();
+      if (res.ok) setUsers(data.users || []);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadUsers(); }, []);
+
+  const sendInvite = async () => {
+    if (!email.trim()) { setError("Please enter an email address."); return; }
+    setError(""); setMessage(""); setInviting(true);
+    try {
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send invite.");
+      setMessage(`✅ Invite sent to ${email.trim()}. They'll get an email to set their password.`);
+      setEmail(""); setRole("crew");
+      loadUsers();
+    } catch(e) {
+      setError(e.message);
+    }
+    setInviting(false);
+  };
+
+  const removeUser = async (userId, userEmail) => {
+    if (!confirm(`Remove ${userEmail}? They will lose access immediately.`)) return;
+    try {
+      const res = await fetch("/api/remove-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to remove user.");
+      setUsers(prev => prev.filter(u => u.id !== userId));
+    } catch(e) {
+      alert("Error: " + e.message);
+    }
+  };
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Team</h1>
+      <p style={S.subhead}>Invite crew members and manage access</p>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Invite Team Member</h2>
+        <label style={S.formLabel}>Email
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            style={S.input} placeholder="name@example.com" autoCapitalize="none" autoCorrect="off"/>
+        </label>
+        <label style={{...S.formLabel, marginTop:10}}>Role
+          <select value={role} onChange={e => setRole(e.target.value)} style={S.input}>
+            <option value="crew">Crew — field access only</option>
+            <option value="manager">Manager — almost full access (no Rates or Team)</option>
+            <option value="admin">Admin — full access</option>
+          </select>
+        </label>
+        {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
+        {message && <div style={{color:C.green, fontSize:13, marginTop:10}}>{message}</div>}
+        <button style={{...S.btnPrimary, marginTop:14, opacity:inviting?0.6:1}} onClick={sendInvite} disabled={inviting}>
+          {inviting ? "Sending..." : "✉️ Send Invite"}
+        </button>
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Current Team ({users.length})</h2>
+        {loading ? (
+          <p style={{fontSize:13, color:C.textMuted}}>Loading...</p>
+        ) : users.length === 0 ? (
+          <p style={{fontSize:13, color:C.textMuted}}>No team members yet.</p>
+        ) : (
+          users.map(u => (
+            <div key={u.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:8}}>
+              <div>
+                <div style={{fontWeight:600, fontSize:14}}>{u.email}</div>
+                <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>
+                  {u.role === "admin" ? "👑 Admin" : u.role === "manager" ? "🛠 Manager" : "🔧 Crew"} · Added {new Date(u.created_at).toLocaleDateString()}
+                </div>
+              </div>
+              <button style={S.btnSmallDanger} onClick={() => removeUser(u.id, u.email)}>Remove</button>
+            </div>
+          ))
+        )}
+      </section>
+    </div>
+  );
+}
+
 // ─── Export View (secret) ──────────────────────────────────────────────────────
 function ExportView({ jobs, laborEntries, rates, setView }) {
   const csvEscape = (val) => {
@@ -3131,15 +3254,97 @@ function EstimateView({ currentJob, updateJob, rates, syncJob }) {
 const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDk3MDYsImV4cCI6MjA5NjA4NTcwNn0.rTr3e4739fJpbHXgBneRTr18utum5XxMWTf2E0DtOVQ";
 
-const sbFetch = (path, opts={}) => fetch(SUPABASE_URL + "/rest/v1/" + path, {
+const sbFetch = (path, opts={}, accessToken=null) => fetch(SUPABASE_URL + "/rest/v1/" + path, {
   ...opts,
   headers: {
     "apikey": SUPABASE_KEY,
-    "Authorization": "Bearer " + SUPABASE_KEY,
+    "Authorization": "Bearer " + (accessToken || SUPABASE_KEY),
     "Content-Type": "application/json",
     ...(opts.headers || {}),
   },
 });
+
+// ── Auth helpers (Supabase GoTrue REST API, no SDK needed) ──
+const AUTH_STORAGE_KEY = "tps_auth_session";
+
+const authSignIn = async (email, password) => {
+  const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=password", {
+    method: "POST",
+    headers: { "apikey": SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.msg || "Login failed");
+  return data; // { access_token, refresh_token, user, expires_at, ... }
+};
+
+const authRefresh = async (refreshToken) => {
+  const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
+    method: "POST",
+    headers: { "apikey": SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error("Session refresh failed");
+  return data;
+};
+
+const saveSession = (session) => {
+  try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session)); } catch(e) {}
+};
+const loadSession = () => {
+  try { const s = localStorage.getItem(AUTH_STORAGE_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+};
+const clearSession = () => {
+  try { localStorage.removeItem(AUTH_STORAGE_KEY); } catch(e) {}
+};
+
+// ─── Login View ───────────────────────────────────────────────────────────────
+function LoginView({ onSuccess }) {
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [error,    setError]    = useState("");
+  const [loading,  setLoading]  = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      const session = await authSignIn(email.trim(), password);
+      saveSession(session);
+      onSuccess(session);
+    } catch(err) {
+      setError(err.message || "Login failed. Check your email and password.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+      <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
+        <img src={"data:image/png;base64," + LOGO_B64} alt="TPS"
+          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+        <form onSubmit={handleLogin}>
+          <label style={S.formLabel}>Email
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              style={S.input} autoCapitalize="none" autoCorrect="off" required/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Password
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              style={S.input} required/>
+          </label>
+          {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
+          <button type="submit" style={{...S.btnPrimary, width:"100%", marginTop:18, opacity:loading?0.6:1}} disabled={loading}>
+            {loading ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
+        <p style={{fontSize:12, color:C.textMuted, textAlign:"center", marginTop:16}}>
+          Need an account? Ask your admin to create one for you.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [view,          setView]         = useState("jobs");
@@ -3149,6 +3354,63 @@ export default function App() {
   const [loading,       setLoading]      = useState(true);
   const [syncStatus,    setSyncStatus]   = useState("");
   const [laborEntries,  setLaborEntries] = useState([]);
+
+  // ── Auth state ──
+  const [session,    setSession]    = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [userRole,   setUserRole]   = useState("crew");
+
+  const fetchProfile = async (userId, accessToken) => {
+    try {
+      const res = await sbFetch("profiles?id=eq."+userId+"&select=role", {}, accessToken);
+      const data = await res.json();
+      if (Array.isArray(data) && data[0]?.role) setUserRole(data[0].role);
+    } catch(e) { console.error("fetchProfile error:", e); }
+  };
+
+  // ── Restore session on mount ──
+  useEffect(() => {
+    const restore = async () => {
+      const saved = loadSession();
+      if (!saved) { setAuthChecked(true); return; }
+      const expiresAt = saved.expires_at ? saved.expires_at * 1000 : 0;
+      const isExpired = Date.now() > expiresAt - 60000; // refresh if within 1 min of expiry
+      if (isExpired && saved.refresh_token) {
+        try {
+          const fresh = await authRefresh(saved.refresh_token);
+          saveSession(fresh);
+          setSession(fresh);
+          await fetchProfile(fresh.user.id, fresh.access_token);
+        } catch(e) {
+          clearSession();
+        }
+      } else {
+        setSession(saved);
+        await fetchProfile(saved.user.id, saved.access_token);
+      }
+      setAuthChecked(true);
+    };
+    restore();
+  }, []);
+
+  const handleLoginSuccess = async (newSession) => {
+    setSession(newSession);
+    await fetchProfile(newSession.user.id, newSession.access_token);
+  };
+
+  // If the active view isn't allowed for this role, fall back to jobs
+  useEffect(() => {
+    const adminOnly = ["export","team"];
+    const adminOrManager = ["costs","invoice","reports","rates"];
+    if (adminOnly.includes(view) && userRole !== "admin") setView("jobs");
+    if (adminOrManager.includes(view) && userRole !== "admin" && userRole !== "manager") setView("jobs");
+  }, [userRole, view]);
+
+  const handleLogout = () => {
+    clearSession();
+    setSession(null);
+    setUserRole("crew");
+  };
 
   // ── Load all data on mount ──
   useEffect(() => {
@@ -3302,6 +3564,20 @@ export default function App() {
     });
   };
 
+  if (!authChecked) return (
+    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+      <div style={{textAlign:"center", padding:"0 40px"}}>
+        <img
+          src={"data:image/png;base64," + LOGO_B64}
+          alt="TPS Asphalt Maintenance"
+          style={{width:"100%", maxWidth:280, display:"block", margin:"0 auto"}}
+        />
+      </div>
+    </div>
+  );
+
+  if (!session) return <LoginView onSuccess={handleLoginSuccess}/>;
+
   if (loading) return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{textAlign:"center", padding:"0 40px"}}>
@@ -3317,7 +3593,7 @@ export default function App() {
 
   return (
     <div style={S.app}>
-      <TopNav view={view} setView={setView}/>
+      <TopNav view={view} setView={setView} userRole={userRole} onLogout={handleLogout}/>
       {syncStatus && (
         <div style={{
           background: syncStatus.startsWith("⚠️") ? "#2a1010" : "#1a2a1a",
@@ -3332,12 +3608,13 @@ export default function App() {
         {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
         {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}/>}
-        {view==="costs"    && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
-        {view==="invoice"  && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="costs"    && (userRole==="admin"||userRole==="manager") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="invoice"  && (userRole==="admin"||userRole==="manager") && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="labor"    && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
-        {view==="reports"  && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="rates"    && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
-        {view==="export"   && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
+        {view==="reports"  && (userRole==="admin"||userRole==="manager") && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="rates"    && (userRole==="admin"||userRole==="manager") && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
+        {view==="team"     && userRole==="admin" && <TeamView accessToken={session?.access_token}/>}
+        {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
       </div>
     </div>
   );
