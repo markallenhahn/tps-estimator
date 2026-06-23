@@ -56,7 +56,8 @@ export default async function handler(req, res) {
   }
 
   // Admins may set any role; managers are locked to "crew" no matter what they send.
-  const requestedRole = ["admin","manager"].includes(role) ? role : "crew";
+  const VALID_ROLES = ["estimator","crew","crewlead","manager","admin"];
+  const requestedRole = VALID_ROLES.includes(role) ? role : "crew";
   const safeRole = callerRole === "admin" ? requestedRole : "crew";
 
   try {
