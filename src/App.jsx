@@ -278,9 +278,6 @@ function TopNav({ view, setView, userRole, onLogout }) {
   const allTabs = [
     {key:"jobs",     label:"Jobs",     icon:"📋", roles:["admin","manager","crew"]},
     {key:"schedule", label:"Schedule", icon:"📅", roles:["admin","manager","crew"]},
-    {key:"inspect",  label:"Inspect",  icon:"🔍", roles:["admin","manager","crew"]},
-    {key:"measure",  label:"Measure",  icon:"📐", roles:["admin","manager","crew"]},
-    {key:"media",    label:"Media",    icon:"🖼️", roles:["admin","manager","crew"]},
     {key:"estimate", label:"Estimate", icon:"💰", roles:["admin","manager","crew"]},
     {key:"costs",    label:"Costs",    icon:"🧮", roles:["admin","manager"]},
     {key:"invoice",  label:"Invoice",  icon:"🧾", roles:["admin","manager"]},
@@ -433,25 +430,464 @@ function RatesView({ rates, setRates, currentJob, updateJob }) {
 }
 
 // ─── Media View ───────────────────────────────────────────────────────────────
-function MediaView({ currentJob, updateJob }) {
+function JobDetailView({ currentJob, updateJob, rates, setView }) {
+  // ── Photo capture ──
+  const [capturing, setCapturing] = useState(null);
+  const [stream,    setStream]    = useState(null);
+  const videoRef  = useRef(null);
+  const canvasRef = useRef(null);
+  const sigCanvasRef = useRef(null);
+  const sigDrawing   = useRef(false);
   const [lightbox, setLightbox] = useState(null);
+
+  // ── Measure state ──
+  const [newArea,    setNewArea]    = useState(initialArea());
+  const [useCalc,    setUseCalc]    = useState(false);
+  const [calcRows,   setCalcRows]   = useState([{id:1, l:"", w:""}]);
+  const [editingId,  setEditingId]  = useState(null);
+  const [editArea,   setEditArea]   = useState(null);
+
+  const stopStream = useCallback(() => {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    setStream(null); setCapturing(null);
+  }, [stream]);
+
+  useEffect(() => { return () => { if (stream) stream.getTracks().forEach(t => t.stop()); }; }, [stream]);
+
+  const startCamera = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+      setStream(s); setCapturing("photo");
+      setTimeout(() => { if (videoRef.current) videoRef.current.srcObject = s; }, 100);
+    } catch { alert("Camera permission denied or not available."); }
+  };
+
+  const takePhoto = () => {
+    const canvas = canvasRef.current, video = videoRef.current;
+    if (!canvas || !video) return;
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    const label   = prompt("Label for this photo:", "") || "Area of concern";
+    updateJob(j => ({...j, photos:[...j.photos, {id:Date.now(), dataUrl, label, ts:new Date().toLocaleTimeString()}]}));
+    stopStream();
+  };
+
+  const removePhoto = (id) => updateJob(j => ({...j, photos:j.photos.filter(p => p.id!==id)}));
+
+  // ── Signature pad helpers ──
+  const getSigPos = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const src  = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * (canvas.width / rect.width),
+             y: (src.clientY - rect.top)  * (canvas.height / rect.height) };
+  };
+
+  const sigStart = (e) => {
+    e.preventDefault();
+    const c = sigCanvasRef.current; if (!c) return;
+    const ctx = c.getContext("2d");
+    const pos = getSigPos(e, c);
+    ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+    sigDrawing.current = true;
+  };
+
+  const sigMove = (e) => {
+    e.preventDefault();
+    if (!sigDrawing.current) return;
+    const c = sigCanvasRef.current; if (!c) return;
+    const ctx = c.getContext("2d");
+    const pos = getSigPos(e, c);
+    ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.strokeStyle = "#f59e0b";
+    ctx.lineTo(pos.x, pos.y); ctx.stroke();
+  };
+
+  const sigEnd = (e) => {
+    e.preventDefault();
+    sigDrawing.current = false;
+  };
+
+  const clearSig = () => {
+    const c = sigCanvasRef.current; if (!c) return;
+    c.getContext("2d").clearRect(0, 0, c.width, c.height);
+    updateJob(j => ({...j, signature: null}));
+  };
+
+  // Restore existing signature onto canvas after mount
+  useEffect(() => {
+    if (!currentJob?.signature || !sigCanvasRef.current) return;
+    const img = new Image();
+    img.onload = () => sigCanvasRef.current?.getContext("2d").drawImage(img, 0, 0);
+    img.src = currentJob.signature;
+  }, [currentJob?.id]);
 
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
-  const hasMedia = currentJob.photos.length > 0;
-  const removePhoto = (id) => updateJob(j => ({...j, photos: j.photos.filter(p => p.id !== id)}));
+  const isOther = (svcType) => svcType === "other";
+
+  // Calc helpers
+  const calcAreas   = calcRows.map(r => ({...r, area: Number(r.l||0) * Number(r.w||0)}));
+  const calcTotal   = calcAreas.reduce((sum, r) => sum + r.area, 0);
+  const addCalcRow  = () => setCalcRows(r => [...r, {id:Date.now(), l:"", w:""}]);
+  const removeCalcRow = (id) => setCalcRows(r => r.filter(x => x.id !== id));
+  const updateCalcRow = (id, field, val) => setCalcRows(r => r.map(x => x.id===id ? {...x,[field]:val} : x));
+  const applyCalc   = () => {
+    if (calcTotal > 0) {
+      setNewArea(p => ({...p, measurement:String(Math.round(calcTotal))}));
+      setUseCalc(false);
+      setCalcRows([{id:1, l:"", w:""}]);
+    }
+  };
+
+  const addArea = () => {
+    if (!newArea.name || !newArea.measurement) { alert("Name and measurement are required."); return; }
+    updateJob(j => ({...j, areas:[...j.areas, {...newArea, id:Date.now()}]}));
+    setNewArea(initialArea());
+    setCalcRows([{id:1, l:"", w:""}]);
+    setUseCalc(false);
+  };
+
+  const removeArea = (id) => updateJob(j => ({...j, areas:j.areas.filter(a => a.id!==id)}));
+
+  const startEdit = (a) => { setEditingId(a.id); setEditArea({...a}); };
+  const cancelEdit = () => { setEditingId(null); setEditArea(null); };
+  const saveEdit = () => {
+    if (!editArea.name || !editArea.measurement) { alert("Name and amount are required."); return; }
+    updateJob(j => ({...j, areas: j.areas.map(a => a.id===editingId ? {...editArea} : a)}));
+    setEditingId(null); setEditArea(null);
+  };
+
+  const totalBySvc = currentJob.areas.reduce((acc, a) => {
+    if (a.serviceType === "other") {
+      acc["other"] = (acc["other"]||0) + Number(a.measurement||0);
+    } else {
+      acc[a.serviceType] = (acc[a.serviceType]||0) + Number(a.measurement||0);
+    }
+    return acc;
+  }, {});
+
+  const measureLabel = (svcType) => {
+    if (svcType === "other")   return "Amount ($) *";
+    if (svcType === "patch")   return "Sq Ft * (tons auto-calc)";
+    if (rates[svcType]?.unit === "sqft")  return "Square Feet *";
+    return "Linear Feet *";
+  };
 
   return (
     <div style={S.page}>
-      <h1 style={S.h1}>Media</h1>
-      <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
+      <div style={S.pageHeader}>
+        <h1 style={S.h1}>{currentJob.clientName||"Unnamed Job"}</h1>
+        <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Jobs</button>
+      </div>
+      <p style={S.subhead}>{currentJob.address||"No address"}</p>
 
-      {!hasMedia && (
-        <div style={S.empty}>
-          <div style={S.emptyIcon}>🖼️</div>
-          <p style={S.emptyText}>No photos yet. Use the Inspect tab to capture photos.</p>
+      {/* ── CLIENT INFO ── */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Client Info</h2>
+        <div style={S.formGrid}>
+          {[["clientName","Client Name","text"],["clientPhone","Phone","tel"],["clientEmail","Email","email"]].map(([f,l,t]) => (
+            <label key={f} style={S.formLabel}>{l}
+              <input type={t} value={currentJob[f]||""}
+                onChange={e => updateJob(j => ({...j,[f]:e.target.value}))} style={S.input}/>
+            </label>
+          ))}
+          <label style={S.formLabel}>Estimate #
+            <input value={currentJob.estimateNum||""}
+              onChange={e => updateJob(j => ({...j, estimateNum:e.target.value}))} style={S.input}/>
+          </label>
         </div>
+        <label style={S.formLabel}>Street Address
+          <input value={currentJob.address||""}
+            onChange={e => updateJob(j => ({...j, address:e.target.value}))}
+            style={S.input} placeholder="123 Main St"/>
+        </label>
+        <div style={{...S.formGrid, marginTop:10, gridTemplateColumns:"2fr 1fr 1fr"}}>
+          <label style={S.formLabel}>City
+            <input value={currentJob.city||""}
+              onChange={e => updateJob(j => ({...j, city:e.target.value}))} style={S.input}/>
+          </label>
+          <label style={S.formLabel}>State
+            <input value={currentJob.state||"PA"}
+              onChange={e => updateJob(j => ({...j, state:e.target.value}))} style={S.input}/>
+          </label>
+          <label style={S.formLabel}>ZIP
+            <input value={currentJob.zip||""}
+              onChange={e => updateJob(j => ({...j, zip:e.target.value}))} style={S.input}/>
+          </label>
+        </div>
+        <label style={{...S.formLabel, marginTop:10}}>Site Notes
+          <textarea value={currentJob.notes||""}
+            onChange={e => updateJob(j => ({...j, notes:e.target.value}))}
+            style={{...S.input, height:72, resize:"vertical"}}
+            placeholder="General condition, access notes, special instructions..."/>
+        </label>
+      </section>
+
+      {/* ── TPS SIGNATURE ── */}
+      <section style={S.section}>
+        <h2 style={S.h2}>TPS Representative Signature</h2>
+        {currentJob.signature ? (
+          <div style={S.signedBanner}>
+            <div style={S.signedBannerTitle}>✅ Signature Saved</div>
+            <div style={S.signedBannerSub}>Appears on estimate PDF</div>
+            <img src={currentJob.signature} alt="TPS Signature"
+              style={{display:"block", maxWidth:260, marginTop:10, borderRadius:6, border:`1px solid ${C.border}`}}/>
+            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={clearSig}>
+              🗑 Remove Signature
+            </button>
+          </div>
+        ) : (
+          <>
+            <p style={{fontSize:12, color:C.textMuted, marginBottom:10, marginTop:-8}}>
+              Draw your signature below — it will appear on the estimate PDF.
+            </p>
+            <div style={S.sigWrap}>
+              <canvas
+                ref={sigCanvasRef}
+                width={560} height={140}
+                style={S.sigCanvas}
+                onMouseDown={sigStart} onMouseMove={sigMove} onMouseUp={sigEnd} onMouseLeave={sigEnd}
+                onTouchStart={sigStart} onTouchMove={sigMove} onTouchEnd={sigEnd}
+              />
+            </div>
+            <div style={{display:"flex", gap:10, marginTop:10}}>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearSig}>🗑 Clear</button>
+              <button style={{...S.btnPrimary, flex:1}} onClick={() => {
+                const c = sigCanvasRef.current; if (!c) return;
+                const px = c.getContext("2d").getImageData(0,0,c.width,c.height).data;
+                const hasInk = Array.from(px).some((v,i) => i%4===3 && v>0);
+                if (!hasInk) { alert("Please draw your signature first."); return; }
+                updateJob(j => ({...j, signature: c.toDataURL("image/png")}));
+              }}>✍️ Save Signature</button>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* ── MEASUREMENTS ── */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Add Area / Line Item</h2>
+        <div style={S.formGrid}>
+          <label style={S.formLabel}>Area / Zone Name *
+            <input value={newArea.name} onChange={e => setNewArea(p => ({...p, name:e.target.value}))}
+              style={S.input} placeholder="e.g. Main lot, Driveway, Row 3"/>
+          </label>
+          <label style={S.formLabel}>Service Type *
+            <select value={newArea.serviceType} onChange={e => setNewArea(p => ({...p, serviceType:e.target.value, measurement:""}))} style={S.input}>
+              {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </label>
+          {!isOther(newArea.serviceType) && (
+            <label style={S.formLabel}>Condition
+              <select value={newArea.condition} onChange={e => setNewArea(p => ({...p, condition:e.target.value}))} style={S.input}>
+                {["good","fair","poor","failed"].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+              </select>
+            </label>
+          )}
+          <label style={S.formLabel}>
+            {measureLabel(newArea.serviceType)}
+            <div style={{display:"flex", gap:8, alignItems:"center"}}>
+              {isOther(newArea.serviceType) && <span style={{color:C.textMuted, fontSize:14, lineHeight:"36px"}}>$</span>}
+              <input type="number" value={newArea.measurement} min="0"
+                onChange={e => setNewArea(p => ({...p, measurement:e.target.value}))}
+                style={{...S.input, flex:1}} placeholder="0"/>
+              {!isOther(newArea.serviceType) && rates[newArea.serviceType]?.unit !== "linft" && (
+                <button style={{...S.btnSecondary, fontSize:11, padding:"6px 10px", whiteSpace:"nowrap"}}
+                  onClick={() => setUseCalc(v => !v)}>
+                  {useCalc ? "▲ Hide Calc" : "📐 L×W"}
+                </button>
+              )}
+            </div>
+          </label>
+        </div>
+
+        {useCalc && !isOther(newArea.serviceType) && (
+          <div style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", marginTop:10}}>
+            <div style={S.calcHeader}>
+              <span style={S.calcHeaderLabel}>#</span>
+              <span style={{...S.calcHeaderLabel, flex:2}}>Length (ft)</span>
+              <span style={S.calcHeaderX}>×</span>
+              <span style={{...S.calcHeaderLabel, flex:2}}>Width (ft)</span>
+              <span style={{...S.calcHeaderLabel, flex:2, textAlign:"right"}}>Sq Ft</span>
+              <span style={{width:28}}/>
+            </div>
+            {calcAreas.map((r, i) => (
+              <div key={r.id} style={S.calcRow}>
+                <span style={S.calcRowNum}>{i+1}</span>
+                <input type="number" min="0" placeholder="0" value={r.l}
+                  onChange={e => updateCalcRow(r.id,"l",e.target.value)}
+                  style={{...S.input, ...S.calcInput}}/>
+                <span style={S.calcX}>×</span>
+                <input type="number" min="0" placeholder="0" value={r.w}
+                  onChange={e => updateCalcRow(r.id,"w",e.target.value)}
+                  style={{...S.input, ...S.calcInput}}/>
+                <div style={S.calcResult}>
+                  {r.area > 0 ? r.area.toLocaleString() : "—"}
+                  <span style={S.calcResultUnit}> sf</span>
+                </div>
+                {calcRows.length > 1
+                  ? <button style={S.calcDeleteBtn} onClick={() => removeCalcRow(r.id)}>✕</button>
+                  : <span style={{width:28}}/>}
+              </div>
+            ))}
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:10}}>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={addCalcRow}>+ Add to Total</button>
+              <div style={{display:"flex", alignItems:"center", gap:12}}>
+                <span style={{fontWeight:800, fontSize:16, color:C.accent}}>{calcTotal.toLocaleString()} sq ft</span>
+                <button style={{...S.btnPrimary, fontSize:12, padding:"6px 14px"}}
+                  onClick={applyCalc} disabled={calcTotal===0}>Use This →</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {newArea.serviceType==="patch" && Number(newArea.measurement)>0 && (
+          <div style={S.patchPreview}>
+            {Number(newArea.measurement).toLocaleString()} sq ft →{" "}
+            <strong>{calcPatchTons(newArea.measurement).toFixed(2)} tons</strong> →{" "}
+            <strong style={{color:C.accent}}>{formatCurrency(calcPatchTons(newArea.measurement)*(rates.patch?.rate||650))}</strong>
+          </div>
+        )}
+        <label style={{...S.formLabel, marginTop:10}}>Notes
+          <input value={newArea.notes} onChange={e => setNewArea(p => ({...p, notes:e.target.value}))}
+            style={S.input} placeholder="Additional notes..."/>
+        </label>
+        <label style={{...S.formLabel, marginTop:10}}>
+          Price Override <span style={{color:C.textMuted, fontWeight:400}}>(optional — overrides calculated price)</span>
+          <div style={{display:"flex", gap:6, alignItems:"center"}}>
+            <span style={{color:C.textMuted, fontSize:14}}>$</span>
+            <input type="number" min="0" step="0.01"
+              value={newArea.priceOverride||""}
+              onChange={e => setNewArea(p => ({...p, priceOverride: e.target.value}))}
+              style={{...S.input, flex:1}} placeholder="Leave blank to use calculated price"/>
+          </div>
+        </label>
+        <button style={{...S.btnPrimary, marginTop:12}} onClick={addArea}>+ Add to Job</button>
+      </section>
+
+      {Object.keys(totalBySvc).length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Running Totals</h2>
+          <div style={S.totalsGrid}>
+            {Object.entries(totalBySvc).map(([svc,qty]) => {
+              const amt = svc==="other" ? qty : svc==="patch" ? calcPatchTons(qty)*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
+              return (
+                <div key={svc} style={S.totalCard}>
+                  <div style={S.totalSvc}>{rates[svc]?.label||svc}</div>
+                  <div style={S.totalQty}>
+                    {svc==="other" ? formatCurrency(qty) : qty.toLocaleString() + " " + (svc==="patch"?"sq ft":rates[svc]?.unit||"")}
+                    {svc==="patch" && <span style={S.totalTons}> = {calcPatchTons(qty).toFixed(2)} tons</span>}
+                  </div>
+                  <div style={S.totalAmt}>{svc==="other" ? "" : formatCurrency(amt)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
+
+      {currentJob.areas.length > 0 ? (
+        <section style={S.section}>
+          <h2 style={S.h2}>Line Items ({currentJob.areas.length})</h2>
+          <div style={S.areaList}>
+            {currentJob.areas.map(a => {
+              const amt = calcLineAmt(a, rates);
+              const svc = rates[a.serviceType];
+              const isEdit = editingId === a.id;
+
+              if (isEdit && editArea) {
+                return (
+                  <div key={a.id} style={{...S.areaRow, flexDirection:"column", gap:10, padding:"12px 14px", border:`1px solid ${C.accent}`}}>
+                    <div style={{fontWeight:700, fontSize:12, color:C.accent, marginBottom:2}}>Editing Line Item</div>
+                    <div style={S.formGrid}>
+                      <label style={S.formLabel}>Name
+                        <input value={editArea.name} onChange={e => setEditArea(p => ({...p, name:e.target.value}))} style={S.input}/>
+                      </label>
+                      <label style={S.formLabel}>Service Type
+                        <select value={editArea.serviceType} onChange={e => setEditArea(p => ({...p, serviceType:e.target.value}))} style={S.input}>
+                          {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>
+                      </label>
+                      <label style={S.formLabel}>
+                        {measureLabel(editArea.serviceType)}
+                        <input type="number" value={editArea.measurement} min="0"
+                          onChange={e => setEditArea(p => ({...p, measurement:e.target.value}))} style={S.input}/>
+                      </label>
+                      {!isOther(editArea.serviceType) && (
+                        <label style={S.formLabel}>Condition
+                          <select value={editArea.condition} onChange={e => setEditArea(p => ({...p, condition:e.target.value}))} style={S.input}>
+                            {["good","fair","poor","failed"].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+                          </select>
+                        </label>
+                      )}
+                      <label style={{...S.formLabel, gridColumn:"1 / -1"}}>Notes
+                        <input value={editArea.notes||""} onChange={e => setEditArea(p => ({...p, notes:e.target.value}))} style={S.input}/>
+                      </label>
+                      <label style={{...S.formLabel, gridColumn:"1 / -1"}}>
+                        Price Override <span style={{color:C.textMuted, fontWeight:400}}>(leave blank to use calculated)</span>
+                        <div style={{display:"flex", gap:6, alignItems:"center"}}>
+                          <span style={{color:C.textMuted, fontSize:14}}>$</span>
+                          <input type="number" min="0" step="0.01"
+                            value={editArea.priceOverride||""}
+                            onChange={e => setEditArea(p => ({...p, priceOverride: e.target.value}))}
+                            style={{...S.input, flex:1}} placeholder="Leave blank to use calculated"/>
+                        </div>
+                      </label>
+                    </div>
+                    <div style={{display:"flex", gap:8}}>
+                      <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}>💾 Save</button>
+                      <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
+                    </div>
+                  </div>
+                );
+              }
+
+              const hasLineOverride = a.priceOverride !== undefined && a.priceOverride !== null && a.priceOverride !== "";
+              return (
+                <div key={a.id} style={S.areaRow}>
+                  <div style={S.areaRowMain}>
+                    <div style={S.areaName}>{a.name}</div>
+                    <div style={S.areaMeta}>
+                      {svc?.label}
+                      {a.serviceType==="other"
+                        ? " · " + formatCurrency(Number(a.measurement||0))
+                        : " · " + Number(a.measurement).toLocaleString() + " " + (svc?.unit==="linft"?"lin ft":"sq ft")}
+                      {a.serviceType==="patch" && ` → ${calcPatchTons(a.measurement).toFixed(2)} tons`}
+                    </div>
+                    {a.notes && <div style={S.areaNotes}>{a.notes}</div>}
+                    {hasLineOverride && <div style={{fontSize:11, color:C.accent, marginTop:2}}>✎ Price overridden</div>}
+                  </div>
+                  <div style={S.areaRowRight}>
+                    {!isOther(a.serviceType) && <span style={{...S.condBadge,...S[`cond_${a.condition}`]}}>{a.condition}</span>}
+                    <div style={{...S.areaAmt, ...(hasLineOverride ? {color:C.accent} : {})}}>{formatCurrency(amt)}</div>
+                    <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(a)}>✎</button>
+                    <button style={S.btnSmallDanger} onClick={() => removeArea(a.id)}>✕</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : (
+        <div style={S.empty}><div style={S.emptyIcon}>📐</div><p style={S.emptyText}>No measurements yet.</p></div>
+      )}
+
+      {/* ── MEDIA ── */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Photos</h2>
+        {!capturing ? (
+          <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}>📷 Take Photo</button>
+        ) : (
+          <div style={S.cameraBox}>
+            <video ref={videoRef} autoPlay muted playsInline style={S.cameraPreview}/>
+            <canvas ref={canvasRef} style={{display:"none"}}/>
+            <div style={S.cameraControls}>
+              <button style={S.btnShoot} onClick={takePhoto}>📸 Capture</button>
+              <button style={S.btnCancel} onClick={stopStream}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </section>
 
       {currentJob.photos.length > 0 && (
         <section style={S.section}>
@@ -486,6 +922,7 @@ function MediaView({ currentJob, updateJob }) {
     </div>
   );
 }
+
 // ─── Invoice View ─────────────────────────────────────────────────────────────
 function InvoiceView({ currentJob, updateJob, rates }) {
   const [invoiceType, setInvoiceType] = useState("due");
@@ -2234,8 +2671,8 @@ function ExportView({ jobs, laborEntries, rates, setView }) {
 // ─── Jobs List ────────────────────────────────────────────────────────────────
 function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById }) {
   const [showArchive, setShowArchive] = useState(false);
-  const create    = () => { const j=initialJob(rates); setJobs(p=>[j,...p]); setCurrentJob(j); setView("inspect"); };
-  const open      = (job) => { setCurrentJob(job); setView("inspect"); };
+  const create    = () => { const j=initialJob(rates); setJobs(p=>[j,...p]); setCurrentJob(j); setView("jobdetail"); };
+  const open      = (job) => { setCurrentJob(job); setView("jobdetail"); };
   const remove    = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
   const schedule  = (job, date) => updateJobById(job.id, j => ({...j, scheduledDate:date, status: date ? "scheduled" : j.status==="scheduled" ? "draft" : j.status}));
   const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
@@ -2355,492 +2792,6 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
             </div>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-function InspectView({ currentJob, updateJob }) {
-  const [capturing, setCapturing] = useState(null);
-  const [stream,    setStream]    = useState(null);
-  const videoRef  = useRef(null);
-  const canvasRef = useRef(null);
-  const sigCanvasRef = useRef(null);
-  const sigDrawing   = useRef(false);
-
-  const stopStream = useCallback(() => {
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    setStream(null); setCapturing(null);
-  }, [stream]);
-
-  useEffect(() => { return () => { if (stream) stream.getTracks().forEach(t => t.stop()); }; }, [stream]);
-
-  const startCamera = async () => {
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-      setStream(s); setCapturing("photo");
-      setTimeout(() => { if (videoRef.current) videoRef.current.srcObject = s; }, 100);
-    } catch { alert("Camera permission denied or not available."); }
-  };
-
-  const takePhoto = () => {
-    const canvas = canvasRef.current, video = videoRef.current;
-    if (!canvas || !video) return;
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    canvas.getContext("2d").drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-    const label   = prompt("Label for this photo:", "") || "Area of concern";
-    updateJob(j => ({...j, photos:[...j.photos, {id:Date.now(), dataUrl, label, ts:new Date().toLocaleTimeString()}]}));
-    stopStream();
-  };
-
-  const removePhoto = (id) => updateJob(j => ({...j, photos:j.photos.filter(p => p.id!==id)}));
-
-  // ── Signature pad helpers ──
-  const getSigPos = (e, canvas) => {
-    const rect = canvas.getBoundingClientRect();
-    const src  = e.touches ? e.touches[0] : e;
-    return { x: (src.clientX - rect.left) * (canvas.width / rect.width),
-             y: (src.clientY - rect.top)  * (canvas.height / rect.height) };
-  };
-
-  const sigStart = (e) => {
-    e.preventDefault();
-    const c = sigCanvasRef.current; if (!c) return;
-    const ctx = c.getContext("2d");
-    const pos = getSigPos(e, c);
-    ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
-    sigDrawing.current = true;
-  };
-
-  const sigMove = (e) => {
-    e.preventDefault();
-    if (!sigDrawing.current) return;
-    const c = sigCanvasRef.current; if (!c) return;
-    const ctx = c.getContext("2d");
-    const pos = getSigPos(e, c);
-    ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.strokeStyle = "#f59e0b";
-    ctx.lineTo(pos.x, pos.y); ctx.stroke();
-  };
-
-  const sigEnd = (e) => {
-    e.preventDefault();
-    sigDrawing.current = false;
-  };
-
-  const clearSig = () => {
-    const c = sigCanvasRef.current; if (!c) return;
-    c.getContext("2d").clearRect(0, 0, c.width, c.height);
-    updateJob(j => ({...j, signature: null}));
-  };
-
-  // Restore existing signature onto canvas after mount
-  useEffect(() => {
-    if (!currentJob?.signature || !sigCanvasRef.current) return;
-    const img = new Image();
-    img.onload = () => sigCanvasRef.current?.getContext("2d").drawImage(img, 0, 0);
-    img.src = currentJob.signature;
-  }, [currentJob?.id]); // only re-draw when job changes, not on every keystroke
-
-  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
-
-  return (
-    <div style={S.page}>
-      <h1 style={S.h1}>Site Inspection</h1>
-      <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
-
-      <section style={S.section}>
-        <h2 style={S.h2}>Client Info</h2>
-        <div style={S.formGrid}>
-          {[["clientName","Client Name","text"],["clientPhone","Phone","tel"],["clientEmail","Email","email"]].map(([f,l,t]) => (
-            <label key={f} style={S.formLabel}>{l}
-              <input type={t} value={currentJob[f]||""}
-                onChange={e => updateJob(j => ({...j,[f]:e.target.value}))} style={S.input}/>
-            </label>
-          ))}
-          <label style={S.formLabel}>Estimate #
-            <input value={currentJob.estimateNum||""}
-              onChange={e => updateJob(j => ({...j, estimateNum:e.target.value}))} style={S.input}/>
-          </label>
-        </div>
-        <label style={S.formLabel}>Street Address
-          <input value={currentJob.address||""}
-            onChange={e => updateJob(j => ({...j, address:e.target.value}))}
-            style={S.input} placeholder="123 Main St"/>
-        </label>
-        <div style={{...S.formGrid, marginTop:10, gridTemplateColumns:"2fr 1fr 1fr"}}>
-          <label style={S.formLabel}>City
-            <input value={currentJob.city||""}
-              onChange={e => updateJob(j => ({...j, city:e.target.value}))} style={S.input}/>
-          </label>
-          <label style={S.formLabel}>State
-            <input value={currentJob.state||"PA"}
-              onChange={e => updateJob(j => ({...j, state:e.target.value}))} style={S.input}/>
-          </label>
-          <label style={S.formLabel}>ZIP
-            <input value={currentJob.zip||""}
-              onChange={e => updateJob(j => ({...j, zip:e.target.value}))} style={S.input}/>
-          </label>
-        </div>
-        <label style={{...S.formLabel, marginTop:10}}>Site Notes
-          <textarea value={currentJob.notes||""}
-            onChange={e => updateJob(j => ({...j, notes:e.target.value}))}
-            style={{...S.input, height:72, resize:"vertical"}}
-            placeholder="General condition, access notes, special instructions..."/>
-        </label>
-      </section>
-
-      {/* Signature Pad */}
-      <section style={S.section}>
-        <h2 style={S.h2}>TPS Representative Signature</h2>
-
-        {currentJob.signature ? (
-          <div style={S.signedBanner}>
-            <div style={S.signedBannerTitle}>✅ Signature Saved</div>
-            <div style={S.signedBannerSub}>Appears on estimate PDF</div>
-            <img src={currentJob.signature} alt="TPS Signature"
-              style={{display:"block", maxWidth:260, marginTop:10, borderRadius:6, border:`1px solid ${C.border}`}}/>
-            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={clearSig}>
-              🗑 Remove Signature
-            </button>
-          </div>
-        ) : (
-          <>
-            <p style={{fontSize:12, color:C.textMuted, marginBottom:10, marginTop:-8}}>
-              Draw your signature below — it will appear on the estimate PDF.
-            </p>
-            <div style={S.sigWrap}>
-              <canvas
-                ref={sigCanvasRef}
-                width={560} height={140}
-                style={S.sigCanvas}
-                onMouseDown={sigStart} onMouseMove={sigMove} onMouseUp={sigEnd} onMouseLeave={sigEnd}
-                onTouchStart={sigStart} onTouchMove={sigMove} onTouchEnd={sigEnd}
-              />
-            </div>
-            <div style={{display:"flex", gap:10, marginTop:10}}>
-              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearSig}>🗑 Clear</button>
-              <button style={{...S.btnPrimary, flex:1}} onClick={() => {
-                const c = sigCanvasRef.current; if (!c) return;
-                const px = c.getContext("2d").getImageData(0,0,c.width,c.height).data;
-                const hasInk = Array.from(px).some((v,i) => i%4===3 && v>0);
-                if (!hasInk) { alert("Please draw your signature first."); return; }
-                updateJob(j => ({...j, signature: c.toDataURL("image/png")}));
-              }}>✍️ Save Signature</button>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section style={S.section}>
-        <h2 style={S.h2}>Photos</h2>
-        {!capturing ? (
-          <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}>📷 Take Photo</button>
-        ) : (
-          <div style={S.cameraBox}>
-            <video ref={videoRef} autoPlay muted playsInline style={S.cameraPreview}/>
-            <canvas ref={canvasRef} style={{display:"none"}}/>
-            <div style={S.cameraControls}>
-              <button style={S.btnShoot} onClick={takePhoto}>📸 Capture</button>
-              <button style={S.btnCancel} onClick={stopStream}>Cancel</button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {currentJob.photos.length > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Photos ({currentJob.photos.length})</h2>
-          <div style={S.photoGrid}>
-            {currentJob.photos.map(p => (
-              <div key={p.id} style={S.photoCard}>
-                <img src={p.dataUrl} alt={p.label} style={S.photoImg}/>
-                <div style={S.photoLabel}>{p.label}</div>
-                <div style={S.photoTime}>{p.ts}</div>
-                <button style={S.photoDelete} onClick={() => removePhoto(p.id)}>✕</button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}
-
-// ─── Measure View ─────────────────────────────────────────────────────────────
-function MeasureView({ currentJob, updateJob, rates }) {
-  const [newArea,    setNewArea]    = useState(initialArea());
-  const [useCalc,    setUseCalc]    = useState(false);
-  const [calcRows,   setCalcRows]   = useState([{id:1, l:"", w:""}]);
-  const [editingId,  setEditingId]  = useState(null); // id of line item being edited
-  const [editArea,   setEditArea]   = useState(null); // copy of area being edited
-
-  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
-
-  const isOther = (svcType) => svcType === "other";
-
-  // Calc helpers
-  const calcAreas   = calcRows.map(r => ({...r, area: Number(r.l||0) * Number(r.w||0)}));
-  const calcTotal   = calcAreas.reduce((sum, r) => sum + r.area, 0);
-  const addCalcRow  = () => setCalcRows(r => [...r, {id:Date.now(), l:"", w:""}]);
-  const removeCalcRow = (id) => setCalcRows(r => r.filter(x => x.id !== id));
-  const updateCalcRow = (id, field, val) => setCalcRows(r => r.map(x => x.id===id ? {...x,[field]:val} : x));
-  const applyCalc   = () => {
-    if (calcTotal > 0) {
-      setNewArea(p => ({...p, measurement:String(Math.round(calcTotal))}));
-      setUseCalc(false);
-      setCalcRows([{id:1, l:"", w:""}]);
-    }
-  };
-
-  const addArea = () => {
-    if (!newArea.name || !newArea.measurement) { alert("Name and measurement are required."); return; }
-    updateJob(j => ({...j, areas:[...j.areas, {...newArea, id:Date.now()}]}));
-    setNewArea(initialArea());
-    setCalcRows([{id:1, l:"", w:""}]);
-    setUseCalc(false);
-  };
-
-  const removeArea = (id) => updateJob(j => ({...j, areas:j.areas.filter(a => a.id!==id)}));
-
-  const startEdit = (a) => { setEditingId(a.id); setEditArea({...a}); };
-  const cancelEdit = () => { setEditingId(null); setEditArea(null); };
-  const saveEdit = () => {
-    if (!editArea.name || !editArea.measurement) { alert("Name and amount are required."); return; }
-    updateJob(j => ({...j, areas: j.areas.map(a => a.id===editingId ? {...editArea} : a)}));
-    setEditingId(null); setEditArea(null);
-  };
-
-  const totalBySvc = currentJob.areas.reduce((acc, a) => {
-    if (a.serviceType === "other") {
-      acc["other"] = (acc["other"]||0) + Number(a.measurement||0);
-    } else {
-      acc[a.serviceType] = (acc[a.serviceType]||0) + Number(a.measurement||0);
-    }
-    return acc;
-  }, {});
-
-  // Measurement field label
-  const measureLabel = (svcType) => {
-    if (svcType === "other")   return "Amount ($) *";
-    if (svcType === "patch")   return "Sq Ft * (tons auto-calc)";
-    if (rates[svcType]?.unit === "sqft")  return "Square Feet *";
-    return "Linear Feet *";
-  };
-
-  return (
-    <div style={S.page}>
-      <h1 style={S.h1}>Measurements</h1>
-      <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
-
-      <section style={S.section}>
-        <h2 style={S.h2}>Add Area / Line Item</h2>
-        <div style={S.formGrid}>
-          <label style={S.formLabel}>Area / Zone Name *
-            <input value={newArea.name} onChange={e => setNewArea(p => ({...p, name:e.target.value}))}
-              style={S.input} placeholder="e.g. Main lot, Driveway, Row 3"/>
-          </label>
-          <label style={S.formLabel}>Service Type *
-            <select value={newArea.serviceType} onChange={e => setNewArea(p => ({...p, serviceType:e.target.value, measurement:""}))} style={S.input}>
-              {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
-          </label>
-          {!isOther(newArea.serviceType) && (
-            <label style={S.formLabel}>Condition
-              <select value={newArea.condition} onChange={e => setNewArea(p => ({...p, condition:e.target.value}))} style={S.input}>
-                {["good","fair","poor","failed"].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
-              </select>
-            </label>
-          )}
-          <label style={S.formLabel}>
-            {measureLabel(newArea.serviceType)}
-            <div style={{display:"flex", gap:8, alignItems:"center"}}>
-              {isOther(newArea.serviceType) && <span style={{color:C.textMuted, fontSize:14, lineHeight:"36px"}}>$</span>}
-              <input type="number" value={newArea.measurement} min="0"
-                onChange={e => setNewArea(p => ({...p, measurement:e.target.value}))}
-                style={{...S.input, flex:1}} placeholder="0"/>
-              {!isOther(newArea.serviceType) && rates[newArea.serviceType]?.unit !== "linft" && (
-                <button style={{...S.btnSecondary, fontSize:11, padding:"6px 10px", whiteSpace:"nowrap"}}
-                  onClick={() => setUseCalc(v => !v)}>
-                  {useCalc ? "▲ Hide Calc" : "📐 L×W"}
-                </button>
-              )}
-            </div>
-          </label>
-        </div>
-
-        {/* Inline L×W Calculator */}
-        {useCalc && !isOther(newArea.serviceType) && (
-          <div style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", marginTop:10}}>
-            <div style={S.calcHeader}>
-              <span style={S.calcHeaderLabel}>#</span>
-              <span style={{...S.calcHeaderLabel, flex:2}}>Length (ft)</span>
-              <span style={S.calcHeaderX}>×</span>
-              <span style={{...S.calcHeaderLabel, flex:2}}>Width (ft)</span>
-              <span style={{...S.calcHeaderLabel, flex:2, textAlign:"right"}}>Sq Ft</span>
-              <span style={{width:28}}/>
-            </div>
-            {calcAreas.map((r, i) => (
-              <div key={r.id} style={S.calcRow}>
-                <span style={S.calcRowNum}>{i+1}</span>
-                <input type="number" min="0" placeholder="0" value={r.l}
-                  onChange={e => updateCalcRow(r.id,"l",e.target.value)}
-                  style={{...S.input, ...S.calcInput}}/>
-                <span style={S.calcX}>×</span>
-                <input type="number" min="0" placeholder="0" value={r.w}
-                  onChange={e => updateCalcRow(r.id,"w",e.target.value)}
-                  style={{...S.input, ...S.calcInput}}/>
-                <div style={S.calcResult}>
-                  {r.area > 0 ? r.area.toLocaleString() : "—"}
-                  <span style={S.calcResultUnit}> sf</span>
-                </div>
-                {calcRows.length > 1
-                  ? <button style={S.calcDeleteBtn} onClick={() => removeCalcRow(r.id)}>✕</button>
-                  : <span style={{width:28}}/>}
-              </div>
-            ))}
-            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:10}}>
-              <button style={{...S.btnSecondary, fontSize:12}} onClick={addCalcRow}>+ Add to Total</button>
-              <div style={{display:"flex", alignItems:"center", gap:12}}>
-                <span style={{fontWeight:800, fontSize:16, color:C.accent}}>{calcTotal.toLocaleString()} sq ft</span>
-                <button style={{...S.btnPrimary, fontSize:12, padding:"6px 14px"}}
-                  onClick={applyCalc} disabled={calcTotal===0}>Use This →</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {newArea.serviceType==="patch" && Number(newArea.measurement)>0 && (
-          <div style={S.patchPreview}>
-            {Number(newArea.measurement).toLocaleString()} sq ft →{" "}
-            <strong>{calcPatchTons(newArea.measurement).toFixed(2)} tons</strong> →{" "}
-            <strong style={{color:C.accent}}>{formatCurrency(calcPatchTons(newArea.measurement)*(rates.patch?.rate||650))}</strong>
-          </div>
-        )}
-        <label style={{...S.formLabel, marginTop:10}}>Notes
-          <input value={newArea.notes} onChange={e => setNewArea(p => ({...p, notes:e.target.value}))}
-            style={S.input} placeholder="Additional notes..."/>
-        </label>
-        <label style={{...S.formLabel, marginTop:10}}>
-          Price Override <span style={{color:C.textMuted, fontWeight:400}}>(optional — overrides calculated price)</span>
-          <div style={{display:"flex", gap:6, alignItems:"center"}}>
-            <span style={{color:C.textMuted, fontSize:14}}>$</span>
-            <input type="number" min="0" step="0.01"
-              value={newArea.priceOverride||""}
-              onChange={e => setNewArea(p => ({...p, priceOverride: e.target.value}))}
-              style={{...S.input, flex:1}} placeholder="Leave blank to use calculated price"/>
-          </div>
-        </label>
-        <button style={{...S.btnPrimary, marginTop:12}} onClick={addArea}>+ Add to Job</button>
-      </section>
-
-      {Object.keys(totalBySvc).length > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Running Totals</h2>
-          <div style={S.totalsGrid}>
-            {Object.entries(totalBySvc).map(([svc,qty]) => {
-              const amt = svc==="other" ? qty : svc==="patch" ? calcPatchTons(qty)*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
-              return (
-                <div key={svc} style={S.totalCard}>
-                  <div style={S.totalSvc}>{rates[svc]?.label||svc}</div>
-                  <div style={S.totalQty}>
-                    {svc==="other" ? formatCurrency(qty) : qty.toLocaleString() + " " + (svc==="patch"?"sq ft":rates[svc]?.unit||"")}
-                    {svc==="patch" && <span style={S.totalTons}> = {calcPatchTons(qty).toFixed(2)} tons</span>}
-                  </div>
-                  <div style={S.totalAmt}>{svc==="other" ? "" : formatCurrency(amt)}</div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {currentJob.areas.length > 0 ? (
-        <section style={S.section}>
-          <h2 style={S.h2}>Line Items ({currentJob.areas.length})</h2>
-          <div style={S.areaList}>
-            {currentJob.areas.map(a => {
-              const amt = calcLineAmt(a, rates);
-              const svc = rates[a.serviceType];
-              const isEdit = editingId === a.id;
-
-              if (isEdit && editArea) {
-                // ── Inline edit form ──
-                return (
-                  <div key={a.id} style={{...S.areaRow, flexDirection:"column", gap:10, padding:"12px 14px", border:`1px solid ${C.accent}`}}>
-                    <div style={{fontWeight:700, fontSize:12, color:C.accent, marginBottom:2}}>Editing Line Item</div>
-                    <div style={S.formGrid}>
-                      <label style={S.formLabel}>Name
-                        <input value={editArea.name} onChange={e => setEditArea(p => ({...p, name:e.target.value}))} style={S.input}/>
-                      </label>
-                      <label style={S.formLabel}>Service Type
-                        <select value={editArea.serviceType} onChange={e => setEditArea(p => ({...p, serviceType:e.target.value}))} style={S.input}>
-                          {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-                        </select>
-                      </label>
-                      <label style={S.formLabel}>
-                        {measureLabel(editArea.serviceType)}
-                        <input type="number" value={editArea.measurement} min="0"
-                          onChange={e => setEditArea(p => ({...p, measurement:e.target.value}))} style={S.input}/>
-                      </label>
-                      {!isOther(editArea.serviceType) && (
-                        <label style={S.formLabel}>Condition
-                          <select value={editArea.condition} onChange={e => setEditArea(p => ({...p, condition:e.target.value}))} style={S.input}>
-                            {["good","fair","poor","failed"].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
-                          </select>
-                        </label>
-                      )}
-                      <label style={{...S.formLabel, gridColumn:"1 / -1"}}>Notes
-                        <input value={editArea.notes||""} onChange={e => setEditArea(p => ({...p, notes:e.target.value}))} style={S.input}/>
-                      </label>
-                      <label style={{...S.formLabel, gridColumn:"1 / -1"}}>
-                        Price Override <span style={{color:C.textMuted, fontWeight:400}}>(leave blank to use calculated)</span>
-                        <div style={{display:"flex", gap:6, alignItems:"center"}}>
-                          <span style={{color:C.textMuted, fontSize:14}}>$</span>
-                          <input type="number" min="0" step="0.01"
-                            value={editArea.priceOverride||""}
-                            onChange={e => setEditArea(p => ({...p, priceOverride: e.target.value}))}
-                            style={{...S.input, flex:1}} placeholder="Leave blank to use calculated"/>
-                        </div>
-                      </label>
-                    </div>
-                    <div style={{display:"flex", gap:8}}>
-                      <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}>💾 Save</button>
-                      <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
-                    </div>
-                  </div>
-                );
-              }
-
-              // ── Normal display row ──
-              const hasLineOverride = a.priceOverride !== undefined && a.priceOverride !== null && a.priceOverride !== "";
-              return (
-                <div key={a.id} style={S.areaRow}>
-                  <div style={S.areaRowMain}>
-                    <div style={S.areaName}>{a.name}</div>
-                    <div style={S.areaMeta}>
-                      {svc?.label}
-                      {a.serviceType==="other"
-                        ? " · " + formatCurrency(Number(a.measurement||0))
-                        : " · " + Number(a.measurement).toLocaleString() + " " + (svc?.unit==="linft"?"lin ft":"sq ft")}
-                      {a.serviceType==="patch" && ` → ${calcPatchTons(a.measurement).toFixed(2)} tons`}
-                    </div>
-                    {a.notes && <div style={S.areaNotes}>{a.notes}</div>}
-                    {hasLineOverride && <div style={{fontSize:11, color:C.accent, marginTop:2}}>✎ Price overridden</div>}
-                  </div>
-                  <div style={S.areaRowRight}>
-                    {!isOther(a.serviceType) && <span style={{...S.condBadge,...S[`cond_${a.condition}`]}}>{a.condition}</span>}
-                    <div style={{...S.areaAmt, ...(hasLineOverride ? {color:C.accent} : {})}}>{formatCurrency(amt)}</div>
-                    <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(a)}>✎</button>
-                    <button style={S.btnSmallDanger} onClick={() => removeArea(a.id)}>✕</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : (
-        <div style={S.empty}><div style={S.emptyIcon}>📐</div><p style={S.emptyText}>No measurements yet.</p></div>
       )}
     </div>
   );
@@ -3782,9 +3733,7 @@ export default function App() {
       <div style={S.content}>
         {view==="jobs"     && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById}/>}
         {view==="schedule" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="inspect"  && <InspectView currentJob={currentJob} updateJob={updateJob}/>}
-        {view==="measure"  && <MeasureView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
-        {view==="media"    && <MediaView   currentJob={currentJob} updateJob={updateJob}/>}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView}/>}
         {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}/>}
         {view==="costs"    && (userRole==="admin"||userRole==="manager") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && (userRole==="admin"||userRole==="manager") && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
