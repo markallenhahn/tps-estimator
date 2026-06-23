@@ -62,6 +62,7 @@ const S = {
   navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0, cursor:"pointer", userSelect:"none" },
   navTitle:{ fontWeight:800, fontSize:14, color:C.accent, letterSpacing:"0.06em" },
   navTabs:{ display:"flex", overflowX:"auto", flex:1, scrollbarWidth:"none", msOverflowStyle:"none" },
+  navDivider:{ width:1, alignSelf:"stretch", margin:"8px 4px", background:C.border, flexShrink:0 },
   navTab:{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1, padding:"6px 10px", background:"none", border:"none", color:C.textMuted, cursor:"pointer", fontSize:10, borderBottom:"2px solid transparent", transition:"all .15s", flexShrink:0, minWidth:52 },
   navTabActive:{ color:C.accent, borderBottomColor:C.accent },
   navTabIcon:{ fontSize:15 }, navTabLabel:{whiteSpace:"nowrap"},
@@ -322,17 +323,14 @@ function TopNav({ view, setView, userRole, onLogout }) {
             <span style={S.navTabLabel}>{t.label}</span>
           </button>
         ))}
+        <div style={S.navDivider}/>
+        <button onClick={() => setView("account")}
+          data-active={view==="account"?"true":"false"}
+          style={{...S.navTab,...(view==="account"?S.navTabActive:{})}}>
+          <span style={S.navTabIcon}>👤</span>
+          <span style={S.navTabLabel}>Account</span>
+        </button>
       </div>
-      <button onClick={() => setView("settings")}
-        style={{background:"none", border:"none", color:C.textMuted, fontSize:16, padding:"0 8px", cursor:"pointer", flexShrink:0}}
-        title="User settings">
-        👤
-      </button>
-      <button onClick={() => { if(confirm("Sign out?")) onLogout(); }}
-        style={{background:"none", border:"none", color:C.textMuted, fontSize:18, padding:"0 12px", cursor:"pointer", flexShrink:0}}
-        title="Sign out">
-        ⏻
-      </button>
     </nav>
   );
 }
@@ -1809,7 +1807,7 @@ function CostsView({ currentJob, updateJob, rates }) {
 }
 
 // ─── User Settings View (any logged-in user) ───────────────────────────────────
-function UserSettingsView({ accessToken, userId, setView }) {
+function UserSettingsView({ accessToken, userId, setView, onLogout }) {
   const [firstName, setFirstName] = useState("");
   const [lastName,  setLastName]  = useState("");
   const [phone,     setPhone]     = useState("");
@@ -1942,6 +1940,15 @@ function UserSettingsView({ accessToken, userId, setView }) {
         {passwordMsg && <div style={{color:C.green, fontSize:13, marginTop:10}}>{passwordMsg}</div>}
         <button style={{...S.btnPrimary, marginTop:14, opacity:savingPassword?0.6:1}} onClick={savePassword} disabled={savingPassword}>
           {savingPassword ? "Saving..." : "🔑 Update Password"}
+        </button>
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Session</h2>
+        <button
+          style={{...S.btnSmall,...S.btnDanger, width:"100%", padding:"10px 0", fontSize:14}}
+          onClick={() => { if(confirm("Sign out?")) onLogout(); }}>
+          ⏻ Sign Out
         </button>
       </section>
     </div>
@@ -3785,7 +3792,7 @@ export default function App() {
         {view==="reports"  && (userRole==="admin"||userRole==="manager") && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && (userRole==="admin"||userRole==="manager") && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
         {view==="team"     && userRole==="admin" && <TeamView accessToken={session?.access_token}/>}
-        {view==="settings" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView}/>}
+        {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView} onLogout={handleLogout}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
       </div>
     </div>
