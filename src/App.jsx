@@ -74,7 +74,7 @@ const S = {
   subhead:{ margin:"0 0 20px", color:C.textMuted, fontSize:13, lineHeight:1.4 },
   section:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:16 },
   formGrid:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:8 },
-  formLabel:{ display:"flex", flexDirection:"column", gap:4, fontSize:13, color:C.textMuted, minWidth:0, overflow:"hidden" },
+  formLabel:{ display:"flex", flexDirection:"column", gap:4, fontSize:13, color:C.textMuted, minWidth:0 },
   input:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, padding:"8px 10px", color:C.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box" },
   btnPrimary:{ background:C.accent, color:"#000", border:"none", borderRadius:8, padding:"10px 20px", fontWeight:700, fontSize:14, cursor:"pointer" },
   btnSecondary:{ background:C.surface2, color:C.text, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 20px", fontWeight:600, fontSize:14, cursor:"pointer" },
@@ -271,22 +271,47 @@ if (typeof document !== "undefined" && !document.getElementById("tps-font-link")
   document.head.appendChild(link);
 }
 
-function TopNav({ view, setView, userRole, onLogout }) {
+// ─── Default permissions matrix ────────────────────────────────────────────────
+// Each tab maps to an access level per role: "hidden" | "view" | "edit"
+// Stored in Supabase (table: permissions) so admins can change it live.
+const ALL_ROLES = ["estimator","crew","crewlead","manager","admin"];
+const ALL_TABS  = [
+  {key:"jobs",     label:"Jobs",     icon:"📋"},
+  {key:"schedule", label:"Schedule", icon:"📅"},
+  {key:"zones",    label:"Zones",    icon:"🗺"},
+  {key:"estimate", label:"Estimate", icon:"💰"},
+  {key:"costs",    label:"Costs",    icon:"🧮"},
+  {key:"invoice",  label:"Invoice",  icon:"🧾"},
+  {key:"labor",    label:"Labor",    icon:"👷"},
+  {key:"reports",  label:"Reports",  icon:"📊"},
+  {key:"rates",    label:"Rates",    icon:"⚙️"},
+  {key:"team",     label:"Team",     icon:"👥"},
+];
+const ROLE_LABELS = { estimator:"Estimator", crew:"Crew", crewlead:"Crew Lead", manager:"Manager", admin:"Admin" };
+
+const DEFAULT_PERMISSIONS = {
+  jobs:     { estimator:"edit", crew:"edit",   crewlead:"edit", manager:"edit", admin:"edit" },
+  schedule: { estimator:"view", crew:"view",   crewlead:"edit", manager:"edit", admin:"edit" },
+  zones:    { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
+  estimate: { estimator:"edit", crew:"view",   crewlead:"edit", manager:"edit", admin:"edit" },
+  costs:    { estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", admin:"edit" },
+  invoice:  { estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", admin:"edit" },
+  labor:    { estimator:"hidden", crew:"edit",   crewlead:"edit", manager:"edit", admin:"edit" },
+  reports:  { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
+  rates:    { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
+  team:     { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
+};
+
+function getAccessLevel(permissions, tabKey, role) {
+  const perms = permissions || DEFAULT_PERMISSIONS;
+  return perms?.[tabKey]?.[role] || "hidden";
+}
+
+function TopNav({ view, setView, userRole, permissions, onLogout }) {
   const tabsRef = useRef(null);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef(null);
-  const allTabs = [
-    {key:"jobs",     label:"Jobs",     icon:"📋", roles:["admin","manager","crew"]},
-    {key:"schedule", label:"Schedule", icon:"📅", roles:["admin","manager","crew"]},
-    {key:"estimate", label:"Estimate", icon:"💰", roles:["admin","manager","crew"]},
-    {key:"costs",    label:"Costs",    icon:"🧮", roles:["admin","manager"]},
-    {key:"invoice",  label:"Invoice",  icon:"🧾", roles:["admin","manager"]},
-    {key:"labor",    label:"Labor",    icon:"👷", roles:["admin","manager","crew"]},
-    {key:"reports",  label:"Reports",  icon:"📊", roles:["admin","manager"]},
-    {key:"rates",    label:"Rates",    icon:"⚙️", roles:["admin","manager"]},
-    {key:"team",     label:"Team",     icon:"👥", roles:["admin","manager"]},
-  ];
-  const tabs = allTabs.filter(t => t.roles.includes(userRole));
+  const tabs = ALL_TABS.filter(t => getAccessLevel(permissions, t.key, userRole) !== "hidden");
 
   useEffect(() => {
     if (!tabsRef.current) return;
@@ -320,6 +345,17 @@ function TopNav({ view, setView, userRole, onLogout }) {
             <span style={S.navTabLabel}>{t.label}</span>
           </button>
         ))}
+        {userRole === "admin" && (
+          <>
+            <div style={S.navDivider}/>
+            <button onClick={() => setView("permissions")}
+              data-active={view==="permissions"?"true":"false"}
+              style={{...S.navTab,...(view==="permissions"?S.navTabActive:{})}}>
+              <span style={S.navTabIcon}>🔐</span>
+              <span style={S.navTabLabel}>Permissions</span>
+            </button>
+          </>
+        )}
         <div style={S.navDivider}/>
         <button onClick={() => setView("account")}
           data-active={view==="account"?"true":"false"}
@@ -430,7 +466,7 @@ function RatesView({ rates, setRates, currentJob, updateJob }) {
 }
 
 // ─── Media View ───────────────────────────────────────────────────────────────
-function JobDetailView({ currentJob, updateJob, rates, setView }) {
+function JobDetailView({ currentJob, updateJob, rates, setView, teamUsers, crews }) {
   // ── Photo capture ──
   const [capturing, setCapturing] = useState(null);
   const [stream,    setStream]    = useState(null);
@@ -580,6 +616,31 @@ function JobDetailView({ currentJob, updateJob, rates, setView }) {
         <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Jobs</button>
       </div>
       <p style={S.subhead}>{currentJob.address||"No address"}</p>
+
+      {/* ── ASSIGNMENT ── */}
+      {teamUsers && teamUsers.length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Assigned To</h2>
+          <select
+            value={currentJob.assignedTo || ""}
+            onChange={e => updateJob(j => ({...j, assignedTo: e.target.value || null}))}
+            style={S.input}>
+            <option value="">— Unassigned —</option>
+            {teamUsers.map(u => {
+              const name = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+              return <option key={u.id} value={u.id}>{name} ({ROLE_LABELS[u.role]||u.role})</option>;
+            })}
+          </select>
+          {(crews||[]).length > 0 && (
+            <div style={{fontSize:11, color:C.textMuted, marginTop:6}}>
+              {(() => {
+                const crew = (crews||[]).find(c => c.memberIds?.includes(currentJob.assignedTo) || c.leadId === currentJob.assignedTo);
+                return crew ? `Crew: ${crew.name}` : null;
+              })()}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── CLIENT INFO ── */}
       <section style={S.section}>
@@ -1354,6 +1415,117 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
   const [editName,     setEditName]     = useState("");
   const [editHours,    setEditHours]    = useState("");
 
+  // ── Clock in/out state (per-device, stored locally) ──
+  const CLOCK_KEY = "tps_active_clock";
+  const [clockName, setClockName] = useState("");
+  const [activeClock, setActiveClock] = useState(() => {
+    try { const s = localStorage.getItem(CLOCK_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+  });
+  const [clockBusy, setClockBusy] = useState(false);
+  const [clockErr,  setClockErr]  = useState("");
+  const [permDenied, setPermDenied] = useState(false); // shows in-app fix modal
+  const [pendingAction, setPendingAction] = useState(null); // "in" | "out" — what to retry
+
+  const detectPlatform = () => {
+    const ua = navigator.userAgent || "";
+    const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    const isAndroid = /Android/.test(ua);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+    const isChrome = /chrome/i.test(ua) && !/edg/i.test(ua);
+    if (isIOS && isSafari) return "ios-safari";
+    if (isIOS) return "ios-other";
+    if (isAndroid && isChrome) return "android-chrome";
+    if (isAndroid) return "android-other";
+    return "desktop";
+  };
+
+  const getLocation = () => new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject({ type:"unsupported", message:"This device doesn't support location services. Clock in/out requires location access." }); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      err => {
+        if (err.code === err.PERMISSION_DENIED) {
+          reject({ type:"denied", message:"Location access is blocked for this site." });
+        } else if (err.code === err.TIMEOUT) {
+          reject({ type:"timeout", message:"Location request timed out. Check your GPS signal and try again." });
+        } else {
+          reject({ type:"other", message:"Could not get your location. " + err.message });
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+
+  const reverseGeocode = async (lat, lng) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+      const data = await res.json();
+      return data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    } catch(e) {
+      return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    }
+  };
+
+  const clockIn = async () => {
+    if (!clockName.trim()) { setClockErr("Enter your name first."); return; }
+    setClockErr(""); setPermDenied(false); setClockBusy(true);
+    try {
+      const { lat, lng } = await getLocation();
+      const address = await reverseGeocode(lat, lng);
+      const session = {
+        name: clockName.trim(),
+        date: new Date().toISOString().slice(0,10),
+        clockInTime: new Date().toISOString(),
+        clockInLat: lat, clockInLng: lng, clockInAddress: address,
+      };
+      localStorage.setItem(CLOCK_KEY, JSON.stringify(session));
+      setActiveClock(session);
+    } catch(e) {
+      if (e.type === "denied") { setPermDenied(true); setPendingAction("in"); }
+      else { setClockErr(e.message); }
+    }
+    setClockBusy(false);
+  };
+
+  const clockOut = async () => {
+    if (!activeClock) return;
+    setClockErr(""); setPermDenied(false); setClockBusy(true);
+    try {
+      const { lat, lng } = await getLocation();
+      const address = await reverseGeocode(lat, lng);
+      const clockOutTime = new Date().toISOString();
+      const hoursWorked = (new Date(clockOutTime) - new Date(activeClock.clockInTime)) / (1000*60*60);
+      addLaborEntry({
+        id: Date.now(),
+        date: activeClock.date,
+        name: activeClock.name,
+        hours: Math.round(hoursWorked * 4) / 4, // round to nearest 15 min
+        clockInTime: activeClock.clockInTime,
+        clockInLat: activeClock.clockInLat, clockInLng: activeClock.clockInLng, clockInAddress: activeClock.clockInAddress,
+        clockOutTime, clockOutLat: lat, clockOutLng: lng, clockOutAddress: address,
+      });
+      localStorage.removeItem(CLOCK_KEY);
+      setActiveClock(null);
+      setClockName("");
+    } catch(e) {
+      if (e.type === "denied") { setPermDenied(true); setPendingAction("out"); }
+      else { setClockErr(e.message); }
+    }
+    setClockBusy(false);
+  };
+
+  const retryAfterPermissionFix = () => {
+    setPermDenied(false);
+    if (pendingAction === "in") clockIn();
+    else if (pendingAction === "out") clockOut();
+  };
+
+  const cancelClockIn = () => {
+    if (!confirm("Cancel this clock-in without logging hours?")) return;
+    localStorage.removeItem(CLOCK_KEY);
+    setActiveClock(null);
+  };
+
   // Get Sunday-Saturday week containing selectedDate
   const getWeekRange = (dateStr) => {
     const d = new Date(dateStr+"T12:00:00");
@@ -1409,6 +1581,89 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
     <div style={S.page}>
       <h1 style={S.h1}>Labor Log</h1>
       <p style={S.subhead}>Track contractor hours by day</p>
+
+      {/* Clock In / Out with GPS */}
+      <section style={{...S.section, border:`2px solid ${activeClock ? C.green : C.border}`}}>
+        <h2 style={S.h2}>📍 Clock {activeClock ? "Out" : "In"}</h2>
+        {!activeClock ? (
+          <>
+            <input type="text" value={clockName} onChange={e => setClockName(e.target.value)}
+              style={{...S.input, marginBottom:10}} placeholder="Your name"/>
+            {clockErr && (
+              <div style={{background:"#2a1010", border:`1px solid ${C.danger}`, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
+                <div style={{color:C.danger, fontSize:12, fontWeight:600}}>⚠️ {clockErr}</div>
+              </div>
+            )}
+            <button style={{...S.btnPrimary, width:"100%", opacity:clockBusy?0.6:1}} onClick={clockIn} disabled={clockBusy}>
+              {clockBusy ? "Getting location..." : "🟢 Clock In"}
+            </button>
+            <p style={{fontSize:11, color:C.textDim, marginTop:8, marginBottom:0}}>
+              Captures your location at clock-in and clock-out as a record of where you started and finished work.
+            </p>
+          </>
+        ) : (
+          <>
+            <div style={{background:C.surface2, borderRadius:8, padding:"10px 12px", marginBottom:12}}>
+              <div style={{fontWeight:700, fontSize:15}}>{activeClock.name}</div>
+              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
+                Clocked in {new Date(activeClock.clockInTime).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}
+              </div>
+              <div style={{fontSize:11, color:C.textDim, marginTop:4}}>📍 {activeClock.clockInAddress}</div>
+            </div>
+            {clockErr && (
+              <div style={{background:"#2a1010", border:`1px solid ${C.danger}`, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
+                <div style={{color:C.danger, fontSize:12, fontWeight:600}}>⚠️ {clockErr}</div>
+              </div>
+            )}
+            <div style={{display:"flex", gap:8}}>
+              <button style={{...S.btnPrimary, flex:1, background:"#16a34a", opacity:clockBusy?0.6:1}} onClick={clockOut} disabled={clockBusy}>
+                {clockBusy ? "Getting location..." : "🔴 Clock Out"}
+              </button>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={cancelClockIn} disabled={clockBusy}>Cancel</button>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* In-app permission fix modal — no leaving the app required */}
+      {permDenied && (() => {
+        const platform = detectPlatform();
+        const steps = {
+          "ios-safari": ["Open the Settings app", "Tap Safari → Location", `Tap "Ask" or "Allow"`, "Come back here and tap Try Again"],
+          "ios-other":  ["Open the Settings app on your phone", "Find this browser app in the list", "Turn on Location access", "Come back here and tap Try Again"],
+          "android-chrome": [`Tap the 🔒 lock icon in the address bar`, "Tap Permissions → Location", `Switch it to "Allow"`, "Come back here and tap Try Again"],
+          "android-other":  ["Open your phone's Settings", "Find this browser app under Apps → Permissions", "Turn on Location", "Come back here and tap Try Again"],
+          "desktop": [`Click the 🔒 lock icon in your address bar`, "Find Location in the site settings", `Switch it to "Allow"`, "Come back here and tap Try Again"],
+        }[platform];
+        return (
+          <div style={S.lightboxOverlay} onClick={() => setPermDenied(false)}>
+            <div style={{...S.lightboxInner, background:C.surface, borderRadius:14, padding:20, maxWidth:340}} onClick={e => e.stopPropagation()}>
+              <div style={{fontSize:32, textAlign:"center", marginBottom:8}}>📍🚫</div>
+              <div style={{fontWeight:800, fontSize:16, textAlign:"center", marginBottom:6}}>Location Access Needed</div>
+              <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:16}}>
+                You'll need to turn on location for this site. It only takes a few seconds — here's how:
+              </p>
+              <div style={{background:C.surface2, borderRadius:10, padding:"12px 14px", marginBottom:16}}>
+                {steps.map((step, i) => (
+                  <div key={i} style={{display:"flex", gap:10, marginBottom: i<steps.length-1 ? 10 : 0}}>
+                    <div style={{width:22, height:22, borderRadius:"50%", background:C.accent, color:"#000",
+                      fontSize:12, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
+                      {i+1}
+                    </div>
+                    <div style={{fontSize:13, color:C.text, paddingTop:1}}>{step}</div>
+                  </div>
+                ))}
+              </div>
+              <button style={{...S.btnPrimary, width:"100%"}} onClick={retryAfterPermissionFix}>
+                🔄 Try Again
+              </button>
+              <button style={{...S.btnSecondary, width:"100%", marginTop:8}} onClick={() => setPermDenied(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Week summary */}
       {Object.keys(weekByName).length > 0 && (
@@ -1470,13 +1725,20 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
                     </div>
                   </div>
                 ) : (
-                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-                    <span style={{fontWeight:600, fontSize:14}}>{e.name}</span>
-                    <div style={{display:"flex", alignItems:"center", gap:8}}>
-                      <span style={{fontSize:14, fontWeight:700, color:C.accent}}>{e.hours} hr{e.hours!==1?"s":""}</span>
-                      <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(e)}>✎</button>
-                      <button style={S.btnSmallDanger} onClick={() => deleteLaborEntry(e.id)}>✕</button>
+                  <div>
+                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+                      <span style={{fontWeight:600, fontSize:14}}>{e.name}</span>
+                      <div style={{display:"flex", alignItems:"center", gap:8}}>
+                        <span style={{fontSize:14, fontWeight:700, color:C.accent}}>{e.hours} hr{e.hours!==1?"s":""}</span>
+                        <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(e)}>✎</button>
+                        <button style={S.btnSmallDanger} onClick={() => deleteLaborEntry(e.id)}>✕</button>
+                      </div>
                     </div>
+                    {e.clockInTime && (
+                      <div style={{fontSize:11, color:C.textDim, marginTop:4}}>
+                        📍 {new Date(e.clockInTime).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})} – {new Date(e.clockOutTime).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})} · GPS verified
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1519,7 +1781,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
               {entries.map(e => (
                 <div key={e.id} style={{display:"flex", justifyContent:"space-between",
                   padding:"5px 16px", fontSize:13}}>
-                  <span style={{color:C.textMuted}}>{e.name}</span>
+                  <span style={{color:C.textMuted}}>{e.name}{e.clockInTime ? " 📍" : ""}</span>
                   <span style={{color:C.accent, fontWeight:600}}>{e.hours} hr{e.hours!==1?"s":""}</span>
                 </div>
               ))}
@@ -1528,6 +1790,505 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
         })}
       </section>
     </div>
+  );
+}
+
+// ─── Schedule View ────────────────────────────────────────────────────────────
+// ─── Zones View (route optimization) ───────────────────────────────────────────
+function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView }) {
+  const [tab,           setTab]           = useState("list"); // "list" | "map" | "import"
+  const [calculating,   setCalculating]   = useState(false);
+  const [calcProgress,  setCalcProgress]  = useState("");
+  const [csvFile,       setCsvFile]       = useState(null);
+  const [csvRows,       setCsvRows]       = useState([]);
+  const [importing,     setImporting]     = useState(false);
+  const [historicalJobs, setHistoricalJobs] = useState([]);
+  const [editingNames,  setEditingNames]  = useState(false);
+  const [zoneNameDrafts, setZoneNameDrafts] = useState({});
+  const [selectedZoneId, setSelectedZoneId] = useState(null);
+  const [routeDate,      setRouteDate]      = useState(new Date().toISOString().slice(0,10));
+  const [optimizedRoute, setOptimizedRoute] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // ── Load historical jobs (CSV-imported, separate from live jobs) on mount ──
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await sbFetch("historical_jobs?select=id,data&order=id.desc");
+        const data = await res.json();
+        if (Array.isArray(data)) setHistoricalJobs(data.map(row => ({...row.data, id: row.id})));
+      } catch(e) { console.error("load historical_jobs error:", e); }
+    };
+    load();
+  }, []);
+
+  // ── CSV parsing ──
+  const parseCSV = (text) => {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return [];
+    const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+    const addrIdx = headers.findIndex(h => h.includes("address"));
+    const cityIdx = headers.findIndex(h => h.includes("city"));
+    const stateIdx = headers.findIndex(h => h.includes("state"));
+    const zipIdx = headers.findIndex(h => h.includes("zip"));
+    return lines.slice(1).map(line => {
+      const cells = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+      return {
+        address: addrIdx>=0 ? cells[addrIdx] : "",
+        city:    cityIdx>=0 ? cells[cityIdx] : "",
+        state:   stateIdx>=0 ? cells[stateIdx] : "",
+        zip:     zipIdx>=0 ? cells[zipIdx] : "",
+      };
+    }).filter(r => r.address || r.city);
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCsvFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setCsvRows(parseCSV(ev.target.result));
+    reader.readAsText(file);
+  };
+
+  const importHistorical = async () => {
+    if (!csvRows.length) return;
+    setImporting(true);
+    const imported = [];
+    for (let i = 0; i < csvRows.length; i++) {
+      const row = csvRows[i];
+      const addrStr = [row.address, row.city, row.state, row.zip].filter(Boolean).join(", ");
+      setCalcProgress(`Geocoding ${i+1} of ${csvRows.length}...`);
+      const geo = await geocodeAddress(addrStr);
+      if (geo) {
+        const entry = { id: Date.now()+i, ...row, lat: geo.lat, lng: geo.lng };
+        imported.push(entry);
+        try {
+          await sbFetch("historical_jobs", {
+            method: "POST",
+            headers: { "Prefer": "resolution=merge-duplicates" },
+            body: JSON.stringify({ id: entry.id, data: entry }),
+          });
+        } catch(e) { console.error(e); }
+      }
+      await new Promise(r => setTimeout(r, 350)); // be polite to the geocoder
+    }
+    setHistoricalJobs(prev => [...imported, ...prev]);
+    setCsvRows([]); setCsvFile(null); setCalcProgress("");
+    setImporting(false);
+    alert(`Imported and geocoded ${imported.length} of ${csvRows.length} addresses.`);
+  };
+
+  // ── Zone calculation ──
+  const recalculateZones = async () => {
+    setCalculating(true);
+    setCalcProgress("Preparing addresses...");
+
+    // Gather all points: live jobs (geocode if missing) + historical jobs (already geocoded)
+    const livePoints = [];
+    for (let i = 0; i < jobs.length; i++) {
+      const j = jobs[i];
+      const addrStr = fullAddressOf(j);
+      if (!addrStr) continue;
+      if (j.geoLat && j.geoLng) {
+        livePoints.push({ lat: j.geoLat, lng: j.geoLng, jobId: j.id, source: "live" });
+      } else {
+        setCalcProgress(`Geocoding live job ${i+1} of ${jobs.length}...`);
+        const geo = await geocodeAddress(addrStr);
+        if (geo) {
+          livePoints.push({ lat: geo.lat, lng: geo.lng, jobId: j.id, source: "live" });
+          // Cache the geocode result on the job itself (best-effort, fire and forget)
+          try {
+            await sbFetch("jobs?id=eq."+j.id, {
+              method: "PATCH",
+              body: JSON.stringify({ data: {...j, geoLat: geo.lat, geoLng: geo.lng} }),
+            });
+          } catch(e) {}
+        }
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    const historicalPoints = historicalJobs
+      .filter(h => h.lat && h.lng)
+      .map(h => ({ lat: h.lat, lng: h.lng, source: "historical" }));
+
+    const allPoints = [...livePoints, ...historicalPoints];
+
+    if (allPoints.length < 4) {
+      alert("Need at least 4 geocoded addresses (live jobs + historical imports combined) to calculate 4 zones.");
+      setCalculating(false); setCalcProgress("");
+      return;
+    }
+
+    setCalcProgress("Calculating zones...");
+    const clusters = kMeansCluster(allPoints, 4);
+    const { overflow, kept } = findOverflowPoints(allPoints, clusters, 25);
+
+    // Re-cluster the kept points (overflow removed) for cleaner zone shapes
+    const finalClusters = kMeansCluster(kept.length >= 4 ? kept : allPoints, 4);
+
+    const newZones = finalClusters.map((cluster, i) => {
+      const existingName = zones?.list?.[i]?.name;
+      return {
+        id: i,
+        name: existingName || `Zone ${i+1}`,
+        centroid: cluster.centroid,
+        jobCount: cluster.members.filter(m => m.source==="live").length,
+        historicalCount: cluster.members.filter(m => m.source==="historical").length,
+        totalWeight: cluster.members.length,
+        jobIds: cluster.members.filter(m => m.jobId).map(m => m.jobId),
+      };
+    });
+
+    const zonesData = {
+      list: newZones,
+      overflow: {
+        jobIds: overflow.filter(o => o.jobId).map(o => o.jobId),
+        count: overflow.length,
+      },
+      lastCalculated: new Date().toISOString(),
+      totalPoints: allPoints.length,
+    };
+
+    setZones(zonesData);
+    await syncZones(zonesData);
+    setCalcProgress("");
+    setCalculating(false);
+  };
+
+  // ── Live re-assignment when a new job is added (nearest centroid, no full recalc) ──
+  // This is called externally via the zones object already containing centroids;
+  // see assignJobToNearestZone in the main App component.
+
+  const saveZoneNames = async () => {
+    const updated = {...zones, list: zones.list.map(z => ({...z, name: zoneNameDrafts[z.id] || z.name}))};
+    setZones(updated);
+    await syncZones(updated);
+    setEditingNames(false);
+  };
+
+  const startEditingNames = () => {
+    const drafts = {};
+    (zones?.list||[]).forEach(z => drafts[z.id] = z.name);
+    setZoneNameDrafts(drafts);
+    setEditingNames(true);
+  };
+
+  // ── Build route for a zone ──
+  const buildRoute = (zoneId) => {
+    const zone = zones.list.find(z => z.id === zoneId);
+    if (!zone) return;
+    const zoneJobs = jobs.filter(j => zone.jobIds.includes(j.id) && j.geoLat && j.geoLng);
+    if (zoneJobs.length === 0) { alert("No geocoded jobs in this zone yet."); return; }
+    const points = zoneJobs.map(j => ({ lat: j.geoLat, lng: j.geoLng, job: j }));
+    const ordered = optimizeRoute(points);
+    setOptimizedRoute(ordered.map(p => p.job));
+    setSelectedZoneId(zoneId);
+  };
+
+  const getDirectionsUrlMulti = (stops) => {
+    if (!stops.length) return "#";
+    const waypoints = stops.map(j => encodeURIComponent(fullAddressOf(j)));
+    const destination = waypoints[waypoints.length - 1];
+    const origin = waypoints[0];
+    const middle = waypoints.slice(1, -1).join("|");
+    let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+    if (middle) url += `&waypoints=${middle}`;
+    return url;
+  };
+
+  const zonesList = zones?.list || [];
+  const totalJobsInZones = zonesList.reduce((s,z)=>s+z.jobCount,0) + (zones?.overflow?.count||0);
+
+  const ZONE_COLORS = ["#f59e0b", "#60a5fa", "#4ade80", "#f87171", "#a78bfa"];
+
+  return (
+    <div style={S.page}>
+      <div style={S.pageHeader}>
+        <h1 style={S.h1}>Zones &amp; Routing</h1>
+      </div>
+      <p style={S.subhead}>4 zones calculated from job density, plus overflow</p>
+
+      {/* Tab switcher */}
+      <div style={{display:"flex", gap:8, marginBottom:16}}>
+        {["list","map","import"].map(t => (
+          <button key={t}
+            onClick={() => setTab(t)}
+            style={{
+              flex:1, padding:"8px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
+              background: tab===t ? C.accent : C.surface2,
+              color: tab===t ? "#000" : C.textMuted,
+              border: `1px solid ${tab===t ? C.accent : C.border}`,
+            }}>
+            {t==="list" ? "📋 List" : t==="map" ? "🗺 Map" : "📤 Import"}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Recalculate button + status, always visible ── */}
+      <section style={S.section}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+          <div>
+            <div style={{fontSize:13, fontWeight:600}}>
+              {zonesList.length>0 ? `${zonesList.length} zones · ${totalJobsInZones} jobs assigned` : "No zones calculated yet"}
+            </div>
+            {zones?.lastCalculated && (
+              <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>
+                Last calculated {new Date(zones.lastCalculated).toLocaleString()}
+              </div>
+            )}
+          </div>
+        </div>
+        {calculating && (
+          <div style={{fontSize:12, color:C.accent, marginBottom:8}}>⏳ {calcProgress}</div>
+        )}
+        <button style={{...S.btnPrimary, width:"100%", opacity:calculating?0.6:1}} onClick={recalculateZones} disabled={calculating}>
+          {calculating ? "Calculating..." : "🔄 Recalculate Zones"}
+        </button>
+        <p style={{fontSize:11, color:C.textDim, marginTop:8, marginBottom:0}}>
+          Uses all live job addresses + imported historical addresses. Outlier jobs more than 25 miles from any zone center go to Overflow.
+        </p>
+      </section>
+
+      {/* ── LIST TAB ── */}
+      {tab === "list" && (
+        <>
+          {zonesList.length === 0 ? (
+            <div style={S.empty}>
+              <div style={S.emptyIcon}>🗺</div>
+              <p style={S.emptyText}>No zones yet. Import historical addresses and tap Recalculate Zones.</p>
+            </div>
+          ) : (
+            <>
+              <section style={S.section}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+                  <h2 style={{...S.h2, margin:0}}>Zone Names</h2>
+                  {!editingNames ? (
+                    <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={startEditingNames}>✎ Rename</button>
+                  ) : (
+                    <button style={{...S.btnPrimary, fontSize:12, padding:"4px 10px"}} onClick={saveZoneNames}>💾 Save</button>
+                  )}
+                </div>
+                {zonesList.map((z, i) => (
+                  <div key={z.id} style={{display:"flex", alignItems:"center", gap:10, marginBottom:8}}>
+                    <div style={{width:14, height:14, borderRadius:"50%", background:ZONE_COLORS[i], flexShrink:0}}/>
+                    {editingNames ? (
+                      <input value={zoneNameDrafts[z.id]||""} onChange={e => setZoneNameDrafts(p=>({...p,[z.id]:e.target.value}))}
+                        style={{...S.input, flex:1}}/>
+                    ) : (
+                      <div style={{flex:1, fontSize:14, fontWeight:600}}>{z.name}</div>
+                    )}
+                    <div style={{fontSize:12, color:C.textMuted}}>{z.jobCount} jobs</div>
+                  </div>
+                ))}
+                <div style={{display:"flex", alignItems:"center", gap:10, marginTop:4}}>
+                  <div style={{width:14, height:14, borderRadius:"50%", background:"#666", flexShrink:0}}/>
+                  <div style={{flex:1, fontSize:14, fontWeight:600, color:C.textMuted}}>Overflow</div>
+                  <div style={{fontSize:12, color:C.textMuted}}>{zones?.overflow?.count||0} jobs</div>
+                </div>
+              </section>
+
+              {zonesList.map((z, i) => {
+                const zoneJobs = jobs.filter(j => z.jobIds.includes(j.id));
+                return (
+                  <section key={z.id} style={S.section}>
+                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+                      <div style={{display:"flex", alignItems:"center", gap:8}}>
+                        <div style={{width:12, height:12, borderRadius:"50%", background:ZONE_COLORS[i]}}/>
+                        <h2 style={{...S.h2, margin:0}}>{z.name} ({zoneJobs.length})</h2>
+                      </div>
+                      {zoneJobs.length > 0 && (
+                        <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => buildRoute(z.id)}>
+                          🧭 Build Route
+                        </button>
+                      )}
+                    </div>
+                    {zoneJobs.length === 0 ? (
+                      <p style={{fontSize:12, color:C.textMuted}}>No live jobs currently assigned here.</p>
+                    ) : zoneJobs.map(j => (
+                      <div key={j.id} style={{...S.schedJobCard, marginBottom:8, cursor:"pointer"}}
+                        onClick={() => { setCurrentJob(j); setView("jobdetail"); }}>
+                        <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                        <div style={S.schedJobAddr}>{fullAddressOf(j)}</div>
+                      </div>
+                    ))}
+
+                    {selectedZoneId === z.id && optimizedRoute && (
+                      <div style={{marginTop:12, paddingTop:12, borderTop:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:13, fontWeight:700, marginBottom:8}}>Optimized Route Order</div>
+                        {optimizedRoute.map((j, idx) => (
+                          <div key={j.id} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
+                            <div style={{width:22, height:22, borderRadius:"50%", background:ZONE_COLORS[i],
+                              color:"#000", fontSize:11, fontWeight:800, display:"flex", alignItems:"center",
+                              justifyContent:"center", flexShrink:0}}>{idx+1}</div>
+                            <div style={{flex:1, fontSize:13}}>{j.clientName||"Unnamed"} — {fullAddressOf(j)}</div>
+                          </div>
+                        ))}
+                        <a href={getDirectionsUrlMulti(optimizedRoute)} target="_blank" rel="noopener noreferrer"
+                          style={{...S.btnPrimary, display:"block", textAlign:"center", textDecoration:"none", marginTop:10}}>
+                          🧭 Open Full Route in Maps
+                        </a>
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+
+              {zones?.overflow?.count > 0 && (
+                <section style={S.section}>
+                  <h2 style={S.h2}>Overflow ({zones.overflow.count})</h2>
+                  {jobs.filter(j => zones.overflow.jobIds.includes(j.id)).map(j => (
+                    <div key={j.id} style={{...S.schedJobCard, marginBottom:8, cursor:"pointer"}}
+                      onClick={() => { setCurrentJob(j); setView("jobdetail"); }}>
+                      <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                      <div style={S.schedJobAddr}>{fullAddressOf(j)}</div>
+                    </div>
+                  ))}
+                </section>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── MAP TAB ── */}
+      {tab === "map" && (
+        <ZonesMapView jobs={jobs} zones={zones} zoneColors={ZONE_COLORS} fullAddressOf={fullAddressOf}/>
+      )}
+
+      {/* ── IMPORT TAB ── */}
+      {tab === "import" && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Import Historical Addresses</h2>
+          <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
+            Upload a CSV with columns: <strong>address, city, state, zip</strong> (header row required, extra columns are ignored).
+            These are used only to weight zone calculation — they won't appear as live jobs.
+          </p>
+          <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileSelect} style={{display:"none"}}/>
+          <button style={S.btnSecondary} onClick={() => fileInputRef.current?.click()}>
+            📄 Choose CSV File
+          </button>
+          {csvFile && (
+            <div style={{marginTop:10, fontSize:13, color:C.textMuted}}>
+              {csvFile.name} — {csvRows.length} addresses found
+            </div>
+          )}
+          {csvRows.length > 0 && (
+            <button style={{...S.btnPrimary, width:"100%", marginTop:12, opacity:importing?0.6:1}}
+              onClick={importHistorical} disabled={importing}>
+              {importing ? calcProgress || "Importing..." : `📥 Import & Geocode ${csvRows.length} Addresses`}
+            </button>
+          )}
+          <div style={{marginTop:20, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+            <div style={{fontSize:13, fontWeight:600, marginBottom:8}}>
+              Previously Imported ({historicalJobs.length})
+            </div>
+            {historicalJobs.length === 0 ? (
+              <p style={{fontSize:12, color:C.textMuted}}>No historical addresses imported yet.</p>
+            ) : (
+              <div style={{maxHeight:240, overflowY:"auto"}}>
+                {historicalJobs.slice(0,50).map(h => (
+                  <div key={h.id} style={{fontSize:12, color:C.textMuted, padding:"4px 0", borderBottom:`1px solid ${C.border}`}}>
+                    {[h.address, h.city, h.state, h.zip].filter(Boolean).join(", ")}
+                  </div>
+                ))}
+                {historicalJobs.length > 50 && (
+                  <div style={{fontSize:11, color:C.textDim, marginTop:6}}>+ {historicalJobs.length-50} more</div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+// ─── Zones Map View (Leaflet, sandboxed iframe approach) ───────────────────────
+function ZonesMapView({ jobs, zones, zoneColors, fullAddressOf }) {
+  const iframeRef = useRef(null);
+
+  useEffect(() => {
+    if (!iframeRef.current) return;
+    const zonesList = zones?.list || [];
+    const markers = [];
+
+    zonesList.forEach((z, i) => {
+      const zoneJobs = jobs.filter(j => z.jobIds.includes(j.id) && j.geoLat && j.geoLng);
+      zoneJobs.forEach(j => {
+        markers.push({ lat: j.geoLat, lng: j.geoLng, color: zoneColors[i], label: j.clientName||"Job", zone: z.name });
+      });
+      if (z.centroid) {
+        markers.push({ lat: z.centroid.lat, lng: z.centroid.lng, color: zoneColors[i], label: "★ "+z.name+" Center", zone: z.name, isCentroid: true });
+      }
+    });
+
+    const overflowJobs = jobs.filter(j => zones?.overflow?.jobIds?.includes(j.id) && j.geoLat && j.geoLng);
+    overflowJobs.forEach(j => {
+      markers.push({ lat: j.geoLat, lng: j.geoLng, color: "#888", label: j.clientName||"Job", zone: "Overflow" });
+    });
+
+    const markersJson = JSON.stringify(markers);
+
+    const html = `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>html,body,#map{margin:0;padding:0;width:100%;height:100%}</style>
+</head><body>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const MARKERS = ${markersJson};
+const map = L.map('map').setView([41.05,-75.35],10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
+const bounds = [];
+MARKERS.forEach(m => {
+  bounds.push([m.lat,m.lng]);
+  const size = m.isCentroid ? 18 : 14;
+  const icon = L.divIcon({
+    className:'',
+    html:'<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+m.color+';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)'+(m.isCentroid?';display:flex;align-items:center;justify-content:center;font-size:10px':'')+'">'+(m.isCentroid?'★':'')+'</div>',
+    iconSize:[size,size],iconAnchor:[size/2,size/2]
+  });
+  L.marker([m.lat,m.lng],{icon}).addTo(map).bindPopup('<b>'+m.label+'</b><br><span style="color:#888">'+m.zone+'</span>');
+});
+if(bounds.length>0) map.fitBounds(bounds,{padding:[30,30],maxZoom:13});
+</script></body></html>`;
+
+    const blob = new Blob([html], {type:"text/html"});
+    const url  = URL.createObjectURL(blob);
+    iframeRef.current.src = url;
+    return () => URL.revokeObjectURL(url);
+  }, [jobs, zones]);
+
+  return (
+    <section style={S.section}>
+      <h2 style={S.h2}>Zone Map</h2>
+      {!zones?.list?.length ? (
+        <p style={{fontSize:12, color:C.textMuted}}>Calculate zones first to see them on the map.</p>
+      ) : (
+        <>
+          <div style={{borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}`, height:380}}>
+            <iframe ref={iframeRef} style={{width:"100%", height:"100%", border:"none"}}
+              title="Zones map" sandbox="allow-scripts allow-same-origin allow-popups"/>
+          </div>
+          <div style={{display:"flex", flexWrap:"wrap", gap:12, marginTop:12}}>
+            {zones.list.map((z,i) => (
+              <div key={z.id} style={{display:"flex", alignItems:"center", gap:6, fontSize:12}}>
+                <div style={{width:10, height:10, borderRadius:"50%", background:zoneColors[i]}}/>
+                {z.name}
+              </div>
+            ))}
+            <div style={{display:"flex", alignItems:"center", gap:6, fontSize:12}}>
+              <div style={{width:10, height:10, borderRadius:"50%", background:"#888"}}/>
+              Overflow
+            </div>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -1765,6 +2526,136 @@ function calcJobFinancials(job, rates) {
   const netMargin      = revenue>0 ? (netProfit/revenue)*100 : 0;
 
   return { revenue, totalMaterials, fuelCost, laborCost, totalCosts, grossProfit, actualMargin, targetGP, overhead, netProfit, netMargin, estTotal, variance: totalCosts-estTotal };
+}
+
+// ─── Geocoding (forward: address → lat/lng) ────────────────────────────────────
+// Uses Nominatim (OpenStreetMap) — free, no API key. Results are cached on the
+// record itself (job.geoLat/geoLng or historicalJob.lat/lng) so we only ever
+// geocode an address once.
+async function geocodeAddress(addressStr) {
+  if (!addressStr || !addressStr.trim()) return null;
+  try {
+    const res = await fetch(
+      "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(addressStr)
+    );
+    const data = await res.json();
+    if (Array.isArray(data) && data[0]) {
+      return { lat: Number(data[0].lat), lng: Number(data[0].lon) };
+    }
+  } catch (e) { console.error("geocodeAddress error:", e); }
+  return null;
+}
+
+function fullAddressOf(job) {
+  return [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
+}
+
+// ─── Weighted K-Means Zone Clustering ──────────────────────────────────────────
+// Clusters geocoded points into k zones. Because every point is one job, denser
+// areas naturally pull more zone "weight" toward them — this is what produces
+// splits like 75% Stroudsburg / 15% Mt Pocono / 7.5% Scranton / 7.5% Kresgeville
+// without needing to hand-specify percentages; the data itself is the weighting.
+function kMeansCluster(points, k, maxIterations = 50) {
+  if (points.length === 0) return [];
+  if (points.length <= k) {
+    // Not enough points to form k clusters — one point per cluster
+    return points.map((p, i) => ({ centroid: { lat: p.lat, lng: p.lng }, members: [p] }));
+  }
+
+  // Initialize centroids using k-means++ style spread (pick far-apart starting points)
+  const centroids = [points[Math.floor(Math.random() * points.length)]];
+  while (centroids.length < k) {
+    let best = null, bestDist = -1;
+    for (const p of points) {
+      const minDistToExisting = Math.min(...centroids.map(c => haversine(p, c)));
+      if (minDistToExisting > bestDist) { bestDist = minDistToExisting; best = p; }
+    }
+    centroids.push(best);
+  }
+  let centers = centroids.map(c => ({ lat: c.lat, lng: c.lng }));
+
+  let assignments = new Array(points.length).fill(0);
+  for (let iter = 0; iter < maxIterations; iter++) {
+    let changed = false;
+    // Assign each point to nearest centroid
+    for (let i = 0; i < points.length; i++) {
+      let bestIdx = 0, bestDist = Infinity;
+      for (let c = 0; c < centers.length; c++) {
+        const d = haversine(points[i], centers[c]);
+        if (d < bestDist) { bestDist = d; bestIdx = c; }
+      }
+      if (assignments[i] !== bestIdx) { assignments[i] = bestIdx; changed = true; }
+    }
+    // Recompute centroids as mean of assigned points
+    const sums = centers.map(() => ({ lat: 0, lng: 0, n: 0 }));
+    for (let i = 0; i < points.length; i++) {
+      const c = assignments[i];
+      sums[c].lat += points[i].lat; sums[c].lng += points[i].lng; sums[c].n++;
+    }
+    centers = sums.map((s, idx) => s.n > 0 ? { lat: s.lat/s.n, lng: s.lng/s.n } : centers[idx]);
+    if (!changed) break;
+  }
+
+  return centers.map((centroid, c) => ({
+    centroid,
+    members: points.filter((_, i) => assignments[i] === c),
+  }));
+}
+
+function haversine(a, b) {
+  const R = 3958.8; // miles
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const lat1 = a.lat * Math.PI / 180, lat2 = b.lat * Math.PI / 180;
+  const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+// Detect outliers relative to all 4 zone centroids — used to populate "Overflow"
+function findOverflowPoints(points, clusters, thresholdMiles = 25) {
+  const overflow = [];
+  const kept = [];
+  points.forEach(p => {
+    const distances = clusters.map(c => haversine(p, c.centroid));
+    const minDist = Math.min(...distances);
+    if (minDist > thresholdMiles) overflow.push(p);
+    else kept.push(p);
+  });
+  return { overflow, kept };
+}
+
+// Nearest-neighbor + 2-opt route ordering for a single day's stops
+function optimizeRoute(points) {
+  if (points.length <= 2) return points;
+  // Nearest-neighbor construction
+  const remaining = [...points];
+  const route = [remaining.shift()];
+  while (remaining.length) {
+    const last = route[route.length - 1];
+    let bestIdx = 0, bestDist = Infinity;
+    remaining.forEach((p, i) => {
+      const d = haversine(last, p);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    });
+    route.push(remaining.splice(bestIdx, 1)[0]);
+  }
+  // 2-opt improvement pass
+  const routeDist = (r) => { let d=0; for(let i=0;i<r.length-1;i++) d+=haversine(r[i],r[i+1]); return d; };
+  let improved = true;
+  let bestRoute = route;
+  let bestDist = routeDist(route);
+  let safety = 0;
+  while (improved && safety < 200) {
+    improved = false; safety++;
+    for (let i = 1; i < bestRoute.length - 1; i++) {
+      for (let j = i+1; j < bestRoute.length; j++) {
+        const newRoute = [...bestRoute.slice(0,i), ...bestRoute.slice(i,j+1).reverse(), ...bestRoute.slice(j+1)];
+        const newDist = routeDist(newRoute);
+        if (newDist < bestDist - 0.001) { bestRoute = newRoute; bestDist = newDist; improved = true; }
+      }
+    }
+  }
+  return bestRoute;
 }
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
@@ -2393,6 +3284,101 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 }
 
 // ─── Team View (admin only) ────────────────────────────────────────────────────
+// ─── Permissions View (admin only) ─────────────────────────────────────────────
+function PermissionsView({ permissions, setPermissions, syncPermissions, setView }) {
+  const [editing, setEditing] = useState(() => JSON.parse(JSON.stringify(permissions || DEFAULT_PERMISSIONS)));
+  const [saving,  setSaving]  = useState(false);
+  const [message, setMessage] = useState("");
+
+  const cycleLevel = (tabKey, role) => {
+    const order = ["hidden","view","edit"];
+    const current = editing[tabKey]?.[role] || "hidden";
+    const next = order[(order.indexOf(current)+1) % order.length];
+    setEditing(prev => ({...prev, [tabKey]: {...prev[tabKey], [role]: next}}));
+  };
+
+  const levelColor = (level) => level==="edit" ? C.green : level==="view" ? C.accent : C.textDim;
+  const levelLabel = (level) => level==="edit" ? "Edit" : level==="view" ? "View" : "Hidden";
+
+  const save = async () => {
+    setSaving(true); setMessage("");
+    setPermissions(editing);
+    await syncPermissions(editing);
+    setMessage("✅ Permissions saved.");
+    setSaving(false);
+  };
+
+  const resetToDefaults = () => {
+    if (!confirm("Reset all permissions to the recommended defaults?")) return;
+    setEditing(JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS)));
+  };
+
+  return (
+    <div style={S.page}>
+      <div style={S.pageHeader}>
+        <h1 style={S.h1}>Permissions</h1>
+        <button style={S.btnSecondary} onClick={() => setView("jobs")}>✕ Close</button>
+      </div>
+      <p style={S.subhead}>Tap a cell to cycle Hidden → View → Edit, for each role and tab</p>
+
+      <section style={S.section}>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%", borderCollapse:"collapse", minWidth:560}}>
+            <thead>
+              <tr>
+                <th style={{textAlign:"left", fontSize:11, color:C.textMuted, padding:"6px 8px", position:"sticky", left:0, background:C.surface}}>Tab</th>
+                {ALL_ROLES.map(r => (
+                  <th key={r} style={{fontSize:11, color:C.textMuted, padding:"6px 8px", textAlign:"center", whiteSpace:"nowrap"}}>
+                    {ROLE_LABELS[r]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ALL_TABS.map(tab => (
+                <tr key={tab.key} style={{borderTop:`1px solid ${C.border}`}}>
+                  <td style={{fontSize:13, fontWeight:600, padding:"8px 8px", whiteSpace:"nowrap", position:"sticky", left:0, background:C.surface}}>
+                    {tab.icon} {tab.label}
+                  </td>
+                  {ALL_ROLES.map(role => {
+                    const level = editing[tab.key]?.[role] || "hidden";
+                    return (
+                      <td key={role} style={{textAlign:"center", padding:"6px 4px"}}>
+                        <button onClick={() => cycleLevel(tab.key, role)}
+                          style={{
+                            fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:14, cursor:"pointer",
+                            background: level==="edit" ? "#14532d" : level==="view" ? "#1a2535" : C.surface2,
+                            color: levelColor(level),
+                            border:`1px solid ${level==="hidden"?C.border:levelColor(level)}`,
+                            minWidth:60,
+                          }}>
+                          {levelLabel(level)}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {message && <div style={{color:C.green, fontSize:13, marginTop:14}}>{message}</div>}
+        <div style={{display:"flex", gap:8, marginTop:14}}>
+          <button style={{...S.btnPrimary, flex:1, opacity:saving?0.6:1}} onClick={save} disabled={saving}>
+            {saving ? "Saving..." : "💾 Save Permissions"}
+          </button>
+          <button style={S.btnSecondary} onClick={resetToDefaults}>↩ Reset to Defaults</button>
+        </div>
+        <p style={{fontSize:11, color:C.textDim, marginTop:12}}>
+          Admin always retains full access to everything, including this screen, regardless of these settings.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+// ─── Team View (admin only) ────────────────────────────────────────────────────
 function TeamView({ accessToken, userRole }) {
   const isManager = userRole === "manager";
   const [users,     setUsers]     = useState([]);
@@ -2477,9 +3463,11 @@ function TeamView({ accessToken, userRole }) {
         ) : (
           <label style={{...S.formLabel, marginTop:10}}>Role
             <select value={role} onChange={e => setRole(e.target.value)} style={S.input}>
-              <option value="crew">Crew — field access only</option>
-              <option value="manager">Manager — almost full access (no Rates or Team)</option>
-              <option value="admin">Admin — full access</option>
+              <option value="estimator">Estimator</option>
+              <option value="crew">Crew</option>
+              <option value="crewlead">Crew Lead</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
             </select>
           </label>
         )}
@@ -2506,7 +3494,7 @@ function TeamView({ accessToken, userRole }) {
                 <div style={{fontWeight:600, fontSize:14}}>{fullName || u.email}</div>
                 {fullName && <div style={{fontSize:12, color:C.textMuted}}>{u.email}</div>}
                 <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>
-                  {u.role === "admin" ? "👑 Admin" : u.role === "manager" ? "🛠 Manager" : "🔧 Crew"} · Added {new Date(u.created_at).toLocaleDateString()}
+                  {ROLE_LABELS[u.role] || u.role} · Added {new Date(u.created_at).toLocaleDateString()}
                 </div>
                 {(u.phone || u.date_of_birth) && (
                   <div style={{fontSize:11, color:C.textDim, marginTop:2}}>
@@ -2524,7 +3512,155 @@ function TeamView({ accessToken, userRole }) {
           })
         )}
       </section>
+
+      <CrewsSection users={users} isManager={isManager}/>
     </div>
+  );
+}
+
+// ─── Crews management (used inside TeamView) ───────────────────────────────────
+function CrewsSection({ users, isManager }) {
+  const [crews,       setCrews]       = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [editingId,   setEditingId]   = useState(null);
+  const [draftName,   setDraftName]   = useState("");
+  const [draftLeadId, setDraftLeadId] = useState("");
+  const [draftMemberIds, setDraftMemberIds] = useState([]);
+
+  const loadCrews = async () => {
+    setLoading(true);
+    try {
+      const res = await sbFetch("crews?select=id,data&order=id.asc");
+      const data = await res.json();
+      if (Array.isArray(data)) setCrews(data.map(row => ({...row.data, id: row.id})));
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadCrews(); }, []);
+
+  const syncCrew = async (crew) => {
+    try {
+      await sbFetch("crews", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: crew.id, data: crew }),
+      });
+    } catch(e) { console.error("syncCrew error:", e); }
+  };
+
+  const deleteCrew = async (id) => {
+    if (!confirm("Delete this crew?")) return;
+    setCrews(prev => prev.filter(c => c.id !== id));
+    try { await sbFetch("crews?id=eq."+id, { method:"DELETE" }); } catch(e) {}
+  };
+
+  const startNew = () => {
+    setEditingId("new");
+    setDraftName("");
+    setDraftLeadId("");
+    setDraftMemberIds([]);
+  };
+
+  const startEdit = (crew) => {
+    setEditingId(crew.id);
+    setDraftName(crew.name);
+    setDraftLeadId(crew.leadId || "");
+    setDraftMemberIds(crew.memberIds || []);
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveCrew = async () => {
+    if (!draftName.trim()) { alert("Enter a crew name."); return; }
+    const crew = {
+      id: editingId === "new" ? Date.now() : editingId,
+      name: draftName.trim(),
+      leadId: draftLeadId || null,
+      memberIds: draftMemberIds,
+    };
+    setCrews(prev => editingId === "new" ? [...prev, crew] : prev.map(c => c.id === editingId ? crew : c));
+    await syncCrew(crew);
+    setEditingId(null);
+  };
+
+  const toggleMember = (userId) => {
+    setDraftMemberIds(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
+  };
+
+  const nameOf = (userId) => {
+    const u = users.find(x => x.id === userId);
+    if (!u) return "—";
+    return [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+  };
+
+  return (
+    <section style={S.section}>
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+        <h2 style={{...S.h2, margin:0}}>Crews</h2>
+        {!isManager && editingId === null && (
+          <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={startNew}>+ New Crew</button>
+        )}
+      </div>
+
+      {loading ? (
+        <p style={{fontSize:13, color:C.textMuted}}>Loading...</p>
+      ) : crews.length === 0 && editingId === null ? (
+        <p style={{fontSize:13, color:C.textMuted}}>No crews yet.</p>
+      ) : (
+        crews.filter(c => editingId !== c.id).map(crew => (
+          <div key={crew.id} style={{background:C.surface2, borderRadius:8, padding:"10px 12px", marginBottom:8}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+              <div>
+                <div style={{fontWeight:700, fontSize:14}}>{crew.name}</div>
+                <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>Lead: {nameOf(crew.leadId)}</div>
+                <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
+                  Members: {crew.memberIds?.length ? crew.memberIds.map(nameOf).join(", ") : "none"}
+                </div>
+              </div>
+              {!isManager && (
+                <div style={{display:"flex", gap:6, flexShrink:0}}>
+                  <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(crew)}>✎</button>
+                  <button style={S.btnSmallDanger} onClick={() => deleteCrew(crew.id)}>✕</button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))
+      )}
+
+      {editingId !== null && (
+        <div style={{background:C.surface2, border:`1px solid ${C.accent}`, borderRadius:8, padding:"12px 14px", marginTop:8}}>
+          <div style={{fontWeight:700, fontSize:12, color:C.accent, marginBottom:8}}>
+            {editingId === "new" ? "New Crew" : "Edit Crew"}
+          </div>
+          <label style={S.formLabel}>Crew Name
+            <input value={draftName} onChange={e => setDraftName(e.target.value)} style={S.input} placeholder="e.g. Crew 1, North Team"/>
+          </label>
+          <label style={{...S.formLabel, marginTop:10}}>Crew Lead
+            <select value={draftLeadId} onChange={e => setDraftLeadId(e.target.value)} style={S.input}>
+              <option value="">— None —</option>
+              {users.map(u => <option key={u.id} value={u.id}>{nameOf(u.id)}</option>)}
+            </select>
+          </label>
+          <div style={{...S.formLabel, marginTop:10}}>
+            <div>Members</div>
+            <div style={{display:"flex", flexDirection:"column", gap:6, marginTop:4}}>
+              {users.map(u => (
+                <label key={u.id} style={{display:"flex", alignItems:"center", gap:8, fontSize:13, color:C.text}}>
+                  <input type="checkbox" checked={draftMemberIds.includes(u.id)} onChange={() => toggleMember(u.id)}/>
+                  {nameOf(u.id)}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div style={{display:"flex", gap:8, marginTop:14}}>
+            <button style={{...S.btnPrimary, flex:1}} onClick={saveCrew}>💾 Save</button>
+            <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -2686,9 +3822,26 @@ function ExportView({ jobs, laborEntries, rates, setView }) {
 }
 
 // ─── Jobs List ────────────────────────────────────────────────────────────────
-function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById }) {
+function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById, userRole, userId, crews }) {
   const [showArchive, setShowArchive] = useState(false);
-  const create    = () => { const j=initialJob(rates); setJobs(p=>[j,...p]); setCurrentJob(j); setView("jobdetail"); };
+
+  // ── Visibility scoping ──
+  // Admin/Manager: see everything. Crew Lead: self + their crew's members.
+  // Crew/Estimator: only jobs assigned directly to them.
+  const myCrew = (crews||[]).find(c => c.leadId === userId);
+  const myCrewMemberIds = myCrew ? (myCrew.memberIds||[]) : [];
+
+  const visibleJobs = (() => {
+    if (userRole === "admin" || userRole === "manager") return jobs;
+    if (userRole === "crewlead") {
+      const allowedIds = new Set([userId, ...myCrewMemberIds]);
+      return jobs.filter(j => !j.assignedTo || allowedIds.has(j.assignedTo));
+    }
+    // crew, estimator
+    return jobs.filter(j => j.assignedTo === userId);
+  })();
+
+  const create    = () => { const j=initialJob(rates); if (userId && userRole!=="admin" && userRole!=="manager") j.assignedTo = userId; setJobs(p=>[j,...p]); setCurrentJob(j); setView("jobdetail"); };
   const open      = (job) => { setCurrentJob(job); setView("jobdetail"); };
   const remove    = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
   const schedule  = (job, date) => updateJobById(job.id, j => ({...j, scheduledDate:date, status: date ? "scheduled" : j.status==="scheduled" ? "draft" : j.status}));
@@ -2699,10 +3852,10 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
   const ARCHIVE_STATUSES = ["completed","paid","lost"];
   const safeStatus = (s) => (s && STATUS_ORDER.includes(s)) ? s : "estimate";
 
-  const activeJobs = jobs
+  const activeJobs = visibleJobs
     .filter(j => !ARCHIVE_STATUSES.includes(safeStatus(j.status)))
     .sort((a,b) => STATUS_ORDER.indexOf(safeStatus(a.status)) - STATUS_ORDER.indexOf(safeStatus(b.status)));
-  const archivedJobs = jobs
+  const archivedJobs = visibleJobs
     .filter(j => ARCHIVE_STATUSES.includes(safeStatus(j.status)))
     .sort((a,b) => STATUS_ORDER.indexOf(safeStatus(a.status)) - STATUS_ORDER.indexOf(safeStatus(b.status)));
 
@@ -3500,6 +4653,10 @@ export default function App() {
   const [loading,       setLoading]      = useState(true);
   const [syncStatus,    setSyncStatus]   = useState("");
   const [laborEntries,  setLaborEntries] = useState([]);
+  const [zones,         setZones]        = useState(null);
+  const [permissions,   setPermissions]  = useState(null);
+  const [teamUsers,     setTeamUsers]    = useState([]);
+  const [crews,         setCrews]        = useState([]);
 
   // ── Auth state ──
   const [session,    setSession]    = useState(null);
@@ -3544,13 +4701,17 @@ export default function App() {
     await fetchProfile(newSession.user.id, newSession.access_token);
   };
 
-  // If the active view isn't allowed for this role, fall back to jobs
+  // If the active view isn't allowed for this role, fall back to jobs.
+  // "export", "permissions", "team" stay admin-only regardless of the configurable matrix.
   useEffect(() => {
-    const adminOnly = ["export"];
-    const adminOrManager = ["costs","invoice","reports","rates","team"];
-    if (adminOnly.includes(view) && userRole !== "admin") setView("jobs");
-    if (adminOrManager.includes(view) && userRole !== "admin" && userRole !== "manager") setView("jobs");
-  }, [userRole, view]);
+    const alwaysAdminOnly = ["export","permissions"];
+    if (alwaysAdminOnly.includes(view) && userRole !== "admin") { setView("jobs"); return; }
+    if (view === "team" && userRole !== "admin" && userRole !== "manager") { setView("jobs"); return; }
+    if (ALL_TABS.some(t => t.key === view)) {
+      const level = getAccessLevel(permissions, view, userRole);
+      if (level === "hidden" && userRole !== "admin") setView("jobs");
+    }
+  }, [userRole, view, permissions]);
 
   const handleLogout = () => {
     clearSession();
@@ -3573,6 +4734,24 @@ export default function App() {
         const lr = await sbFetch("labor?select=id,data&order=id.desc");
         const ld = await lr.json();
         if (Array.isArray(ld)) setLaborEntries(ld.map(row => ({...row.data, id: row.id})));
+
+        const zr = await sbFetch("zones?select=data&limit=1");
+        const zd = await zr.json();
+        if (Array.isArray(zd) && zd.length > 0) setZones(zd[0].data);
+
+        const pr = await sbFetch("permissions?select=data&limit=1");
+        const pd = await pr.json();
+        if (Array.isArray(pd) && pd.length > 0) setPermissions(pd[0].data);
+
+        try {
+          const tr = await fetch("/api/list-users");
+          const td = await tr.json();
+          if (tr.ok && Array.isArray(td.users)) setTeamUsers(td.users);
+        } catch(e) { console.error("load team users error:", e); }
+
+        const cr = await sbFetch("crews?select=id,data&order=id.asc");
+        const cd = await cr.json();
+        if (Array.isArray(cd)) setCrews(cd.map(row => ({...row.data, id: row.id})));
       } catch(e) {
         console.error("Load error:", e);
         setSyncStatus("⚠️ Could not connect to database");
@@ -3581,6 +4760,58 @@ export default function App() {
     };
     load();
   }, []);
+
+  const syncZones = async (zonesData) => {
+    try {
+      await sbFetch("zones", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: 1, data: zonesData }),
+      });
+    } catch(e) { console.error("syncZones error:", e); }
+  };
+
+  const syncPermissions = async (permissionsData) => {
+    try {
+      await sbFetch("permissions", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: 1, data: permissionsData }),
+      });
+    } catch(e) { console.error("syncPermissions error:", e); }
+  };
+
+  // Assign a newly created/edited job to its nearest existing zone centroid
+  // (lightweight live update — does not recalculate centroids themselves)
+  const assignJobToNearestZone = async (job) => {
+    if (!zones?.list?.length) return;
+    const addrStr = fullAddressOf(job);
+    if (!addrStr) return;
+    const geo = job.geoLat && job.geoLng ? { lat: job.geoLat, lng: job.geoLng } : await geocodeAddress(addrStr);
+    if (!geo) return;
+
+    let bestIdx = -1, bestDist = Infinity;
+    zones.list.forEach((z, i) => {
+      const d = haversine(geo, z.centroid);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    });
+
+    const updatedZones = {...zones};
+    const isOverflow = bestDist > 25;
+    updatedZones.list = zones.list.map((z, i) => ({
+      ...z,
+      jobIds: z.jobIds.filter(id => id !== job.id).concat(i===bestIdx && !isOverflow ? [job.id] : []),
+      jobCount: z.jobIds.filter(id => id !== job.id).concat(i===bestIdx && !isOverflow ? [job.id] : []).length,
+    }));
+    updatedZones.overflow = {
+      ...updatedZones.overflow,
+      jobIds: (updatedZones.overflow?.jobIds||[]).filter(id => id !== job.id).concat(isOverflow ? [job.id] : []),
+    };
+    updatedZones.overflow.count = updatedZones.overflow.jobIds.length;
+
+    setZones(updatedZones);
+    syncZones(updatedZones);
+  };
 
   const syncLaborEntry = async (entry) => {
     try {
@@ -3603,6 +4834,8 @@ export default function App() {
   };
 
   // ── Upsert a single job ──
+  const lastZonedAddressRef = useRef({});
+
   const syncJob = async (job) => {
     setSyncStatus("Saving...");
     try {
@@ -3614,6 +4847,13 @@ export default function App() {
       if (!res.ok) throw new Error(await res.text());
       setSyncStatus("✓ Saved");
       setTimeout(() => setSyncStatus(""), 2000);
+
+      // Live zone re-assignment — only re-geocode/re-assign if the address actually changed
+      const addrStr = fullAddressOf(job);
+      if (addrStr && zones?.list?.length && lastZonedAddressRef.current[job.id] !== addrStr) {
+        lastZonedAddressRef.current[job.id] = addrStr;
+        assignJobToNearestZone(job);
+      }
     } catch(e) {
       console.error("syncJob error:", e);
       setSyncStatus("⚠️ Save failed");
@@ -3739,7 +4979,7 @@ export default function App() {
 
   return (
     <div style={S.app}>
-      <TopNav view={view} setView={setView} userRole={userRole} onLogout={handleLogout}/>
+      <TopNav view={view} setView={setView} userRole={userRole} permissions={permissions} onLogout={handleLogout}/>
       {syncStatus && (
         <div style={{
           background: syncStatus.startsWith("⚠️") ? "#2a1010" : "#1a2a1a",
@@ -3748,16 +4988,18 @@ export default function App() {
         }}>{syncStatus}</div>
       )}
       <div style={S.content}>
-        {view==="jobs"     && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById}/>}
-        {view==="schedule" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView}/>}
-        {view==="estimate" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}/>}
-        {view==="costs"    && (userRole==="admin"||userRole==="manager") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
-        {view==="invoice"  && (userRole==="admin"||userRole==="manager") && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
-        {view==="labor"    && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
-        {view==="reports"  && (userRole==="admin"||userRole==="manager") && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="rates"    && (userRole==="admin"||userRole==="manager") && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
+        {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} readOnly={getAccessLevel(permissions,"jobs",userRole)==="view"} userRole={userRole} userId={session?.user?.id} crews={crews}/>}
+        {view==="schedule" && getAccessLevel(permissions,"schedule",userRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews}/>}
+        {view==="estimate" && getAccessLevel(permissions,"estimate",userRole)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRole)==="view"}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
+        {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
+        {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={setView}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView} onLogout={handleLogout}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
       </div>
