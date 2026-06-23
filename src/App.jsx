@@ -323,6 +323,11 @@ function TopNav({ view, setView, userRole, onLogout }) {
           </button>
         ))}
       </div>
+      <button onClick={() => setView("password")}
+        style={{background:"none", border:"none", color:C.textMuted, fontSize:16, padding:"0 8px", cursor:"pointer", flexShrink:0}}
+        title="Change password">
+        🔑
+      </button>
       <button onClick={() => { if(confirm("Sign out?")) onLogout(); }}
         style={{background:"none", border:"none", color:C.textMuted, fontSize:18, padding:"0 12px", cursor:"pointer", flexShrink:0}}
         title="Sign out">
@@ -1798,6 +1803,54 @@ function CostsView({ currentJob, updateJob, rates }) {
             <span style={{fontWeight:700, fontSize:14, color}}>{val}</span>
           </div>
         ))}
+      </section>
+    </div>
+  );
+}
+
+// ─── Change Password View (any logged-in user) ────────────────────────────────
+function ChangePasswordView({ accessToken, setView }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState("");
+  const [message, setMessage] = useState("");
+
+  const handleSave = async () => {
+    setError(""); setMessage("");
+    if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (newPassword !== confirmPassword) { setError("Passwords do not match."); return; }
+    setSaving(true);
+    try {
+      await authUpdatePassword(accessToken, newPassword);
+      setMessage("✅ Password updated successfully.");
+      setNewPassword(""); setConfirmPassword("");
+    } catch(e) {
+      setError(e.message);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div style={S.page}>
+      <div style={S.pageHeader}>
+        <h1 style={S.h1}>Change Password</h1>
+        <button style={S.btnSecondary} onClick={() => setView("jobs")}>✕ Close</button>
+      </div>
+      <section style={S.section}>
+        <label style={S.formLabel}>New Password
+          <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+            style={S.input} placeholder="At least 6 characters"/>
+        </label>
+        <label style={{...S.formLabel, marginTop:10}}>Confirm New Password
+          <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+            style={S.input} placeholder="Re-enter new password"/>
+        </label>
+        {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
+        {message && <div style={{color:C.green, fontSize:13, marginTop:10}}>{message}</div>}
+        <button style={{...S.btnPrimary, marginTop:14, opacity:saving?0.6:1}} onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "💾 Update Password"}
+        </button>
       </section>
     </div>
   );
@@ -3289,6 +3342,21 @@ const authRefresh = async (refreshToken) => {
   return data;
 };
 
+const authUpdatePassword = async (accessToken, newPassword) => {
+  const res = await fetch(SUPABASE_URL + "/auth/v1/user", {
+    method: "PUT",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + accessToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password: newPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.msg || "Password update failed");
+  return data;
+};
+
 const saveSession = (session) => {
   try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session)); } catch(e) {}
 };
@@ -3614,6 +3682,7 @@ export default function App() {
         {view==="reports"  && (userRole==="admin"||userRole==="manager") && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && (userRole==="admin"||userRole==="manager") && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
         {view==="team"     && userRole==="admin" && <TeamView accessToken={session?.access_token}/>}
+        {view==="password" && <ChangePasswordView accessToken={session?.access_token} setView={setView}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
       </div>
     </div>
