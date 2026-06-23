@@ -74,7 +74,7 @@ const S = {
   subhead:{ margin:"0 0 20px", color:C.textMuted, fontSize:13, lineHeight:1.4 },
   section:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:16 },
   formGrid:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:8 },
-  formLabel:{ display:"flex", flexDirection:"column", gap:4, fontSize:13, color:C.textMuted },
+  formLabel:{ display:"flex", flexDirection:"column", gap:4, fontSize:13, color:C.textMuted, minWidth:0, overflow:"hidden" },
   input:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, padding:"8px 10px", color:C.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box" },
   btnPrimary:{ background:C.accent, color:"#000", border:"none", borderRadius:8, padding:"10px 20px", fontWeight:700, fontSize:14, cursor:"pointer" },
   btnSecondary:{ background:C.surface2, color:C.text, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 20px", fontWeight:600, fontSize:14, cursor:"pointer" },
@@ -284,7 +284,7 @@ function TopNav({ view, setView, userRole, onLogout }) {
     {key:"labor",    label:"Labor",    icon:"👷", roles:["admin","manager","crew"]},
     {key:"reports",  label:"Reports",  icon:"📊", roles:["admin","manager"]},
     {key:"rates",    label:"Rates",    icon:"⚙️", roles:["admin","manager"]},
-    {key:"team",     label:"Team",     icon:"👥", roles:["admin"]},
+    {key:"team",     label:"Team",     icon:"👥", roles:["admin","manager"]},
   ];
   const tabs = allTabs.filter(t => t.roles.includes(userRole));
 
@@ -2352,7 +2352,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
             </label>
             <label style={{...S.formLabel, marginTop:10}}>Date of Birth
               <input type="date" value={dob} onChange={e => setDob(e.target.value)}
-                style={S.input}/>
+                style={{...S.input, color:C.text, colorScheme:"dark", maxWidth:"100%", minWidth:0, width:"100%", display:"block"}}/>
             </label>
             {profileErr && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{profileErr}</div>}
             {profileMsg && <div style={{color:C.green, fontSize:13, marginTop:10}}>{profileMsg}</div>}
@@ -2393,7 +2393,8 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 }
 
 // ─── Team View (admin only) ────────────────────────────────────────────────────
-function TeamView({ accessToken }) {
+function TeamView({ accessToken, userRole }) {
+  const isManager = userRole === "manager";
   const [users,     setUsers]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [inviting,  setInviting]  = useState(false);
@@ -2416,12 +2417,17 @@ function TeamView({ accessToken }) {
 
   const sendInvite = async () => {
     if (!email.trim()) { setError("Please enter an email address."); return; }
+    // Managers can only ever invite as crew, regardless of dropdown state
+    const safeRole = isManager ? "crew" : role;
     setError(""); setMessage(""); setInviting(true);
     try {
       const res = await fetch("/api/invite", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), role }),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + accessToken,
+        },
+        body: JSON.stringify({ email: email.trim(), role: safeRole }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to send invite.");
@@ -2439,7 +2445,10 @@ function TeamView({ accessToken }) {
     try {
       const res = await fetch("/api/remove-user", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + accessToken,
+        },
         body: JSON.stringify({ userId }),
       });
       const data = await res.json();
@@ -2453,7 +2462,7 @@ function TeamView({ accessToken }) {
   return (
     <div style={S.page}>
       <h1 style={S.h1}>Team</h1>
-      <p style={S.subhead}>Invite crew members and manage access</p>
+      <p style={S.subhead}>{isManager ? "Invite crew members" : "Invite crew members and manage access"}</p>
 
       <section style={S.section}>
         <h2 style={S.h2}>Invite Team Member</h2>
@@ -2461,13 +2470,19 @@ function TeamView({ accessToken }) {
           <input type="email" value={email} onChange={e => setEmail(e.target.value)}
             style={S.input} placeholder="name@example.com" autoCapitalize="none" autoCorrect="off"/>
         </label>
-        <label style={{...S.formLabel, marginTop:10}}>Role
-          <select value={role} onChange={e => setRole(e.target.value)} style={S.input}>
-            <option value="crew">Crew — field access only</option>
-            <option value="manager">Manager — almost full access (no Rates or Team)</option>
-            <option value="admin">Admin — full access</option>
-          </select>
-        </label>
+        {isManager ? (
+          <div style={{marginTop:10, fontSize:12, color:C.textMuted}}>
+            New team members you invite will be added as <strong>Crew</strong> automatically.
+          </div>
+        ) : (
+          <label style={{...S.formLabel, marginTop:10}}>Role
+            <select value={role} onChange={e => setRole(e.target.value)} style={S.input}>
+              <option value="crew">Crew — field access only</option>
+              <option value="manager">Manager — almost full access (no Rates or Team)</option>
+              <option value="admin">Admin — full access</option>
+            </select>
+          </label>
+        )}
         {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
         {message && <div style={{color:C.green, fontSize:13, marginTop:10}}>{message}</div>}
         <button style={{...S.btnPrimary, marginTop:14, opacity:inviting?0.6:1}} onClick={sendInvite} disabled={inviting}>
@@ -2501,7 +2516,9 @@ function TeamView({ accessToken }) {
                   </div>
                 )}
               </div>
-              <button style={{...S.btnSmallDanger, flexShrink:0, marginLeft:8}} onClick={() => removeUser(u.id, u.email)}>Remove</button>
+              {!isManager && (
+                <button style={{...S.btnSmallDanger, flexShrink:0, marginLeft:8}} onClick={() => removeUser(u.id, u.email)}>Remove</button>
+              )}
             </div>
             );
           })
@@ -3529,8 +3546,8 @@ export default function App() {
 
   // If the active view isn't allowed for this role, fall back to jobs
   useEffect(() => {
-    const adminOnly = ["export","team"];
-    const adminOrManager = ["costs","invoice","reports","rates"];
+    const adminOnly = ["export"];
+    const adminOrManager = ["costs","invoice","reports","rates","team"];
     if (adminOnly.includes(view) && userRole !== "admin") setView("jobs");
     if (adminOrManager.includes(view) && userRole !== "admin" && userRole !== "manager") setView("jobs");
   }, [userRole, view]);
@@ -3740,7 +3757,7 @@ export default function App() {
         {view==="labor"    && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
         {view==="reports"  && (userRole==="admin"||userRole==="manager") && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && (userRole==="admin"||userRole==="manager") && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
-        {view==="team"     && userRole==="admin" && <TeamView accessToken={session?.access_token}/>}
+        {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView} onLogout={handleLogout}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
       </div>
