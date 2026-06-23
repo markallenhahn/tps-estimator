@@ -2,6 +2,11 @@
 // Vercel serverless function — runs privately on the server, never in the browser.
 // Uses the Supabase service_role key (stored as a Vercel environment variable)
 // to invite a new user by email and assign them a role in the profiles table.
+//
+// Security note: this endpoint verifies the CALLER's own role server-side
+// (via their access token) before honoring any requested role. A manager
+// calling this directly cannot grant themselves or anyone else admin/manager
+// access — the server forces "crew" regardless of what the client sends.
 
 const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
 
@@ -19,7 +24,40 @@ export default async function handler(req, res) {
   if (!email || typeof email !== "string") {
     return res.status(400).json({ error: "Email is required." });
   }
-  const safeRole = ["admin","manager"].includes(role) ? role : "crew";
+
+  // ── Verify the caller's identity and role server-side ──
+  const authHeader = req.headers.authorization || "";
+  const callerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  let callerRole = "crew"; // fail closed: assume least privilege if anything is missing/invalid
+
+  if (callerToken) {
+    try {
+      const userRes = await fetch(SUPABASE_URL + "/auth/v1/user", {
+        headers: { "apikey": serviceKey, "Authorization": "Bearer " + callerToken },
+      });
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        const callerId = userData?.id;
+        if (callerId) {
+          const profileRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + callerId + "&select=role", {
+            headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey },
+          });
+          const profileData = await profileRes.json();
+          if (Array.isArray(profileData) && profileData[0]?.role) {
+            callerRole = profileData[0].role;
+          }
+        }
+      }
+    } catch (e) { /* fall through with callerRole = "crew" */ }
+  }
+
+  if (callerRole !== "admin" && callerRole !== "manager") {
+    return res.status(403).json({ error: "You do not have permission to invite team members." });
+  }
+
+  // Admins may set any role; managers are locked to "crew" no matter what they send.
+  const requestedRole = ["admin","manager"].includes(role) ? role : "crew";
+  const safeRole = callerRole === "admin" ? requestedRole : "crew";
 
   try {
     // 1. Invite the user via Supabase Admin API — sends them a secure email
