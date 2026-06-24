@@ -4084,7 +4084,7 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
         </div>
       )}
       {myJobs.length > 0 && (() => {
-        const isOpen = openSections["__my_jobs"] ?? true;
+        const isOpen = openSections["__my_jobs"] ?? false;
         return (
           <div style={{marginBottom:16}}>
             <button
@@ -4109,7 +4109,7 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
         const jobsInStatus = visibleJobs.filter(j => safeStatus(j.status) === status);
         if (jobsInStatus.length === 0) return null;
         const isArchivedStatus = ARCHIVE_STATUSES.includes(status);
-        const isOpen = openSections[status] ?? !isArchivedStatus; // archived statuses start collapsed
+        const isOpen = openSections[status] ?? false; // all sections start collapsed
         const label = status==="estimate" ? "Estimate" : status.charAt(0).toUpperCase()+status.slice(1);
         return (
           <div key={status} style={{marginBottom:16}}>
