@@ -77,7 +77,7 @@ const S = {
   sidebarTabActive:{ background:C.surface2, color:C.accent, fontWeight:700 },
   sidebarDivider:{ height:1, margin:"10px 14px", background:C.border },
   content:{ flex:1 },
-  page:{ maxWidth:1100, margin:"0 auto", padding:"24px 16px 80px" },
+  page:{ maxWidth:1600, width:"100%", margin:"0 auto", padding:"24px 24px 80px", boxSizing:"border-box" },
   pageHeader:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 },
   h1:{ fontSize:22, fontWeight:800, margin:"0 0 4px", lineHeight:1.2, letterSpacing:"-0.01em" },
   h2:{ fontSize:13, fontWeight:600, margin:"0 0 12px", color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.08em" },
