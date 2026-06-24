@@ -2598,15 +2598,37 @@ function calcJobFinancials(job, rates) {
 // geocode an address once.
 async function geocodeAddress(addressStr) {
   if (!addressStr || !addressStr.trim()) return null;
+
+  // Try Nominatim first (OpenStreetMap's official geocoder)
   try {
     const res = await fetch(
-      "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(addressStr)
+      "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(addressStr),
+      { headers: { "Accept": "application/json" } }
     );
-    const data = await res.json();
-    if (Array.isArray(data) && data[0]) {
-      return { lat: Number(data[0].lat), lng: Number(data[0].lon) };
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data[0]) {
+        return { lat: Number(data[0].lat), lng: Number(data[0].lon) };
+      }
     }
-  } catch (e) { console.error("geocodeAddress error:", e); }
+  } catch (e) { console.error("geocodeAddress (Nominatim) error:", e); }
+
+  // Fallback: Photon (Komoot) — different provider, same OSM data, often
+  // succeeds when Nominatim rate-limits or rejects a request.
+  try {
+    const res2 = await fetch(
+      "https://photon.komoot.io/api/?limit=1&q=" + encodeURIComponent(addressStr)
+    );
+    if (res2.ok) {
+      const data2 = await res2.json();
+      const feature = data2?.features?.[0];
+      if (feature?.geometry?.coordinates) {
+        const [lng, lat] = feature.geometry.coordinates;
+        return { lat: Number(lat), lng: Number(lng) };
+      }
+    }
+  } catch (e) { console.error("geocodeAddress (Photon) error:", e); }
+
   return null;
 }
 
