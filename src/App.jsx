@@ -1325,6 +1325,11 @@ function InvoiceView({ currentJob, updateJob, rates }) {
             <input value={invNum} onChange={e => setInvoiceNum(e.target.value)} style={S.input}
               placeholder={(currentJob.estimateNum||"").replace("EST-","INV-") || "INV-00001"}/>
           </label>
+          <label style={S.formLabel}>Invoice Sent Date
+            <input type="date" value={currentJob.invoiceSentDate||""}
+              onChange={e => updateJob(j => ({...j, invoiceSentDate: e.target.value}))}
+              style={{...S.input, marginBottom:0}}/>
+          </label>
           {isPaid && (
             <label style={S.formLabel}>Payment Date
               <input value={paymentDate} onChange={e => setPaymentDate(e.target.value)} style={S.input}/>
@@ -1339,6 +1344,12 @@ function InvoiceView({ currentJob, updateJob, rates }) {
             </label>
           )}
         </div>
+        {currentJob.invoiceSentDate && (
+          <p style={{fontSize:11, color:C.textMuted, marginTop:8, marginBottom:0}}>
+            📅 Invoice marked sent on {new Date(currentJob.invoiceSentDate+"T12:00:00").toLocaleDateString()}
+            {" "}— {Math.floor((Date.now() - new Date(currentJob.invoiceSentDate+"T12:00:00").getTime()) / 86400000)} days outstanding so far.
+          </p>
+        )}
       </section>
 
       {/* Preview */}
@@ -2764,7 +2775,83 @@ function optimizeRouteCore(points, anchor = null) {
 }
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
+// ─── Outstanding Invoices Section (used inside Reports) ───────────────────────
+function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
+  const today = new Date();
+  today.setHours(12,0,0,0);
+
+  // A job counts as an outstanding invoice once it's been marked Completed
+  // (i.e. the invoice was sent) and hasn't reached Paid yet, with a manually
+  // entered invoice sent date to calculate days outstanding from.
+  const outstanding = jobs
+    .filter(j => j.status === "completed" && j.invoiceSentDate)
+    .map(j => {
+      const sentDate = new Date(j.invoiceSentDate + "T12:00:00");
+      const daysOut  = Math.floor((today.getTime() - sentDate.getTime()) / 86400000);
+      return { job: j, sentDate, daysOut };
+    })
+    .sort((a,b) => b.daysOut - a.daysOut);
+
+  const totalOutstanding = outstanding.length;
+  const over30 = outstanding.filter(o => o.daysOut > 30).length;
+  const over60 = outstanding.filter(o => o.daysOut > 60).length;
+
+  const ageColor = (days) => days > 60 ? C.danger : days > 30 ? "#f59e0b" : C.green;
+
+  return (
+    <>
+      <section style={S.section}>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10}}>
+          <div style={{background:C.surface2, borderRadius:10, padding:"12px 10px", textAlign:"center"}}>
+            <div style={{fontSize:22, fontWeight:800, color:C.accent}}>{totalOutstanding}</div>
+            <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>Outstanding</div>
+          </div>
+          <div style={{background:C.surface2, borderRadius:10, padding:"12px 10px", textAlign:"center"}}>
+            <div style={{fontSize:22, fontWeight:800, color:"#f59e0b"}}>{over30}</div>
+            <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>Over 30 days</div>
+          </div>
+          <div style={{background:C.surface2, borderRadius:10, padding:"12px 10px", textAlign:"center"}}>
+            <div style={{fontSize:22, fontWeight:800, color:C.danger}}>{over60}</div>
+            <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>Over 60 days</div>
+          </div>
+        </div>
+      </section>
+
+      {outstanding.length === 0 ? (
+        <div style={S.empty}>
+          <div style={S.emptyIcon}>🧾</div>
+          <p style={S.emptyText}>No outstanding invoices. Jobs appear here once marked Completed with an invoice sent date entered.</p>
+        </div>
+      ) : (
+        <section style={S.section}>
+          <h2 style={S.h2}>Outstanding ({outstanding.length})</h2>
+          {outstanding.map(({job, sentDate, daysOut}) => (
+            <div key={job.id} style={{...S.schedJobCard, marginBottom:10, cursor:"pointer"}}
+              onClick={() => { setCurrentJob(job); setView("invoice"); }}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                <div style={{flex:1, minWidth:0, marginRight:8}}>
+                  <div style={S.schedJobName}>{job.clientName||"Unnamed"}</div>
+                  <div style={S.schedJobAddr}>{job.address||"No address"}</div>
+                  <div style={{fontSize:11, color:C.textMuted, marginTop:4}}>
+                    📅 Invoice sent {sentDate.toLocaleDateString()}
+                  </div>
+                </div>
+                <div style={{textAlign:"right", flexShrink:0}}>
+                  <div style={{fontSize:20, fontWeight:800, color:ageColor(daysOut)}}>{daysOut}</div>
+                  <div style={{fontSize:10, color:C.textMuted}}>days out</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+    </>
+  );
+}
+
+// ─── Reports View ─────────────────────────────────────────────────────────────
 function ReportsView({ jobs, rates, setCurrentJob, setView }) {
+  const [mode,          setMode]          = useState("profitability"); // "profitability" | "outstanding"
   const [filterStatuses, setFilterStatuses] = useState([]); // empty = all statuses
   const [pdfLoading,   setPdfLoading]   = useState(false);
 
@@ -2928,8 +3015,34 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
   return (
     <div style={S.page}>
       <h1 style={S.h1}>Reports</h1>
-      <p style={S.subhead}>Profitability across all jobs</p>
+      <p style={S.subhead}>{mode==="profitability" ? "Profitability across all jobs" : "Invoices sent but not yet paid"}</p>
 
+      {/* Mode toggle */}
+      <div style={{display:"flex", gap:8, marginBottom:16}}>
+        <button onClick={() => setMode("profitability")}
+          style={{
+            flex:1, padding:"8px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
+            background: mode==="profitability" ? C.accent : C.surface2,
+            color: mode==="profitability" ? "#000" : C.textMuted,
+            border: `1px solid ${mode==="profitability" ? C.accent : C.border}`,
+          }}>
+          📊 Profitability
+        </button>
+        <button onClick={() => setMode("outstanding")}
+          style={{
+            flex:1, padding:"8px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
+            background: mode==="outstanding" ? C.accent : C.surface2,
+            color: mode==="outstanding" ? "#000" : C.textMuted,
+            border: `1px solid ${mode==="outstanding" ? C.accent : C.border}`,
+          }}>
+          🧾 Outstanding Invoices
+        </button>
+      </div>
+
+      {mode === "outstanding" ? (
+        <OutstandingInvoicesSection jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>
+      ) : (
+      <>
       {/* Filters + print */}
       <section style={S.section}>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
@@ -3036,6 +3149,8 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
             );
           })}
         </section>
+      )}
+      </>
       )}
     </div>
   );
