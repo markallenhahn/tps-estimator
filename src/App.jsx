@@ -334,8 +334,8 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
           <>
             <div style={S.navDivider}/>
             <button onClick={() => setView("admin")}
-              data-active={view==="admin"||view==="permissions"||view==="export"?"true":"false"}
-              style={{...S.navTab,...((view==="admin"||view==="permissions"||view==="export")?S.navTabActive:{})}}>
+              data-active={["admin","permissions","export","homebase","rates"].includes(view)?"true":"false"}
+              style={{...S.navTab,...(["admin","permissions","export","homebase","rates"].includes(view)?S.navTabActive:{})}}>
               <span style={S.navTabIcon}>🛠</span>
               <span style={S.navTabLabel}>Admin</span>
             </button>
@@ -354,7 +354,7 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
 }
 
 // ─── Rates Editor ─────────────────────────────────────────────────────────────
-function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBase, syncHomeBase, setCurrentJob }) {
+function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob }) {
   const OTHER_RATE = {label:"Other", unit:"flat", rate:0, rateLabel:"flat $"};
 
   // Build the base rates to edit from — always include "other", and always
@@ -366,10 +366,6 @@ function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBa
 
   const [editing,   setEditing]   = useState({...baseRates});
   const [jobId,     setJobId]     = useState(currentJob?.id || null);
-
-  const [homeAddr,    setHomeAddr]    = useState(homeBase?.address || "");
-  const [savingHome,  setSavingHome]  = useState(false);
-  const [homeMsg,     setHomeMsg]     = useState("");
 
   // Only reset editing state when switching to a different job
   if (currentJob?.id !== jobId) {
@@ -406,22 +402,6 @@ function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBa
     }
   };
 
-  const saveHomeBase = async () => {
-    if (!homeAddr.trim()) { setHomeMsg("Enter an address first."); return; }
-    setSavingHome(true); setHomeMsg("");
-    try {
-      const geo = await geocodeAddress(homeAddr.trim());
-      if (!geo) { setHomeMsg("⚠️ Could not find that address. Check spelling and try again."); setSavingHome(false); return; }
-      const data = { address: homeAddr.trim(), lat: geo.lat, lng: geo.lng };
-      setHomeBase(data);
-      await syncHomeBase(data);
-      setHomeMsg("✅ Home base saved.");
-    } catch(e) {
-      setHomeMsg("⚠️ Something went wrong. Try again.");
-    }
-    setSavingHome(false);
-  };
-
   return (
     <div style={S.page}>
       <div style={S.pageHeader}><h1 style={S.h1}>Service Rates</h1></div>
@@ -436,27 +416,6 @@ function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBa
         <div style={{background:"#1a1a2a", border:"1px solid #2a2a4a", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:"#818cf8"}}>
           ℹ Editing default rates — applies to new jobs only. Open a job to edit its rates individually.
         </div>
-      )}
-      {!currentJob && (
-        <section style={S.section}>
-          <h2 style={S.h2}>🏠 Home Base (Route Start/End)</h2>
-          <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
-            Used as the starting and ending point for optimized routes on the Zones tab.
-          </p>
-          <label style={S.formLabel}>Address
-            <input type="text" value={homeAddr} onChange={e => setHomeAddr(e.target.value)}
-              style={S.input} placeholder="e.g. 110 Scipio Way, Stroudsburg, PA 18360"/>
-          </label>
-          {homeBase?.address && (
-            <div style={{fontSize:11, color:C.textMuted, marginTop:6}}>
-              Currently saved: {homeBase.address}
-            </div>
-          )}
-          {homeMsg && <div style={{fontSize:12, color: homeMsg.startsWith("⚠️") ? C.danger : C.green, marginTop:8}}>{homeMsg}</div>}
-          <button style={{...S.btnPrimary, marginTop:12, opacity:savingHome?0.6:1}} onClick={saveHomeBase} disabled={savingHome}>
-            {savingHome ? "Saving..." : "💾 Save Home Base"}
-          </button>
-        </section>
       )}
 
       <section style={S.section}>
@@ -495,6 +454,57 @@ function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBa
           <button style={S.btnPrimary} onClick={save}>💾 Save Rates</button>
           <button style={S.btnSecondary} onClick={reset}>↩ Reset</button>
         </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── Home Base View (admin only) ───────────────────────────────────────────────
+function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
+  const [homeAddr,   setHomeAddr]   = useState(homeBase?.address || "");
+  const [savingHome, setSavingHome] = useState(false);
+  const [homeMsg,    setHomeMsg]    = useState("");
+
+  const saveHomeBase = async () => {
+    if (!homeAddr.trim()) { setHomeMsg("Enter an address first."); return; }
+    setSavingHome(true); setHomeMsg("");
+    try {
+      const geo = await geocodeAddress(homeAddr.trim());
+      if (!geo) { setHomeMsg("⚠️ Could not find that address. Check spelling and try again."); setSavingHome(false); return; }
+      const data = { address: homeAddr.trim(), lat: geo.lat, lng: geo.lng };
+      setHomeBase(data);
+      await syncHomeBase(data);
+      setHomeMsg("✅ Home base saved.");
+    } catch(e) {
+      setHomeMsg("⚠️ Something went wrong. Try again.");
+    }
+    setSavingHome(false);
+  };
+
+  return (
+    <div style={S.page}>
+      <div style={S.pageHeader}>
+        <h1 style={S.h1}>🏠 Home Base</h1>
+        <button style={S.btnSecondary} onClick={() => setView("admin")}>← Admin</button>
+      </div>
+      <p style={S.subhead}>Route start/end point</p>
+      <section style={S.section}>
+        <p style={{fontSize:12, color:C.textMuted, marginTop:-4, marginBottom:12}}>
+          Used as the starting and ending point for optimized routes on the Zones tab.
+        </p>
+        <label style={S.formLabel}>Address
+          <input type="text" value={homeAddr} onChange={e => setHomeAddr(e.target.value)}
+            style={S.input} placeholder="e.g. 110 Scipio Way, Stroudsburg, PA 18360"/>
+        </label>
+        {homeBase?.address && (
+          <div style={{fontSize:11, color:C.textMuted, marginTop:6}}>
+            Currently saved: {homeBase.address}
+          </div>
+        )}
+        {homeMsg && <div style={{fontSize:12, color: homeMsg.startsWith("⚠️") ? C.danger : C.green, marginTop:8}}>{homeMsg}</div>}
+        <button style={{...S.btnPrimary, marginTop:12, opacity:savingHome?0.6:1}} onClick={saveHomeBase} disabled={savingHome}>
+          {savingHome ? "Saving..." : "💾 Save Home Base"}
+        </button>
       </section>
     </div>
   );
@@ -3352,7 +3362,8 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 function AdminHubView({ setView, setCurrentJob }) {
   const cards = [
     { key:"permissions", icon:"🔐", title:"Permissions", desc:"Control what each role can see and edit across every tab." },
-    { key:"rates",       icon:"⚙️", title:"Rates & Home Base", desc:"Service pricing defaults and the start/end address for route optimization." },
+    { key:"rates",       icon:"⚙️", title:"Rates", desc:"Default service pricing used for new jobs." },
+    { key:"homebase",    icon:"🏠", title:"Home Base", desc:"The start/end address used for route optimization on the Zones tab." },
     { key:"export",      icon:"📦", title:"Data Export", desc:"Download full CSV exports of jobs, costs, and labor — including addresses." },
   ];
   const openCard = (key) => {
@@ -4923,7 +4934,7 @@ export default function App() {
   // If the active view isn't allowed for this role, fall back to jobs.
   // "export", "permissions", "team" stay admin-only regardless of the configurable matrix.
   useEffect(() => {
-    const alwaysAdminOnly = ["export","permissions","admin"];
+    const alwaysAdminOnly = ["export","permissions","admin","homebase"];
     if (alwaysAdminOnly.includes(view) && userRole !== "admin") { setView("jobs"); return; }
     if (view === "team" && userRole !== "admin" && userRole !== "manager") { setView("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
@@ -5232,7 +5243,8 @@ export default function App() {
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setCurrentJob={setCurrentJob}/>}
+        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
+        {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
         {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob}/>}
         {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={setView}/>}
