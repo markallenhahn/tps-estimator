@@ -371,11 +371,16 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob }) {
   const [editing,   setEditing]   = useState({...baseRates});
   const [jobId,     setJobId]     = useState(currentJob?.id || null);
 
-  // Only reset editing state when switching to a different job
-  if (currentJob?.id !== jobId) {
-    setJobId(currentJob?.id || null);
-    setEditing({...baseRates});
-  }
+  // Only reset editing state when switching to a different job.
+  // This must run in an effect, not directly in the render body — calling
+  // setState synchronously during render can throw React error #301 if the
+  // render gets interrupted/discarded (e.g. rapid navigation).
+  useEffect(() => {
+    if (currentJob?.id !== jobId) {
+      setJobId(currentJob?.id || null);
+      setEditing({...baseRates});
+    }
+  }, [currentJob?.id]);
 
   const save = () => {
     for (const [k,v] of Object.entries(editing)) {
