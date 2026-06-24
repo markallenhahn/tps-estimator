@@ -284,7 +284,6 @@ const ALL_TABS  = [
   {key:"invoice",  label:"Invoice",  icon:"🧾"},
   {key:"labor",    label:"Labor",    icon:"👷"},
   {key:"reports",  label:"Reports",  icon:"📊"},
-  {key:"rates",    label:"Rates",    icon:"⚙️"},
   {key:"team",     label:"Team",     icon:"👥"},
 ];
 const ROLE_LABELS = { estimator:"Estimator", crew:"Crew", crewlead:"Crew Lead", manager:"Manager", admin:"Admin" };
