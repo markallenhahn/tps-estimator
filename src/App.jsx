@@ -357,10 +357,12 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
 function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBase, syncHomeBase, setCurrentJob }) {
   const OTHER_RATE = {label:"Other", unit:"flat", rate:0, rateLabel:"flat $"};
 
-  // Build the base rates to edit from — always include "other"
+  // Build the base rates to edit from — always include "other", and always
+  // backfill any missing service keys from DEFAULT_RATES so a malformed or
+  // partial rates object on an old job can never crash this screen.
   const baseRates = currentJob?.rates
-    ? {...currentJob.rates, other: currentJob.rates.other || OTHER_RATE}
-    : {...rates, other: rates.other || OTHER_RATE};
+    ? {...DEFAULT_RATES, ...currentJob.rates, other: currentJob.rates.other || OTHER_RATE}
+    : {...DEFAULT_RATES, ...rates, other: rates?.other || OTHER_RATE};
 
   const [editing,   setEditing]   = useState({...baseRates});
   const [jobId,     setJobId]     = useState(currentJob?.id || null);
@@ -460,7 +462,9 @@ function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBa
       <section style={S.section}>
         <h2 style={S.h2}>Adjust Pricing</h2>
         <div style={S.ratesTable}>
-          {Object.entries(editing).map(([key, svc]) => (
+          {Object.entries(editing).map(([key, svc]) => {
+            if (!svc) return null;
+            return (
             <div key={key} style={S.rateRow}>
               <div style={S.rateName}>{svc.label}</div>
               <div style={S.rateUnit}>
@@ -474,7 +478,8 @@ function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBa
                 <span style={S.rateUnitLabel}>{svc.rateLabel}</span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
         <div style={S.formulaBox}>
           <div style={S.formulaTitle}>🧮 Patching Formula</div>
@@ -3344,18 +3349,22 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 // ─── Team View (admin only) ────────────────────────────────────────────────────
 // ─── Permissions View (admin only) ─────────────────────────────────────────────
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
-function AdminHubView({ setView }) {
+function AdminHubView({ setView, setCurrentJob }) {
   const cards = [
     { key:"permissions", icon:"🔐", title:"Permissions", desc:"Control what each role can see and edit across every tab." },
     { key:"rates",       icon:"⚙️", title:"Rates & Home Base", desc:"Service pricing defaults and the start/end address for route optimization." },
     { key:"export",      icon:"📦", title:"Data Export", desc:"Download full CSV exports of jobs, costs, and labor — including addresses." },
   ];
+  const openCard = (key) => {
+    if (key === "rates" && setCurrentJob) setCurrentJob(null); // always land on global rates from here
+    setView(key);
+  };
   return (
     <div style={S.page}>
       <h1 style={S.h1}>Admin</h1>
       <p style={S.subhead}>Company-wide settings and tools</p>
       {cards.map(c => (
-        <button key={c.key} onClick={() => setView(c.key)}
+        <button key={c.key} onClick={() => openCard(c.key)}
           style={{...S.section, display:"flex", alignItems:"center", gap:14, width:"100%", textAlign:"left", cursor:"pointer"}}>
           <div style={{fontSize:28, flexShrink:0}}>{c.icon}</div>
           <div style={{flex:1}}>
@@ -5225,7 +5234,7 @@ export default function App() {
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setCurrentJob={setCurrentJob}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
-        {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView}/>}
+        {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob}/>}
         {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={setView}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView} onLogout={handleLogout}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
