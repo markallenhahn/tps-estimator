@@ -284,6 +284,7 @@ const ALL_TABS  = [
   {key:"invoice",  label:"Invoice",  icon:"🧾"},
   {key:"labor",    label:"Labor",    icon:"👷"},
   {key:"reports",  label:"Reports",  icon:"📊"},
+  {key:"rates",    label:"Rates",    icon:"⚙️"},
   {key:"team",     label:"Team",     icon:"👥"},
 ];
 const ROLE_LABELS = { estimator:"Estimator", crew:"Crew", crewlead:"Crew Lead", manager:"Manager", admin:"Admin" };
@@ -337,8 +338,8 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
           <>
             <div style={S.navDivider}/>
             <button onClick={() => setView("admin")}
-              data-active={["admin","permissions","export","homebase","rates"].includes(view)?"true":"false"}
-              style={{...S.navTab,...(["admin","permissions","export","homebase","rates"].includes(view)?S.navTabActive:{})}}>
+              data-active={["admin","permissions","export","homebase"].includes(view)?"true":"false"}
+              style={{...S.navTab,...(["admin","permissions","export","homebase"].includes(view)?S.navTabActive:{})}}>
               <span style={S.navTabIcon}>🛠</span>
               <span style={S.navTabLabel}>Admin</span>
             </button>
@@ -3365,14 +3366,10 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 function AdminHubView({ setView, setCurrentJob }) {
   const cards = [
     { key:"permissions", icon:"🔐", title:"Permissions", desc:"Control what each role can see and edit across every tab." },
-    { key:"rates",       icon:"⚙️", title:"Rates", desc:"Default service pricing used for new jobs." },
     { key:"homebase",    icon:"🏠", title:"Home Base", desc:"The start/end address used for route optimization on the Zones tab." },
     { key:"export",      icon:"📦", title:"Data Export", desc:"Download full CSV exports of jobs, costs, and labor — including addresses." },
   ];
-  const openCard = (key) => {
-    if (key === "rates" && setCurrentJob) setCurrentJob(null); // always land on global rates from here
-    setView(key);
-  };
+  const openCard = (key) => setView(key);
   return (
     <div style={S.page}>
       <h1 style={S.h1}>Admin</h1>
@@ -4937,7 +4934,7 @@ export default function App() {
   // If the active view isn't allowed for this role, fall back to jobs.
   // "export", "permissions", "team" stay admin-only regardless of the configurable matrix.
   useEffect(() => {
-    const alwaysAdminOnly = ["export","permissions","admin","homebase","rates"];
+    const alwaysAdminOnly = ["export","permissions","admin","homebase"];
     if (alwaysAdminOnly.includes(view) && userRole !== "admin") { setView("jobs"); return; }
     if (view === "team" && userRole !== "admin" && userRole !== "manager") { setView("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
@@ -5246,7 +5243,7 @@ export default function App() {
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="rates"    && userRole==="admin" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
+        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
         {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob}/>}
