@@ -355,7 +355,7 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
 }
 
 // ─── Rates Editor ─────────────────────────────────────────────────────────────
-function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBase, syncHomeBase }) {
+function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBase, syncHomeBase, setCurrentJob }) {
   const OTHER_RATE = {label:"Other", unit:"flat", rate:0, rateLabel:"flat $"};
 
   // Build the base rates to edit from — always include "other"
@@ -425,8 +425,11 @@ function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBa
     <div style={S.page}>
       <div style={S.pageHeader}><h1 style={S.h1}>Service Rates</h1></div>
       {currentJob ? (
-        <div style={{background:"#1a2a1a", border:"1px solid #2a4a2a", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:C.green}}>
-          ✎ Editing rates for <strong>{currentJob.clientName||"this job"}</strong> only — does not affect other jobs or defaults.
+        <div style={{background:"#1a2a1a", border:"1px solid #2a4a2a", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:C.green, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap"}}>
+          <span>✎ Editing rates for <strong>{currentJob.clientName||"this job"}</strong> only — does not affect other jobs or defaults.</span>
+          <button style={{...S.btnSecondary, fontSize:11, padding:"4px 10px", flexShrink:0}} onClick={() => setCurrentJob && setCurrentJob(null)}>
+            🌐 Switch to Global Rates
+          </button>
         </div>
       ) : (
         <div style={{background:"#1a1a2a", border:"1px solid #2a2a4a", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:"#818cf8"}}>
@@ -5151,7 +5154,7 @@ export default function App() {
     });
   };
 
-  const setCurrentJob = job => setCurrentJobId(job.id);
+  const setCurrentJob = job => setCurrentJobId(job ? job.id : null);
 
   const handleSetRates = (r) => { setRates(r); syncRates(r); };
 
@@ -5221,7 +5224,7 @@ export default function App() {
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase}/>}
+        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setCurrentJob={setCurrentJob}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
         {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView}/>}
         {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={setView}/>}
