@@ -2047,9 +2047,10 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
   const getDirectionsUrlMulti = (stops) => {
     if (!stops.length) return "#";
     const waypoints = stops.map(j => j.id==="home" && homeBase?.address ? encodeURIComponent(homeBase.address) : encodeURIComponent(fullAddressOf(j)));
+    const origin = waypoints[0];
     const destination = waypoints[waypoints.length - 1];
     const middle = waypoints.slice(1, -1).join("|");
-    let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
     if (middle) url += `&waypoints=${middle}`;
     return url;
   };
