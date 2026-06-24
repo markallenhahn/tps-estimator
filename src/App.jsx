@@ -2765,17 +2765,19 @@ function optimizeRouteCore(points, anchor = null) {
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
 function ReportsView({ jobs, rates, setCurrentJob, setView }) {
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterStatuses, setFilterStatuses] = useState([]); // empty = all statuses
   const [pdfLoading,   setPdfLoading]   = useState(false);
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
+  const STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
+  const statusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
   // Filter jobs that have any revenue
   const reportJobs = jobs
     .filter(j => {
       const f = calcJobFinancials(j, allRates);
       if (f.revenue === 0) return false;
-      if (filterStatus !== "all" && j.status !== filterStatus) return false;
+      if (filterStatuses.length > 0 && !filterStatuses.includes(j.status)) return false;
       return true;
     })
     .sort((a,b) => (b.date||"").localeCompare(a.date||""));
@@ -2824,6 +2826,10 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
       doc.text("PROFITABILITY REPORT", PW/2, y, {align:"center"}); y+=10;
       doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
       doc.text("Generated "+new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}), PW/2, y+8, {align:"center"}); y+=22;
+      if (filterStatuses.length > 0) {
+        doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+        doc.text("Filtered to: " + filterStatuses.map(statusLabel).join(", "), PW/2, y, {align:"center"}); y+=14;
+      }
 
       // Summary box
       doc.setFillColor(...LGRAY); doc.setDrawColor(...MGRAY); doc.setLineWidth(0.5);
@@ -2916,7 +2922,8 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
     setPdfLoading(false);
   };
 
-  const STATUS_OPTS = ["all","estimate","draft","sent","signed","scheduled","completed","paid","lost"];
+  const toggleStatus = (s) => setFilterStatuses(prev => prev.includes(s) ? prev.filter(x=>x!==s) : [...prev, s]);
+  const clearStatusFilter = () => setFilterStatuses([]);
 
   return (
     <div style={S.page}>
@@ -2925,19 +2932,37 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
 
       {/* Filters + print */}
       <section style={S.section}>
-        <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
-          <label style={{...S.formLabel, flex:1, minWidth:120, margin:0}}>
-            Filter by Status
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
-              style={{...S.input, marginTop:4}}>
-              {STATUS_OPTS.map(s=><option key={s} value={s}>{s==="all"?"All Jobs":s==="estimate"?"Estimate":s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
-            </select>
-          </label>
-          <button style={{...S.btnPrimary, alignSelf:"flex-end", opacity:pdfLoading?.5:1}}
-            onClick={printReport} disabled={pdfLoading}>
-            {pdfLoading?"⏳ Generating...":"📄 Download PDF"}
-          </button>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+          <h2 style={{...S.h2, margin:0}}>Filter by Status</h2>
+          {filterStatuses.length > 0 && (
+            <button style={{...S.btnSecondary, fontSize:11, padding:"4px 10px"}} onClick={clearStatusFilter}>
+              ✕ Clear ({filterStatuses.length})
+            </button>
+          )}
         </div>
+        <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:14}}>
+          {STATUS_OPTS.map(s => {
+            const selected = filterStatuses.includes(s);
+            return (
+              <button key={s} onClick={() => toggleStatus(s)}
+                style={{
+                  fontSize:12, fontWeight:600, padding:"6px 12px", borderRadius:20, cursor:"pointer",
+                  background: selected ? "#14532d" : C.surface2,
+                  color: selected ? "#4ade80" : C.textMuted,
+                  border: `1px solid ${selected ? "#4ade80" : C.border}`,
+                }}>
+                {selected ? "✓ " : ""}{statusLabel(s)}
+              </button>
+            );
+          })}
+        </div>
+        <p style={{fontSize:11, color:C.textDim, marginTop:-6, marginBottom:14}}>
+          {filterStatuses.length === 0 ? "No filter selected — showing all statuses." : `Showing: ${filterStatuses.map(statusLabel).join(", ")}`}
+        </p>
+        <button style={{...S.btnPrimary, width:"100%", opacity:pdfLoading?.5:1}}
+          onClick={printReport} disabled={pdfLoading}>
+          {pdfLoading?"⏳ Generating...":"📄 Download PDF"}
+        </button>
       </section>
 
       {/* Summary cards */}
