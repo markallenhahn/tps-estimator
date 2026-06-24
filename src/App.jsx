@@ -309,8 +309,6 @@ function getAccessLevel(permissions, tabKey, role) {
 
 function TopNav({ view, setView, userRole, permissions, onLogout }) {
   const tabsRef = useRef(null);
-  const tapCountRef = useRef(0);
-  const tapTimerRef = useRef(null);
   const tabs = ALL_TABS.filter(t => getAccessLevel(permissions, t.key, userRole) !== "hidden");
 
   useEffect(() => {
@@ -319,21 +317,9 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
     if (activeBtn) activeBtn.scrollIntoView({behavior:"smooth", block:"nearest", inline:"center"});
   }, [view]);
 
-  const handleLogoTap = () => {
-    if (userRole !== "admin") return; // secret export is admin-only
-    tapCountRef.current += 1;
-    clearTimeout(tapTimerRef.current);
-    if (tapCountRef.current >= 5) {
-      tapCountRef.current = 0;
-      setView("export");
-      return;
-    }
-    tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 1500);
-  };
-
   return (
     <nav style={S.nav}>
-      <div style={S.navBrand} onClick={handleLogoTap}>
+      <div style={S.navBrand}>
         <img src={"data:image/png;base64," + LOGO_B64} alt="TPS" style={{height:32, width:"auto", display:"block"}}/>
       </div>
       <div ref={tabsRef} className="tps-nav-tabs" style={S.navTabs}>
@@ -348,11 +334,11 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
         {userRole === "admin" && (
           <>
             <div style={S.navDivider}/>
-            <button onClick={() => setView("permissions")}
-              data-active={view==="permissions"?"true":"false"}
-              style={{...S.navTab,...(view==="permissions"?S.navTabActive:{})}}>
-              <span style={S.navTabIcon}>🔐</span>
-              <span style={S.navTabLabel}>Permissions</span>
+            <button onClick={() => setView("admin")}
+              data-active={view==="admin"||view==="permissions"||view==="export"?"true":"false"}
+              style={{...S.navTab,...((view==="admin"||view==="permissions"||view==="export")?S.navTabActive:{})}}>
+              <span style={S.navTabIcon}>🛠</span>
+              <span style={S.navTabLabel}>Admin</span>
             </button>
           </>
         )}
@@ -369,7 +355,7 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
 }
 
 // ─── Rates Editor ─────────────────────────────────────────────────────────────
-function RatesView({ rates, setRates, currentJob, updateJob }) {
+function RatesView({ rates, setRates, currentJob, updateJob, homeBase, setHomeBase, syncHomeBase }) {
   const OTHER_RATE = {label:"Other", unit:"flat", rate:0, rateLabel:"flat $"};
 
   // Build the base rates to edit from — always include "other"
@@ -379,6 +365,10 @@ function RatesView({ rates, setRates, currentJob, updateJob }) {
 
   const [editing,   setEditing]   = useState({...baseRates});
   const [jobId,     setJobId]     = useState(currentJob?.id || null);
+
+  const [homeAddr,    setHomeAddr]    = useState(homeBase?.address || "");
+  const [savingHome,  setSavingHome]  = useState(false);
+  const [homeMsg,     setHomeMsg]     = useState("");
 
   // Only reset editing state when switching to a different job
   if (currentJob?.id !== jobId) {
@@ -415,6 +405,22 @@ function RatesView({ rates, setRates, currentJob, updateJob }) {
     }
   };
 
+  const saveHomeBase = async () => {
+    if (!homeAddr.trim()) { setHomeMsg("Enter an address first."); return; }
+    setSavingHome(true); setHomeMsg("");
+    try {
+      const geo = await geocodeAddress(homeAddr.trim());
+      if (!geo) { setHomeMsg("⚠️ Could not find that address. Check spelling and try again."); setSavingHome(false); return; }
+      const data = { address: homeAddr.trim(), lat: geo.lat, lng: geo.lng };
+      setHomeBase(data);
+      await syncHomeBase(data);
+      setHomeMsg("✅ Home base saved.");
+    } catch(e) {
+      setHomeMsg("⚠️ Something went wrong. Try again.");
+    }
+    setSavingHome(false);
+  };
+
   return (
     <div style={S.page}>
       <div style={S.pageHeader}><h1 style={S.h1}>Service Rates</h1></div>
@@ -427,6 +433,28 @@ function RatesView({ rates, setRates, currentJob, updateJob }) {
           ℹ Editing default rates — applies to new jobs only. Open a job to edit its rates individually.
         </div>
       )}
+      {!currentJob && (
+        <section style={S.section}>
+          <h2 style={S.h2}>🏠 Home Base (Route Start/End)</h2>
+          <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
+            Used as the starting and ending point for optimized routes on the Zones tab.
+          </p>
+          <label style={S.formLabel}>Address
+            <input type="text" value={homeAddr} onChange={e => setHomeAddr(e.target.value)}
+              style={S.input} placeholder="e.g. 110 Scipio Way, Stroudsburg, PA 18360"/>
+          </label>
+          {homeBase?.address && (
+            <div style={{fontSize:11, color:C.textMuted, marginTop:6}}>
+              Currently saved: {homeBase.address}
+            </div>
+          )}
+          {homeMsg && <div style={{fontSize:12, color: homeMsg.startsWith("⚠️") ? C.danger : C.green, marginTop:8}}>{homeMsg}</div>}
+          <button style={{...S.btnPrimary, marginTop:12, opacity:savingHome?0.6:1}} onClick={saveHomeBase} disabled={savingHome}>
+            {savingHome ? "Saving..." : "💾 Save Home Base"}
+          </button>
+        </section>
+      )}
+
       <section style={S.section}>
         <h2 style={S.h2}>Adjust Pricing</h2>
         <div style={S.ratesTable}>
@@ -1795,7 +1823,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
 
 // ─── Schedule View ────────────────────────────────────────────────────────────
 // ─── Zones View (route optimization) ───────────────────────────────────────────
-function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView }) {
+function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, homeBase }) {
   const [tab,           setTab]           = useState("list"); // "list" | "map" | "import"
   const [calculating,   setCalculating]   = useState(false);
   const [calcProgress,  setCalcProgress]  = useState("");
@@ -1982,16 +2010,18 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView })
     const zoneJobs = jobs.filter(j => zone.jobIds.includes(j.id) && j.geoLat && j.geoLng);
     if (zoneJobs.length === 0) { alert("No geocoded jobs in this zone yet."); return; }
     const points = zoneJobs.map(j => ({ lat: j.geoLat, lng: j.geoLng, job: j }));
-    const ordered = optimizeRoute(points);
+    const base = homeBase?.lat && homeBase?.lng
+      ? { lat: homeBase.lat, lng: homeBase.lng, job: { id:"home", clientName:"Home Base", address: homeBase.address } }
+      : null;
+    const ordered = optimizeRoute(points, base);
     setOptimizedRoute(ordered.map(p => p.job));
     setSelectedZoneId(zoneId);
   };
 
   const getDirectionsUrlMulti = (stops) => {
     if (!stops.length) return "#";
-    const waypoints = stops.map(j => encodeURIComponent(fullAddressOf(j)));
+    const waypoints = stops.map(j => j.id==="home" && homeBase?.address ? encodeURIComponent(homeBase.address) : encodeURIComponent(fullAddressOf(j)));
     const destination = waypoints[waypoints.length - 1];
-    const origin = waypoints[0];
     const middle = waypoints.slice(1, -1).join("|");
     let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
     if (middle) url += `&waypoints=${middle}`;
@@ -2118,11 +2148,19 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView })
                       <div style={{marginTop:12, paddingTop:12, borderTop:`1px solid ${C.border}`}}>
                         <div style={{fontSize:13, fontWeight:700, marginBottom:8}}>Optimized Route Order</div>
                         {optimizedRoute.map((j, idx) => (
-                          <div key={j.id} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
-                            <div style={{width:22, height:22, borderRadius:"50%", background:ZONE_COLORS[i],
-                              color:"#000", fontSize:11, fontWeight:800, display:"flex", alignItems:"center",
-                              justifyContent:"center", flexShrink:0}}>{idx+1}</div>
-                            <div style={{flex:1, fontSize:13}}>{j.clientName||"Unnamed"} — {fullAddressOf(j)}</div>
+                          <div key={j.id+"-"+idx} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
+                            {j.id === "home" ? (
+                              <div style={{width:22, height:22, borderRadius:"50%", background:C.surface2,
+                                border:`1px solid ${C.border}`, display:"flex", alignItems:"center",
+                                justifyContent:"center", flexShrink:0, fontSize:12}}>🏠</div>
+                            ) : (
+                              <div style={{width:22, height:22, borderRadius:"50%", background:ZONE_COLORS[i],
+                                color:"#000", fontSize:11, fontWeight:800, display:"flex", alignItems:"center",
+                                justifyContent:"center", flexShrink:0}}>{idx}</div>
+                            )}
+                            <div style={{flex:1, fontSize:13, fontStyle: j.id==="home" ? "italic" : "normal", color: j.id==="home" ? C.textMuted : C.text}}>
+                              {j.id === "home" ? "Home Base — " + (j.address||"") : (j.clientName||"Unnamed") + " — " + fullAddressOf(j)}
+                            </div>
                           </div>
                         ))}
                         <a href={getDirectionsUrlMulti(optimizedRoute)} target="_blank" rel="noopener noreferrer"
@@ -2207,10 +2245,9 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView })
 
 // ─── Zones Map View (Leaflet, sandboxed iframe approach) ───────────────────────
 function ZonesMapView({ jobs, zones, zoneColors, fullAddressOf }) {
-  const iframeRef = useRef(null);
+  const [mapHtml, setMapHtml] = useState("");
 
   useEffect(() => {
-    if (!iframeRef.current) return;
     const zonesList = zones?.list || [];
     const markers = [];
 
@@ -2235,32 +2272,33 @@ function ZonesMapView({ jobs, zones, zoneColors, fullAddressOf }) {
 <html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<style>html,body,#map{margin:0;padding:0;width:100%;height:100%}</style>
+<style>html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#1a1a1a}</style>
 </head><body>
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const MARKERS = ${markersJson};
-const map = L.map('map').setView([41.05,-75.35],10);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
-const bounds = [];
-MARKERS.forEach(m => {
-  bounds.push([m.lat,m.lng]);
-  const size = m.isCentroid ? 18 : 14;
-  const icon = L.divIcon({
-    className:'',
-    html:'<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+m.color+';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)'+(m.isCentroid?';display:flex;align-items:center;justify-content:center;font-size:10px':'')+'">'+(m.isCentroid?'★':'')+'</div>',
-    iconSize:[size,size],iconAnchor:[size/2,size/2]
+try {
+  const MARKERS = ${markersJson};
+  const map = L.map('map').setView([41.05,-75.35],10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
+  const bounds = [];
+  MARKERS.forEach(m => {
+    bounds.push([m.lat,m.lng]);
+    const size = m.isCentroid ? 18 : 14;
+    const icon = L.divIcon({
+      className:'',
+      html:'<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+m.color+';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)'+(m.isCentroid?';display:flex;align-items:center;justify-content:center;font-size:10px':'')+'">'+(m.isCentroid?'★':'')+'</div>',
+      iconSize:[size,size],iconAnchor:[size/2,size/2]
+    });
+    L.marker([m.lat,m.lng],{icon}).addTo(map).bindPopup('<b>'+m.label+'</b><br><span style="color:#888">'+m.zone+'</span>');
   });
-  L.marker([m.lat,m.lng],{icon}).addTo(map).bindPopup('<b>'+m.label+'</b><br><span style="color:#888">'+m.zone+'</span>');
-});
-if(bounds.length>0) map.fitBounds(bounds,{padding:[30,30],maxZoom:13});
+  if(bounds.length>0) map.fitBounds(bounds,{padding:[30,30],maxZoom:13});
+} catch(e) {
+  document.body.innerHTML = '<div style="color:#fff;font-family:sans-serif;padding:20px;text-align:center">Map failed to load: '+e.message+'</div>';
+}
 </script></body></html>`;
 
-    const blob = new Blob([html], {type:"text/html"});
-    const url  = URL.createObjectURL(blob);
-    iframeRef.current.src = url;
-    return () => URL.revokeObjectURL(url);
+    setMapHtml(html);
   }, [jobs, zones]);
 
   return (
@@ -2271,8 +2309,8 @@ if(bounds.length>0) map.fitBounds(bounds,{padding:[30,30],maxZoom:13});
       ) : (
         <>
           <div style={{borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}`, height:380}}>
-            <iframe ref={iframeRef} style={{width:"100%", height:"100%", border:"none"}}
-              title="Zones map" sandbox="allow-scripts allow-same-origin allow-popups"/>
+            <iframe srcDoc={mapHtml} style={{width:"100%", height:"100%", border:"none"}}
+              title="Zones map" sandbox="allow-scripts allow-popups"/>
           </div>
           <div style={{display:"flex", flexWrap:"wrap", gap:12, marginTop:12}}>
             {zones.list.map((z,i) => (
@@ -2625,11 +2663,29 @@ function findOverflowPoints(points, clusters, thresholdMiles = 25) {
 }
 
 // Nearest-neighbor + 2-opt route ordering for a single day's stops
-function optimizeRoute(points) {
-  if (points.length <= 2) return points;
-  // Nearest-neighbor construction
+// Nearest-neighbor + 2-opt route ordering. If homeBase is provided, the route
+// always starts and ends there (a real round trip) — only the stops between
+// are reordered for efficiency.
+function optimizeRoute(points, homeBase = null) {
+  if (!homeBase) {
+    if (points.length <= 2) return points;
+    return optimizeRouteCore(points);
+  }
+  if (points.length === 0) return [homeBase, homeBase];
+  const ordered = points.length <= 1 ? points : optimizeRouteCore(points, homeBase);
+  return [homeBase, ...ordered, homeBase];
+}
+
+function optimizeRouteCore(points, anchor = null) {
+  if (points.length <= 2 && !anchor) return points;
   const remaining = [...points];
-  const route = [remaining.shift()];
+  // Start from the point nearest the anchor (home base) if given, else the first point
+  let startIdx = 0;
+  if (anchor) {
+    let bestDist = Infinity;
+    remaining.forEach((p, i) => { const d = haversine(anchor, p); if (d < bestDist) { bestDist = d; startIdx = i; } });
+  }
+  const route = [remaining.splice(startIdx, 1)[0]];
   while (remaining.length) {
     const last = route[route.length - 1];
     let bestIdx = 0, bestDist = Infinity;
@@ -3243,7 +3299,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
             </label>
             <label style={{...S.formLabel, marginTop:10}}>Date of Birth
               <input type="date" value={dob} onChange={e => setDob(e.target.value)}
-                style={{...S.input, color:C.text, colorScheme:"dark", maxWidth:"100%", minWidth:0, width:"100%", display:"block"}}/>
+                style={{...S.input, marginBottom:0}}/>
             </label>
             {profileErr && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{profileErr}</div>}
             {profileMsg && <div style={{color:C.green, fontSize:13, marginTop:10}}>{profileMsg}</div>}
@@ -3285,6 +3341,33 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 
 // ─── Team View (admin only) ────────────────────────────────────────────────────
 // ─── Permissions View (admin only) ─────────────────────────────────────────────
+// ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
+function AdminHubView({ setView }) {
+  const cards = [
+    { key:"permissions", icon:"🔐", title:"Permissions", desc:"Control what each role can see and edit across every tab." },
+    { key:"rates",       icon:"⚙️", title:"Rates & Home Base", desc:"Service pricing defaults and the start/end address for route optimization." },
+    { key:"export",      icon:"📦", title:"Data Export", desc:"Download full CSV exports of jobs, costs, and labor — including addresses." },
+  ];
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Admin</h1>
+      <p style={S.subhead}>Company-wide settings and tools</p>
+      {cards.map(c => (
+        <button key={c.key} onClick={() => setView(c.key)}
+          style={{...S.section, display:"flex", alignItems:"center", gap:14, width:"100%", textAlign:"left", cursor:"pointer"}}>
+          <div style={{fontSize:28, flexShrink:0}}>{c.icon}</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700, fontSize:15, marginBottom:3}}>{c.title}</div>
+            <div style={{fontSize:12, color:C.textMuted}}>{c.desc}</div>
+          </div>
+          <div style={{color:C.textMuted, fontSize:18}}>›</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Permissions View (admin only) ─────────────────────────────────────────────
 function PermissionsView({ permissions, setPermissions, syncPermissions, setView }) {
   const [editing, setEditing] = useState(() => JSON.parse(JSON.stringify(permissions || DEFAULT_PERMISSIONS)));
   const [saving,  setSaving]  = useState(false);
@@ -3317,7 +3400,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
     <div style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>Permissions</h1>
-        <button style={S.btnSecondary} onClick={() => setView("jobs")}>✕ Close</button>
+        <button style={S.btnSecondary} onClick={() => setView("admin")}>← Admin</button>
       </div>
       <p style={S.subhead}>Tap a cell to cycle Hidden → View → Edit, for each role and tab</p>
 
@@ -3786,10 +3869,10 @@ function ExportView({ jobs, laborEntries, rates, setView }) {
   return (
     <div style={S.page}>
       <div style={S.pageHeader}>
-        <h1 style={S.h1}>🔓 Data Export</h1>
-        <button style={S.btnSecondary} onClick={() => setView("jobs")}>✕ Close</button>
+        <h1 style={S.h1}>Data Export</h1>
+        <button style={S.btnSecondary} onClick={() => setView("admin")}>← Admin</button>
       </div>
-      <p style={S.subhead}>Hidden export tools — full data dumps including addresses</p>
+      <p style={S.subhead}>Full data dumps including addresses</p>
 
       <section style={S.section}>
         <h2 style={S.h2}>Export CSV Files</h2>
@@ -3823,7 +3906,7 @@ function ExportView({ jobs, laborEntries, rates, setView }) {
 
 // ─── Jobs List ────────────────────────────────────────────────────────────────
 function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById, userRole, userId, crews }) {
-  const [showArchive, setShowArchive] = useState(false);
+  const [openSections, setOpenSections] = useState({});
 
   // ── Visibility scoping ──
   // Admin/Manager: see everything. Crew Lead: self + their crew's members.
@@ -3852,12 +3935,17 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
   const ARCHIVE_STATUSES = ["completed","paid","lost"];
   const safeStatus = (s) => (s && STATUS_ORDER.includes(s)) ? s : "estimate";
 
-  const activeJobs = visibleJobs
-    .filter(j => !ARCHIVE_STATUSES.includes(safeStatus(j.status)))
-    .sort((a,b) => STATUS_ORDER.indexOf(safeStatus(a.status)) - STATUS_ORDER.indexOf(safeStatus(b.status)));
-  const archivedJobs = visibleJobs
-    .filter(j => ARCHIVE_STATUSES.includes(safeStatus(j.status)))
-    .sort((a,b) => STATUS_ORDER.indexOf(safeStatus(a.status)) - STATUS_ORDER.indexOf(safeStatus(b.status)));
+  // ── "My Jobs" — assigned to me, my crew, or (for admin/manager) unassigned ──
+  const myJobs = (() => {
+    if (userRole === "admin" || userRole === "manager") {
+      return visibleJobs.filter(j => !j.assignedTo);
+    }
+    if (userRole === "crewlead") {
+      const allowedIds = new Set([userId, ...myCrewMemberIds]);
+      return visibleJobs.filter(j => j.assignedTo && allowedIds.has(j.assignedTo));
+    }
+    return visibleJobs.filter(j => j.assignedTo === userId);
+  })().sort((a,b) => STATUS_ORDER.indexOf(safeStatus(a.status)) - STATUS_ORDER.indexOf(safeStatus(b.status)));
 
   const renderCard = (j, isArchived) => (
     <div key={j.id} style={S.jobCard}>
@@ -3939,30 +4027,60 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
         <h1 style={S.h1}>Jobs</h1>
         <button onClick={create} style={S.btnPrimary}>+ New Job</button>
       </div>
-      {activeJobs.length === 0 && (
+      {visibleJobs.length === 0 && (
         <div style={S.empty}>
           <div style={S.emptyIcon}>📋</div>
-          <p style={S.emptyText}>No active jobs. Tap <strong>+ New Job</strong> to start.</p>
+          <p style={S.emptyText}>No jobs yet. Tap <strong>+ New Job</strong> to start.</p>
         </div>
       )}
-      <div style={S.cardGrid}>{activeJobs.map(j => renderCard(j, false))}</div>
-      {archivedJobs.length > 0 && (
-        <div style={{marginTop:24}}>
-          <button style={{...S.btnSecondary, width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center"}}
-            onClick={() => setShowArchive(v => !v)}>
-            <span>🗄 Archive ({archivedJobs.length} job{archivedJobs.length!==1?"s":""})</span>
-            <span>{showArchive ? "▲" : "▼"}</span>
-          </button>
-          {showArchive && (
-            <div style={{marginTop:12}}>
-              <div style={{fontSize:12, color:C.textMuted, marginBottom:8}}>
-                Completed, paid, and lost jobs. Tap Restore to move back to active.
+      {myJobs.length > 0 && (() => {
+        const isOpen = openSections["__my_jobs"] ?? true;
+        return (
+          <div style={{marginBottom:16}}>
+            <button
+              style={{...S.btnSecondary, width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
+                background:C.surface, border:`1px solid ${C.accent}`}}
+              onClick={() => setOpenSections(prev => ({...prev, __my_jobs: !isOpen}))}>
+              <span style={{display:"flex", alignItems:"center", gap:8}}>
+                <span style={{fontWeight:700, fontSize:14, color:C.accent}}>⭐ My Jobs</span>
+                <span style={{color:C.textMuted, fontSize:13}}>{myJobs.length} job{myJobs.length!==1?"s":""}</span>
+              </span>
+              <span style={{color:C.textMuted}}>{isOpen ? "▲" : "▼"}</span>
+            </button>
+            {isOpen && (
+              <div style={{...S.cardGrid, marginTop:10}}>
+                {myJobs.map(j => renderCard(j, ARCHIVE_STATUSES.includes(safeStatus(j.status))))}
               </div>
-              <div style={S.cardGrid}>{archivedJobs.map(j => renderCard(j, true))}</div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })()}
+      {STATUS_ORDER.map(status => {
+        const jobsInStatus = visibleJobs.filter(j => safeStatus(j.status) === status);
+        if (jobsInStatus.length === 0) return null;
+        const isArchivedStatus = ARCHIVE_STATUSES.includes(status);
+        const isOpen = openSections[status] ?? !isArchivedStatus; // archived statuses start collapsed
+        const label = status==="estimate" ? "Estimate" : status.charAt(0).toUpperCase()+status.slice(1);
+        return (
+          <div key={status} style={{marginBottom:16}}>
+            <button
+              style={{...S.btnSecondary, width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
+                background:C.surface, border:`1px solid ${C.border}`}}
+              onClick={() => setOpenSections(prev => ({...prev, [status]: !isOpen}))}>
+              <span style={{display:"flex", alignItems:"center", gap:8}}>
+                <span style={{...S.statusBadge,...(S[`status_${status}`]||S.status_estimate), margin:0}}>{label}</span>
+                <span style={{color:C.textMuted, fontSize:13}}>{jobsInStatus.length} job{jobsInStatus.length!==1?"s":""}</span>
+              </span>
+              <span style={{color:C.textMuted}}>{isOpen ? "▲" : "▼"}</span>
+            </button>
+            {isOpen && (
+              <div style={{...S.cardGrid, marginTop:10}}>
+                {jobsInStatus.map(j => renderCard(j, isArchivedStatus))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -4336,7 +4454,6 @@ function EstimateView({ currentJob, updateJob, rates, syncJob }) {
       // ── Save ──
       const filename = "TPS_Estimate_" + (currentJob.estimateNum || currentJob.id) + ".pdf";
       doc.save(filename);
-      updateJob(j => ({...j, status:"sent"}));
       setSent(true);
 
     } catch(e) {
@@ -4599,6 +4716,71 @@ const clearSession = () => {
 };
 
 // ─── Login View ───────────────────────────────────────────────────────────────
+// ─── Set Password View (shown when arriving from an invite/recovery email link) ──
+function SetPasswordView({ inviteToken, onSuccess }) {
+  const [password,        setPassword]        = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error,           setError]           = useState("");
+  const [saving,          setSaving]          = useState(false);
+
+  const handleSetPassword = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords do not match."); return; }
+    setSaving(true);
+    try {
+      await authUpdatePassword(inviteToken, password);
+      // Fetch the user's identity using the invite token so we can build a full session
+      const userRes = await fetch(SUPABASE_URL + "/auth/v1/user", {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + inviteToken },
+      });
+      const userData = await userRes.json();
+      if (!userRes.ok || !userData?.id) throw new Error("Could not finish setting up your account. Please ask your admin to resend the invite.");
+      // Build a session object compatible with the rest of the app.
+      // The invite token itself acts as a valid access token going forward
+      // until it naturally expires; after that, normal login takes over.
+      const session = {
+        access_token: inviteToken,
+        refresh_token: null,
+        user: userData,
+        expires_at: Math.floor(Date.now()/1000) + 3600, // treat as 1hr fresh from now
+      };
+      onSuccess(session);
+    } catch(err) {
+      setError(err.message || "Something went wrong setting your password.");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+      <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
+        <img src={"data:image/png;base64," + LOGO_B64} alt="TPS"
+          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+        <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome!</h1>
+        <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
+          Set a password to finish creating your account.
+        </p>
+        <form onSubmit={handleSetPassword}>
+          <label style={S.formLabel}>New Password
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              style={S.input} placeholder="At least 6 characters" required/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Confirm Password
+            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+              style={S.input} placeholder="Re-enter password" required/>
+          </label>
+          {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
+          <button type="submit" style={{...S.btnPrimary, width:"100%", marginTop:18, opacity:saving?0.6:1}} disabled={saving}>
+            {saving ? "Setting up..." : "🔑 Set Password & Continue"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function LoginView({ onSuccess }) {
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
@@ -4655,6 +4837,7 @@ export default function App() {
   const [laborEntries,  setLaborEntries] = useState([]);
   const [zones,         setZones]        = useState(null);
   const [permissions,   setPermissions]  = useState(null);
+  const [homeBase,      setHomeBase]     = useState(null); // { address, lat, lng }
   const [teamUsers,     setTeamUsers]    = useState([]);
   const [crews,         setCrews]        = useState([]);
 
@@ -4671,8 +4854,26 @@ export default function App() {
     } catch(e) { console.error("fetchProfile error:", e); }
   };
 
+  // ── Detect Supabase invite/recovery link in the URL hash ──
+  const [inviteToken, setInviteToken] = useState(null); // access_token from #...&type=invite|recovery
+
   // ── Restore session on mount ──
   useEffect(() => {
+    // Supabase redirects invite/recovery links as:
+    // https://yourapp.com/#access_token=...&refresh_token=...&type=invite
+    const hash = window.location.hash || "";
+    if (hash.includes("access_token") && (hash.includes("type=invite") || hash.includes("type=recovery") || hash.includes("type=signup"))) {
+      const params = new URLSearchParams(hash.slice(1));
+      const token = params.get("access_token");
+      if (token) {
+        setInviteToken(token);
+        setAuthChecked(true);
+        // Clean the sensitive token out of the visible URL once captured
+        window.history.replaceState(null, "", window.location.pathname);
+        return;
+      }
+    }
+
     const restore = async () => {
       const saved = loadSession();
       if (!saved) { setAuthChecked(true); return; }
@@ -4696,6 +4897,13 @@ export default function App() {
     restore();
   }, []);
 
+  const handleInvitePasswordSet = async (newSession) => {
+    setInviteToken(null);
+    saveSession(newSession);
+    setSession(newSession);
+    await fetchProfile(newSession.user.id, newSession.access_token);
+  };
+
   const handleLoginSuccess = async (newSession) => {
     setSession(newSession);
     await fetchProfile(newSession.user.id, newSession.access_token);
@@ -4704,7 +4912,7 @@ export default function App() {
   // If the active view isn't allowed for this role, fall back to jobs.
   // "export", "permissions", "team" stay admin-only regardless of the configurable matrix.
   useEffect(() => {
-    const alwaysAdminOnly = ["export","permissions"];
+    const alwaysAdminOnly = ["export","permissions","admin"];
     if (alwaysAdminOnly.includes(view) && userRole !== "admin") { setView("jobs"); return; }
     if (view === "team" && userRole !== "admin" && userRole !== "manager") { setView("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
@@ -4752,6 +4960,10 @@ export default function App() {
         const cr = await sbFetch("crews?select=id,data&order=id.asc");
         const cd = await cr.json();
         if (Array.isArray(cd)) setCrews(cd.map(row => ({...row.data, id: row.id})));
+
+        const hr = await sbFetch("homebase?select=data&limit=1");
+        const hd = await hr.json();
+        if (Array.isArray(hd) && hd.length > 0) setHomeBase(hd[0].data);
       } catch(e) {
         console.error("Load error:", e);
         setSyncStatus("⚠️ Could not connect to database");
@@ -4779,6 +4991,16 @@ export default function App() {
         body: JSON.stringify({ id: 1, data: permissionsData }),
       });
     } catch(e) { console.error("syncPermissions error:", e); }
+  };
+
+  const syncHomeBase = async (homeBaseData) => {
+    try {
+      await sbFetch("homebase", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: 1, data: homeBaseData }),
+      });
+    } catch(e) { console.error("syncHomeBase error:", e); }
   };
 
   // Assign a newly created/edited job to its nearest existing zone centroid
@@ -4962,6 +5184,8 @@ export default function App() {
     </div>
   );
 
+  if (inviteToken) return <SetPasswordView inviteToken={inviteToken} onSuccess={handleInvitePasswordSet}/>;
+
   if (!session) return <LoginView onSuccess={handleLoginSuccess}/>;
 
   if (loading) return (
@@ -4990,15 +5214,16 @@ export default function App() {
       <div style={S.content}>
         {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} readOnly={getAccessLevel(permissions,"jobs",userRole)==="view"} userRole={userRole} userId={session?.user?.id} crews={crews}/>}
         {view==="schedule" && getAccessLevel(permissions,"schedule",userRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
         {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRole)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRole)==="view"}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob}/>}
+        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
+        {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView}/>}
         {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={setView}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView} onLogout={handleLogout}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
