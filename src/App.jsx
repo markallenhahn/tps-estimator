@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import * as LucideIcons from "lucide-react";
 
 const COMPANY  = "TPS Asphalt Maintenance";
 const PHONE    = "(570) 656-3311";
@@ -58,6 +59,8 @@ const C = {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const S = {
   app:{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"column" },
+  appDesktop:{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"row" },
+  contentColDesktop:{ flex:1, minWidth:0, display:"flex", flexDirection:"column", minHeight:"100vh" },
   nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"stretch", position:"sticky", top:0, zIndex:100, minHeight:56 },
   navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0, cursor:"pointer", userSelect:"none" },
   navTitle:{ fontWeight:800, fontSize:14, color:C.accent, letterSpacing:"0.06em" },
@@ -66,6 +69,13 @@ const S = {
   navTab:{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1, padding:"6px 10px", background:"none", border:"none", color:C.textMuted, cursor:"pointer", fontSize:10, borderBottom:"2px solid transparent", transition:"all .15s", flexShrink:0, minWidth:52 },
   navTabActive:{ color:C.accent, borderBottomColor:C.accent },
   navTabIcon:{ fontSize:15 }, navTabLabel:{whiteSpace:"nowrap"},
+  // Desktop sidebar nav
+  sidebar:{ width:220, flexShrink:0, background:C.surface, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", overflowY:"auto" },
+  sidebarBrand:{ padding:"24px 20px 20px" },
+  sidebarTabs:{ display:"flex", flexDirection:"column", gap:2, padding:"0 12px 20px" },
+  sidebarTab:{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:8, background:"none", border:"none", color:C.textMuted, cursor:"pointer", fontSize:14, fontWeight:500, textAlign:"left", transition:"all .15s" },
+  sidebarTabActive:{ background:C.surface2, color:C.accent, fontWeight:700 },
+  sidebarDivider:{ height:1, margin:"10px 14px", background:C.border },
   content:{ flex:1 },
   page:{ maxWidth:1100, margin:"0 auto", padding:"24px 16px 80px" },
   pageHeader:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 },
@@ -271,21 +281,70 @@ if (typeof document !== "undefined" && !document.getElementById("tps-font-link")
   document.head.appendChild(link);
 }
 
+// ─── Responsive / device detection ─────────────────────────────────────────────
+// Touch wins: an iPad (touch + wide) is treated as mobile per product decision.
+// Only a non-touch device above the width breakpoint counts as desktop.
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      const isTouch = window.matchMedia("(pointer: coarse)").matches;
+      const isWide  = window.innerWidth >= 1024;
+      setIsDesktop(!isTouch && isWide);
+    };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isDesktop;
+}
+
+// ─── Icon system ────────────────────────────────────────────────────────────────
+// Two parallel icon sets per tab/feature — emoji (default, matches the app's
+// existing look) and Lucide (clean line icons). The active set is a single
+// global setting stored in Supabase (iconStyle: "emoji" | "lucide") so it's
+// the same for every user, changed only from the Admin hub.
+const TAB_ICONS = {
+  jobs:        { emoji: "📋", lucide: "ClipboardList" },
+  schedule:    { emoji: "📅", lucide: "Calendar" },
+  zones:       { emoji: "🗺",  lucide: "Map" },
+  estimate:    { emoji: "💰", lucide: "DollarSign" },
+  costs:       { emoji: "🧮", lucide: "Calculator" },
+  invoice:     { emoji: "🧾", lucide: "Receipt" },
+  labor:       { emoji: "👷", lucide: "HardHat" },
+  reports:     { emoji: "📊", lucide: "BarChart3" },
+  rates:       { emoji: "⚙️", lucide: "Settings" },
+  team:        { emoji: "👥", lucide: "Users" },
+  admin:       { emoji: "🛠",  lucide: "ShieldCheck" },
+  account:     { emoji: "👤", lucide: "User" },
+};
+
+// Renders either the emoji string or a Lucide icon component for a tab key,
+// based on the current global iconStyle setting.
+function TabIcon({ tabKey, iconStyle, size = 18 }) {
+  const def = TAB_ICONS[tabKey];
+  if (!def) return null;
+  if (iconStyle !== "lucide") return <span>{def.emoji}</span>;
+  const LucideIcon = LucideIcons[def.lucide];
+  if (!LucideIcon) return <span>{def.emoji}</span>; // safe fallback if name typo'd
+  return <LucideIcon size={size} strokeWidth={2}/>;
+}
+
 // ─── Default permissions matrix ────────────────────────────────────────────────
 // Each tab maps to an access level per role: "hidden" | "view" | "edit"
 // Stored in Supabase (table: permissions) so admins can change it live.
 const ALL_ROLES = ["estimator","crew","crewlead","manager","admin"];
 const ALL_TABS  = [
-  {key:"jobs",     label:"Jobs",     icon:"📋"},
-  {key:"schedule", label:"Schedule", icon:"📅"},
-  {key:"zones",    label:"Zones",    icon:"🗺"},
-  {key:"estimate", label:"Estimate", icon:"💰"},
-  {key:"costs",    label:"Costs",    icon:"🧮"},
-  {key:"invoice",  label:"Invoice",  icon:"🧾"},
-  {key:"labor",    label:"Labor",    icon:"👷"},
-  {key:"reports",  label:"Reports",  icon:"📊"},
-  {key:"rates",    label:"Rates",    icon:"⚙️"},
-  {key:"team",     label:"Team",     icon:"👥"},
+  {key:"jobs",     label:"Jobs"},
+  {key:"schedule", label:"Schedule"},
+  {key:"zones",    label:"Zones"},
+  {key:"estimate", label:"Estimate"},
+  {key:"costs",    label:"Costs"},
+  {key:"invoice",  label:"Invoice"},
+  {key:"labor",    label:"Labor"},
+  {key:"reports",  label:"Reports"},
+  {key:"rates",    label:"Rates"},
+  {key:"team",     label:"Team"},
 ];
 const ROLE_LABELS = { estimator:"Estimator", crew:"Crew", crewlead:"Crew Lead", manager:"Manager", admin:"Admin" };
 
@@ -310,8 +369,9 @@ function getAccessLevel(permissions, tabKey, role) {
   return tabPerms?.[role] || "hidden";
 }
 
-function TopNav({ view, setView, userRole, permissions, onLogout }) {
+function TopNav({ view, setView, userRole, permissions, onLogout, iconStyle }) {
   const tabsRef = useRef(null);
+  const isDesktop = useIsDesktop();
   const tabs = ALL_TABS.filter(t => getAccessLevel(permissions, t.key, userRole) !== "hidden");
 
   useEffect(() => {
@@ -320,6 +380,45 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
     if (activeBtn) activeBtn.scrollIntoView({behavior:"smooth", block:"nearest", inline:"center"});
   }, [view]);
 
+  const adminActive = ["admin","permissions","export","homebase"].includes(view);
+
+  // ── Desktop: vertical sidebar ──
+  if (isDesktop) {
+    return (
+      <nav style={S.sidebar}>
+        <div style={S.sidebarBrand}>
+          <img src={"data:image/png;base64," + LOGO_B64} alt="TPS" style={{width:"100%", maxWidth:140, display:"block"}}/>
+        </div>
+        <div style={S.sidebarTabs}>
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => setView(t.key)}
+              style={{...S.sidebarTab,...(view===t.key?S.sidebarTabActive:{})}}>
+              <TabIcon tabKey={t.key} iconStyle={iconStyle} size={18}/>
+              <span>{t.label}</span>
+            </button>
+          ))}
+          {userRole === "admin" && (
+            <>
+              <div style={S.sidebarDivider}/>
+              <button onClick={() => setView("admin")}
+                style={{...S.sidebarTab,...(adminActive?S.sidebarTabActive:{})}}>
+                <TabIcon tabKey="admin" iconStyle={iconStyle} size={18}/>
+                <span>Admin</span>
+              </button>
+            </>
+          )}
+          <div style={S.sidebarDivider}/>
+          <button onClick={() => setView("account")}
+            style={{...S.sidebarTab,...(view==="account"?S.sidebarTabActive:{})}}>
+            <TabIcon tabKey="account" iconStyle={iconStyle} size={18}/>
+            <span>Account</span>
+          </button>
+        </div>
+      </nav>
+    );
+  }
+
+  // ── Mobile/tablet: horizontal scrolling tab strip (unchanged) ──
   return (
     <nav style={S.nav}>
       <div style={S.navBrand}>
@@ -330,7 +429,7 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
           <button key={t.key} onClick={() => setView(t.key)}
             data-active={view===t.key?"true":"false"}
             style={{...S.navTab,...(view===t.key?S.navTabActive:{})}}>
-            <span style={S.navTabIcon}>{t.icon}</span>
+            <span style={S.navTabIcon}><TabIcon tabKey={t.key} iconStyle={iconStyle} size={16}/></span>
             <span style={S.navTabLabel}>{t.label}</span>
           </button>
         ))}
@@ -338,9 +437,9 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
           <>
             <div style={S.navDivider}/>
             <button onClick={() => setView("admin")}
-              data-active={["admin","permissions","export","homebase"].includes(view)?"true":"false"}
-              style={{...S.navTab,...(["admin","permissions","export","homebase"].includes(view)?S.navTabActive:{})}}>
-              <span style={S.navTabIcon}>🛠</span>
+              data-active={adminActive?"true":"false"}
+              style={{...S.navTab,...(adminActive?S.navTabActive:{})}}>
+              <span style={S.navTabIcon}><TabIcon tabKey="admin" iconStyle={iconStyle} size={16}/></span>
               <span style={S.navTabLabel}>Admin</span>
             </button>
           </>
@@ -349,7 +448,7 @@ function TopNav({ view, setView, userRole, permissions, onLogout }) {
         <button onClick={() => setView("account")}
           data-active={view==="account"?"true":"false"}
           style={{...S.navTab,...(view==="account"?S.navTabActive:{})}}>
-          <span style={S.navTabIcon}>👤</span>
+          <span style={S.navTabIcon}><TabIcon tabKey="account" iconStyle={iconStyle} size={16}/></span>
           <span style={S.navTabLabel}>Account</span>
         </button>
       </div>
@@ -521,11 +620,13 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
 
 // ─── Media View ───────────────────────────────────────────────────────────────
 function JobDetailView({ currentJob, updateJob, rates, setView, teamUsers, crews }) {
+  const isDesktop = useIsDesktop();
   // ── Photo capture ──
   const [capturing, setCapturing] = useState(null);
   const [stream,    setStream]    = useState(null);
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
+  const fileInputRef = useRef(null);
   const sigCanvasRef = useRef(null);
   const sigDrawing   = useRef(false);
   const [lightbox, setLightbox] = useState(null);
@@ -550,6 +651,21 @@ function JobDetailView({ currentJob, updateJob, rates, setView, teamUsers, crews
       setStream(s); setCapturing("photo");
       setTimeout(() => { if (videoRef.current) videoRef.current.srcObject = s; }, 100);
     } catch { alert("Camera permission denied or not available."); }
+  };
+
+  // Desktop fallback: upload existing photo files instead of capturing live
+  const handleFileUpload = (e) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        const label = prompt("Label for " + file.name + ":", "") || "Area of concern";
+        updateJob(j => ({...j, photos:[...j.photos, {id:Date.now()+Math.random(), dataUrl, label, ts:new Date().toLocaleTimeString()}]}));
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = ""; // allow re-selecting the same file later
   };
 
   const takePhoto = () => {
@@ -990,7 +1106,18 @@ function JobDetailView({ currentJob, updateJob, rates, setView, teamUsers, crews
       {/* ── MEDIA ── */}
       <section style={S.section}>
         <h2 style={S.h2}>Photos</h2>
-        {!capturing ? (
+        {isDesktop ? (
+          <>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple style={{display:"none"}}
+              onChange={handleFileUpload}/>
+            <button style={{...S.btnCapture, maxWidth:220}} onClick={() => fileInputRef.current?.click()}>
+              📁 Upload Photo
+            </button>
+            <p style={{fontSize:11, color:C.textDim, marginTop:8, marginBottom:0}}>
+              Camera capture is for the mobile app — upload existing photo files here instead.
+            </p>
+          </>
+        ) : !capturing ? (
           <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}>📷 Take Photo</button>
         ) : (
           <div style={S.cameraBox}>
@@ -1472,6 +1599,7 @@ function InvoiceView({ currentJob, updateJob, rates }) {
 
 // ─── Labor View ───────────────────────────────────────────────────────────────
 function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
+  const isDesktop = useIsDesktop();
   const today = new Date().toISOString().slice(0,10);
   const [selectedDate, setSelectedDate] = useState(today);
   const [newName,      setNewName]      = useState("");
@@ -1647,7 +1775,8 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
       <h1 style={S.h1}>Labor Log</h1>
       <p style={S.subhead}>Track contractor hours by day</p>
 
-      {/* Clock In / Out with GPS */}
+      {/* Clock In / Out with GPS — mobile/tablet only; desktop uses manual entry below */}
+      {!isDesktop && (
       <section style={{...S.section, border:`2px solid ${activeClock ? C.green : C.border}`}}>
         <h2 style={S.h2}>📍 Clock {activeClock ? "Out" : "In"}</h2>
         {!activeClock ? (
@@ -1689,9 +1818,10 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
           </>
         )}
       </section>
+      )}
 
-      {/* In-app permission fix modal — no leaving the app required */}
-      {permDenied && (() => {
+      {/* In-app permission fix modal — no leaving the app required (mobile only, tied to GPS clock-in) */}
+      {!isDesktop && permDenied && (() => {
         const platform = detectPlatform();
         const steps = {
           "ios-safari": ["Open the Settings app", "Tap Safari → Location", `Tap "Ask" or "Allow"`, "Come back here and tap Try Again"],
@@ -3531,7 +3661,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 // ─── Team View (admin only) ────────────────────────────────────────────────────
 // ─── Permissions View (admin only) ─────────────────────────────────────────────
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
-function AdminHubView({ setView, setCurrentJob }) {
+function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle }) {
   const cards = [
     { key:"permissions", icon:"🔐", title:"Permissions", desc:"Control what each role can see and edit across every tab." },
     { key:"homebase",    icon:"🏠", title:"Home Base", desc:"The start/end address used for route optimization on the Zones tab." },
@@ -3542,6 +3672,35 @@ function AdminHubView({ setView, setCurrentJob }) {
     <div style={S.page}>
       <h1 style={S.h1}>Admin</h1>
       <p style={S.subhead}>Company-wide settings and tools</p>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Icon Style</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
+          Applies for everyone, on every device — desktop and mobile.
+        </p>
+        <div style={{display:"flex", gap:8}}>
+          <button onClick={() => syncIconStyle("emoji")}
+            style={{
+              flex:1, padding:"10px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
+              background: iconStyle!=="lucide" ? C.accent : C.surface2,
+              color: iconStyle!=="lucide" ? "#000" : C.textMuted,
+              border: `1px solid ${iconStyle!=="lucide" ? C.accent : C.border}`,
+            }}>
+            📋 Emoji Icons
+          </button>
+          <button onClick={() => syncIconStyle("lucide")}
+            style={{
+              flex:1, padding:"10px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+              background: iconStyle==="lucide" ? C.accent : C.surface2,
+              color: iconStyle==="lucide" ? "#000" : C.textMuted,
+              border: `1px solid ${iconStyle==="lucide" ? C.accent : C.border}`,
+            }}>
+            <LucideIcons.ClipboardList size={16}/> Line Icons
+          </button>
+        </div>
+      </section>
+
       {cards.map(c => (
         <button key={c.key} onClick={() => openCard(c.key)}
           style={{...S.section, display:"flex", alignItems:"center", gap:14, width:"100%", textAlign:"left", cursor:"pointer"}}>
@@ -5028,8 +5187,10 @@ export default function App() {
   const [zones,         setZones]        = useState(null);
   const [permissions,   setPermissions]  = useState(null);
   const [homeBase,      setHomeBase]     = useState(null); // { address, lat, lng }
+  const [iconStyle,     setIconStyle]    = useState("emoji"); // "emoji" | "lucide" — global, admin-set
   const [teamUsers,     setTeamUsers]    = useState([]);
   const [crews,         setCrews]        = useState([]);
+  const isDesktopLayout = useIsDesktop();
 
   // ── Auth state ──
   const [session,    setSession]    = useState(null);
@@ -5154,6 +5315,10 @@ export default function App() {
         const hr = await sbFetch("homebase?select=data&limit=1");
         const hd = await hr.json();
         if (Array.isArray(hd) && hd.length > 0) setHomeBase(hd[0].data);
+
+        const sr = await sbFetch("appsettings?select=data&limit=1");
+        const sd = await sr.json();
+        if (Array.isArray(sd) && sd.length > 0 && sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
       } catch(e) {
         console.error("Load error:", e);
         setSyncStatus("⚠️ Could not connect to database");
@@ -5191,6 +5356,17 @@ export default function App() {
         body: JSON.stringify({ id: 1, data: homeBaseData }),
       });
     } catch(e) { console.error("syncHomeBase error:", e); }
+  };
+
+  const syncIconStyle = async (style) => {
+    setIconStyle(style);
+    try {
+      await sbFetch("appsettings", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: 1, data: { iconStyle: style } }),
+      });
+    } catch(e) { console.error("syncIconStyle error:", e); }
   };
 
   // Assign a newly created/edited job to its nearest existing zone centroid
@@ -5392,16 +5568,17 @@ export default function App() {
   );
 
   return (
-    <div style={S.app}>
-      <TopNav view={view} setView={setView} userRole={userRole} permissions={permissions} onLogout={handleLogout}/>
-      {syncStatus && (
-        <div style={{
-          background: syncStatus.startsWith("⚠️") ? "#2a1010" : "#1a2a1a",
-          color: syncStatus.startsWith("⚠️") ? C.danger : C.green,
-          fontSize:11, textAlign:"center", padding:"3px 0",
-        }}>{syncStatus}</div>
-      )}
-      <div style={S.content}>
+    <div style={isDesktopLayout ? S.appDesktop : S.app}>
+      <TopNav view={view} setView={setView} userRole={userRole} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle}/>
+      <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
+        {syncStatus && (
+          <div style={{
+            background: syncStatus.startsWith("⚠️") ? "#2a1010" : "#1a2a1a",
+            color: syncStatus.startsWith("⚠️") ? C.danger : C.green,
+            fontSize:11, textAlign:"center", padding:"3px 0",
+          }}>{syncStatus}</div>
+        )}
+        <div style={S.content}>
         {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} readOnly={getAccessLevel(permissions,"jobs",userRole)==="view"} userRole={userRole} userId={session?.user?.id} crews={crews}/>}
         {view==="schedule" && getAccessLevel(permissions,"schedule",userRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
@@ -5414,10 +5591,11 @@ export default function App() {
         {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
-        {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob}/>}
+        {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
         {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={setView}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView} onLogout={handleLogout}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
+        </div>
       </div>
     </div>
   );
