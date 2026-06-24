@@ -302,8 +302,11 @@ const DEFAULT_PERMISSIONS = {
 };
 
 function getAccessLevel(permissions, tabKey, role) {
-  const perms = permissions || DEFAULT_PERMISSIONS;
-  return perms?.[tabKey]?.[role] || "hidden";
+  // Fall back to the built-in default for this specific tab if it's missing
+  // from the saved permissions object (e.g. an older saved permissions blob
+  // that predates a newly added tab) — not just when the whole object is null.
+  const tabPerms = permissions?.[tabKey] || DEFAULT_PERMISSIONS[tabKey];
+  return tabPerms?.[role] || "hidden";
 }
 
 function TopNav({ view, setView, userRole, permissions, onLogout }) {
@@ -4934,7 +4937,7 @@ export default function App() {
   // If the active view isn't allowed for this role, fall back to jobs.
   // "export", "permissions", "team" stay admin-only regardless of the configurable matrix.
   useEffect(() => {
-    const alwaysAdminOnly = ["export","permissions","admin","homebase"];
+    const alwaysAdminOnly = ["export","permissions","admin","homebase","rates"];
     if (alwaysAdminOnly.includes(view) && userRole !== "admin") { setView("jobs"); return; }
     if (view === "team" && userRole !== "admin" && userRole !== "manager") { setView("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
@@ -5243,7 +5246,7 @@ export default function App() {
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
+        {view==="rates"    && userRole==="admin" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
         {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob}/>}
