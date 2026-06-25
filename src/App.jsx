@@ -58,8 +58,8 @@ const C = {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const S = {
-  app:{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"column" },
-  appDesktop:{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"row" },
+  app:{ minHeight:"100vh", width:"100%", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"column" },
+  appDesktop:{ minHeight:"100vh", width:"100%", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"row" },
   contentColDesktop:{ flex:1, minWidth:0, display:"flex", flexDirection:"column", minHeight:"100vh" },
   nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"stretch", position:"sticky", top:0, zIndex:100, minHeight:56 },
   navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0, cursor:"pointer", userSelect:"none" },
@@ -270,7 +270,7 @@ const S = {
 if (typeof document !== "undefined" && !document.getElementById("tps-nav-css")) {
   const style = document.createElement("style");
   style.id = "tps-nav-css";
-  style.textContent = ".tps-nav-tabs::-webkit-scrollbar{display:none} select{color-scheme:dark} select option{color:#000;background:#fff}";
+  style.textContent = "html,body,#root{margin:0;padding:0;width:100%;min-height:100%} .tps-nav-tabs::-webkit-scrollbar{display:none} select{color-scheme:dark} select option{color:#000;background:#fff}";
   document.head.appendChild(style);
 }
 if (typeof document !== "undefined" && !document.getElementById("tps-font-link")) {
