@@ -51,9 +51,10 @@ function calcLineAmt(area, rates) {
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
-  bg:"#0f0f0f", surface:"#1a1a1a", surface2:"#242424", border:"#2e2e2e",
-  accent:"#f59e0b", text:"#f5f5f5", textMuted:"#888", textDim:"#555",
-  danger:"#ef4444", green:"#22c55e",
+  bg:"#f3f4f6", surface:"#ffffff", surface2:"#f8f9fa", border:"#e5e7eb",
+  accent:"#d97706", text:"#111827", textMuted:"#6b7280", textDim:"#9ca3af",
+  danger:"#ef4444", green:"#16a34a",
+  shadow:"0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -82,14 +83,14 @@ const S = {
   h1:{ fontSize:22, fontWeight:800, margin:"0 0 4px", lineHeight:1.2, letterSpacing:"-0.01em" },
   h2:{ fontSize:13, fontWeight:600, margin:"0 0 12px", color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.08em" },
   subhead:{ margin:"0 0 20px", color:C.textMuted, fontSize:13, lineHeight:1.4 },
-  section:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:16 },
+  section:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:16, marginBottom:16, boxShadow:C.shadow },
   formGrid:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:8 },
   formLabel:{ display:"flex", flexDirection:"column", gap:4, fontSize:13, color:C.textMuted, minWidth:0 },
   input:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, padding:"8px 10px", color:C.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box" },
   btnPrimary:{ background:C.accent, color:"#000", border:"none", borderRadius:8, padding:"10px 20px", fontWeight:700, fontSize:14, cursor:"pointer" },
   btnSecondary:{ background:C.surface2, color:C.text, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 20px", fontWeight:600, fontSize:14, cursor:"pointer" },
   btnSmall:{ background:C.surface2, color:C.text, border:`1px solid ${C.border}`, borderRadius:6, padding:"5px 10px", fontSize:12, cursor:"pointer" },
-  btnDanger:{ background:"#2a1010", color:C.danger, borderColor:"#5a2020" },
+  btnDanger:{ background:"#fee2e2", color:C.danger, borderColor:"#fecaca" },
   btnSmallDanger:{ background:"none", color:C.textDim, border:"none", cursor:"pointer", fontSize:14, padding:"2px 6px" },
   btnRow:{ display:"flex", gap:12 },
   btnCapture:{ flex:1, background:C.surface2, border:`1px solid ${C.border}`, color:C.text, borderRadius:10, padding:"16px", fontSize:15, fontWeight:600, cursor:"pointer", textAlign:"center" },
@@ -127,14 +128,14 @@ const S = {
   jobCardMeta:{ color:C.textDim, fontSize:12 },
   jobCardActions:{ borderTop:`1px solid ${C.border}`, padding:"8px 12px", display:"flex", flexWrap:"wrap", gap:6 },
   statusBadge:{ fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:20, textTransform:"uppercase" },
-  status_estimate:{ background:"#1a2535", color:"#67e8f9" },
-  status_draft:{     background:"#2a2a1a", color:"#ca8a04" },
-  status_sent:{      background:"#1a1a2a", color:"#a78bfa" },
-  status_signed:{    background:"#14532d", color:"#4ade80" },
-  status_scheduled:{ background:"#1a2a3a", color:"#60a5fa" },
-  status_completed:{ background:"#1a2a1a", color:"#86efac" },
-  status_paid:{      background:"#14532d", color:"#4ade80" },
-  status_lost:{      background:"#2a1a1a", color:"#f87171" },
+  status_estimate:{ background:"#e0f2fe", color:"#0e7490" },
+  status_draft:{     background:"#fef3c7", color:"#92400e" },
+  status_sent:{      background:"#ede9fe", color:"#6d28d9" },
+  status_signed:{    background:"#dcfce7", color:"#15803d" },
+  status_scheduled:{ background:"#dbeafe", color:"#1d4ed8" },
+  status_completed:{ background:"#dcfce7", color:"#15803d" },
+  status_paid:{      background:"#dcfce7", color:"#15803d" },
+  status_lost:{      background:"#ffedd5", color:"#b91c1c" },
   areaList:{ display:"flex", flexDirection:"column", gap:8 },
   areaRow:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 12px", display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 },
   areaRowMain:{ flex:1 }, areaName:{ fontWeight:600, fontSize:14 },
@@ -143,17 +144,17 @@ const S = {
   areaRowRight:{ display:"flex", alignItems:"center", gap:8 },
   areaAmt:{ fontWeight:700, color:C.accent, fontSize:14, minWidth:70, textAlign:"right" },
   condBadge:{ fontSize:11, fontWeight:600, padding:"2px 7px", borderRadius:10, textTransform:"uppercase" },
-  cond_good:{ background:"#1a2a1a", color:C.green },
-  cond_fair:{ background:"#2a2a1a", color:"#ca8a04" },
-  cond_poor:{ background:"#2a1a1a", color:"#f97316" },
-  cond_failed:{ background:"#2a1010", color:C.danger },
+  cond_good:{ background:"#dcfce7", color:C.green },
+  cond_fair:{ background:"#fef3c7", color:"#92400e" },
+  cond_poor:{ background:"#ffedd5", color:"#c2410c" },
+  cond_failed:{ background:"#fee2e2", color:C.danger },
   totalsGrid:{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10 },
   totalCard:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:12 },
   totalSvc:{ fontSize:12, color:C.textMuted, marginBottom:4 },
   totalQty:{ fontSize:14, fontWeight:600, marginBottom:2 },
   totalTons:{ fontSize:12, color:C.textMuted, fontWeight:400 },
   totalAmt:{ fontSize:16, fontWeight:700, color:C.accent },
-  patchPreview:{ background:"#1a1a0a", border:"1px solid #3a3a10", borderRadius:6, padding:"8px 12px", fontSize:13, color:C.textMuted, marginTop:4 },
+  patchPreview:{ background:"#fefce8", border:"1px solid #fde68a", borderRadius:6, padding:"8px 12px", fontSize:13, color:C.textMuted, marginTop:4 },
   estimateHeader:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, paddingBottom:16, borderBottom:`1px solid ${C.border}` },
   coName:{ fontSize:17, fontWeight:700, color:C.accent },
   coContact:{ fontSize:12, color:C.textMuted, marginTop:2 },
@@ -189,16 +190,16 @@ const S = {
   rateDollar:{ color:C.textMuted, fontSize:15 },
   rateInput:{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, padding:"7px 10px", color:C.text, fontSize:16, fontWeight:700, width:100 },
   rateUnitLabel:{ color:C.textMuted, fontSize:13 },
-  formulaBox:{ background:"#1a1a0a", border:"1px solid #3a3a10", borderRadius:8, padding:"12px 14px", marginTop:16 },
+  formulaBox:{ background:"#fefce8", border:"1px solid #fde68a", borderRadius:8, padding:"12px 14px", marginTop:16 },
   formulaTitle:{ fontWeight:700, fontSize:13, marginBottom:6, color:C.accent },
   formulaText:{ fontSize:13, color:C.textMuted, lineHeight:1.7 },
   formulaEx:{ color:C.text, fontSize:12 },
   // Invoice
   invoiceHeader:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, paddingBottom:16, borderBottom:`1px solid ${C.border}` },
-  paidBanner:{ background:"#14532d", border:"1px solid #16a34a", borderRadius:8, padding:"10px 16px", fontSize:14, fontWeight:700, color:"#4ade80", textAlign:"center", marginBottom:16 },
+  paidBanner:{ background:"#dcfce7", border:"1px solid #16a34a", borderRadius:8, padding:"10px 16px", fontSize:14, fontWeight:700, color:"#15803d", textAlign:"center", marginBottom:16 },
   toggleBtn:{ flex:1, background:C.surface2, border:`1px solid ${C.border}`, color:C.textMuted, borderRadius:8, padding:"12px 0", fontSize:14, fontWeight:600, cursor:"pointer" },
-  toggleBtnActive:{ background:"#2a2a1a", border:`1px solid ${C.accent}`, color:C.accent },
-  toggleBtnPaid:{ background:"#14532d", border:"1px solid #16a34a", color:"#4ade80" },
+  toggleBtnActive:{ background:"#fef3c7", border:`1px solid ${C.accent}`, color:C.accent },
+  toggleBtnPaid:{ background:"#dcfce7", border:"1px solid #16a34a", color:"#15803d" },
   // Schedule / Calendar
   calNav:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 },
   calNavBtn:{ background:C.surface2, border:`1px solid ${C.border}`, color:C.text, borderRadius:8, width:36, height:36, fontSize:20, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" },
@@ -220,14 +221,14 @@ const S = {
   schedJobMeta:{ fontSize:11, color:C.textDim },
   schedJobNotes:{ fontSize:11, color:C.textMuted, fontStyle:"italic", marginTop:4 },
   jobScheduledDate:{ fontSize:11, color:C.accent, marginTop:3, fontWeight:600 },
-  status_scheduled:{ background:"#1a2a3a", color:"#60a5fa" },
+  status_scheduled:{ background:"#dbeafe", color:"#1d4ed8" },
   sigWrap:{ position:"relative", borderRadius:8, overflow:"hidden", border:`1px solid ${C.border}` },
   sigCanvas:{ display:"block", width:"100%", height:120, background:C.surface2, cursor:"crosshair", touchAction:"none" },
   sigSavedBadge:{ position:"absolute", top:6, right:8, fontSize:11, color:C.green, fontWeight:700 },
   // Signed banner
-  signedBanner:{ background:"#14532d", border:"1px solid #16a34a", borderRadius:10, padding:"14px 16px" },
-  signedBannerTitle:{ fontWeight:700, fontSize:15, color:"#4ade80" },
-  signedBannerSub:{ fontSize:12, color:"#86efac", marginTop:3 },
+  signedBanner:{ background:"#dcfce7", border:"1px solid #16a34a", borderRadius:10, padding:"14px 16px" },
+  signedBannerTitle:{ fontWeight:700, fontSize:15, color:"#15803d" },
+  signedBannerSub:{ fontSize:12, color:"#15803d", marginTop:3 },
   calcHeader:{ display:"flex", alignItems:"center", gap:6, marginBottom:6, paddingBottom:6, borderBottom:`1px solid ${C.border}` },
   calcHeaderLabel:{ flex:1, fontSize:11, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.06em" },
   calcHeaderX:{ fontSize:13, color:C.textDim, width:16, textAlign:"center" },
@@ -514,14 +515,14 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob }) {
     <div style={S.page}>
       <div style={S.pageHeader}><h1 style={S.h1}>Service Rates</h1></div>
       {currentJob ? (
-        <div style={{background:"#1a2a1a", border:"1px solid #2a4a2a", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:C.green, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap"}}>
+        <div style={{background:"#dcfce7", border:"1px solid #bbf7d0", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:C.green, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap"}}>
           <span>✎ Editing rates for <strong>{currentJob.clientName||"this job"}</strong> only — does not affect other jobs or defaults.</span>
           <button style={{...S.btnSecondary, fontSize:11, padding:"4px 10px", flexShrink:0}} onClick={() => setCurrentJob && setCurrentJob(null)}>
             🌐 Switch to Global Rates
           </button>
         </div>
       ) : (
-        <div style={{background:"#1a1a2a", border:"1px solid #2a2a4a", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:"#818cf8"}}>
+        <div style={{background:"#ede9fe", border:"1px solid #ddd6fe", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:"#4338ca"}}>
           ℹ Editing default rates — applies to new jobs only. Open a job to edit its rates individually.
         </div>
       )}
@@ -1574,7 +1575,7 @@ function InvoiceView({ currentJob, updateJob, rates }) {
                 <a href={`sms:${currentJob.clientPhone.replace(/\D/g,"")}?body=${encodeURIComponent(
                   `${currentJob.clientName || "Hi"}, Thank you for choosing TPS Asphalt Maintenance. We would love your feedback and would welcome a review on our Google profile. Regards, TPS Asphalt Maintenance. https://g.page/r/CbwYxYTHq4UyEBM/review`
                 )}`}
-                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#1a2535", color:"#60a5fa", border:`1px solid #2a3a4a`}}>
+                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}>
                   💬 Text Review Request
                 </a>
               )}
@@ -1582,7 +1583,7 @@ function InvoiceView({ currentJob, updateJob, rates }) {
                 <a href={`mailto:${currentJob.clientEmail}?subject=${encodeURIComponent("We'd love your feedback!")}&body=${encodeURIComponent(
                   `${currentJob.clientName || "Hi"},\n\nThank you for choosing TPS Asphalt Maintenance. We would love your feedback and would welcome a review on our Google profile.\n\nRegards,\nTPS Asphalt Maintenance\n\nhttps://g.page/r/CbwYxYTHq4UyEBM/review`
                 )}`}
-                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#1a2535", color:"#60a5fa", border:`1px solid #2a3a4a`}}>
+                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}>
                   ✉️ Email Review Request
                 </a>
               )}
@@ -1784,7 +1785,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
             <input type="text" value={clockName} onChange={e => setClockName(e.target.value)}
               style={{...S.input, marginBottom:10}} placeholder="Your name"/>
             {clockErr && (
-              <div style={{background:"#2a1010", border:`1px solid ${C.danger}`, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
+              <div style={{background:"#fee2e2", border:`1px solid ${C.danger}`, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
                 <div style={{color:C.danger, fontSize:12, fontWeight:600}}>⚠️ {clockErr}</div>
               </div>
             )}
@@ -1805,7 +1806,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
               <div style={{fontSize:11, color:C.textDim, marginTop:4}}>📍 {activeClock.clockInAddress}</div>
             </div>
             {clockErr && (
-              <div style={{background:"#2a1010", border:`1px solid ${C.danger}`, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
+              <div style={{background:"#fee2e2", border:`1px solid ${C.danger}`, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
                 <div style={{color:C.danger, fontSize:12, fontWeight:600}}>⚠️ {clockErr}</div>
               </div>
             )}
@@ -2199,7 +2200,7 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
   const zonesList = zones?.list || [];
   const totalJobsInZones = zonesList.reduce((s,z)=>s+z.jobCount,0) + (zones?.overflow?.count||0);
 
-  const ZONE_COLORS = ["#f59e0b", "#60a5fa", "#4ade80", "#f87171", "#a78bfa"];
+  const ZONE_COLORS = ["#f59e0b", "#1d4ed8", "#15803d", "#b91c1c", "#6d28d9"];
 
   return (
     <div style={S.page}>
@@ -2613,7 +2614,7 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
                   <button style={{...S.btnSmall, flex:1}} onClick={() => openJob(j)}>Open Job</button>
                   {(j.address||j.city) && (
                     <a href={getDirectionsUrl(j)} target="_blank" rel="noopener noreferrer"
-                      style={{...S.btnSmall, flex:1, background:"#1a2a3a", color:"#60a5fa", textDecoration:"none", textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center"}}>
+                      style={{...S.btnSmall, flex:1, background:"#dbeafe", color:"#1d4ed8", textDecoration:"none", textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center"}}>
                       🧭 Directions
                     </a>
                   )}
@@ -2661,7 +2662,7 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
                   <button style={{...S.btnSmall, flex:1}} onClick={() => openJob(j)}>Open Job</button>
                   {(j.address||j.city) && (
                     <a href={getDirectionsUrl(j)} target="_blank" rel="noopener noreferrer"
-                      style={{...S.btnSmall, flex:1, background:"#1a2a3a", color:"#60a5fa", textDecoration:"none", textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center"}}>
+                      style={{...S.btnSmall, flex:1, background:"#dbeafe", color:"#1d4ed8", textDecoration:"none", textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center"}}>
                       🧭 Directions
                     </a>
                   )}
@@ -3190,9 +3191,9 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
               <button key={s} onClick={() => toggleStatus(s)}
                 style={{
                   fontSize:12, fontWeight:600, padding:"6px 12px", borderRadius:20, cursor:"pointer",
-                  background: selected ? "#14532d" : C.surface2,
-                  color: selected ? "#4ade80" : C.textMuted,
-                  border: `1px solid ${selected ? "#4ade80" : C.border}`,
+                  background: selected ? "#dcfce7" : C.surface2,
+                  color: selected ? "#15803d" : C.textMuted,
+                  border: `1px solid ${selected ? "#15803d" : C.border}`,
                 }}>
                 {selected ? "✓ " : ""}{statusLabel(s)}
               </button>
@@ -3377,7 +3378,7 @@ function CostsView({ currentJob, updateJob, rates }) {
             onChange={e => updateActual(actKey, e.target.value)}
             placeholder={formatCurrency(est).replace("$","")}
             style={{...S.input, flex:1, fontSize:12, padding:"5px 8px"}}/>
-          {hasAct && <button style={{...S.btnSmall, fontSize:11, padding:"4px 8px", background:"#2a1a1a", color:C.textMuted}}
+          {hasAct && <button style={{...S.btnSmall, fontSize:11, padding:"4px 8px", background:"#ffedd5", color:C.textMuted}}
             onClick={() => updateActual(actKey, "")}>Reset</button>}
         </div>
       </div>
@@ -3779,7 +3780,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
                         <button onClick={() => cycleLevel(tab.key, role)}
                           style={{
                             fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:14, cursor:"pointer",
-                            background: level==="edit" ? "#14532d" : level==="view" ? "#1a2535" : C.surface2,
+                            background: level==="edit" ? "#dcfce7" : level==="view" ? "#e0f2fe" : C.surface2,
                             color: levelColor(level),
                             border:`1px solid ${level==="hidden"?C.border:levelColor(level)}`,
                             minWidth:60,
@@ -4346,7 +4347,7 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
                     }}
                     placeholder={"Day "+(di+1)+" label"}
                     style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, width:"auto"}}/>
-                  <button style={{...S.btnSmall, padding:"4px 8px", background:"#2a1a1a", color:C.danger, border:`1px solid ${C.danger}`, flexShrink:0}}
+                  <button style={{...S.btnSmall, padding:"4px 8px", background:"#ffedd5", color:C.danger, border:`1px solid ${C.danger}`, flexShrink:0}}
                     onClick={() => {
                       const days = (j.scheduleDays||[]).filter(d => d.id!==day.id);
                       updateJobById(j.id, jj => ({...jj, scheduleDays:days, scheduledDate: days[0]?.date||""}));
@@ -4362,7 +4363,7 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
           </>
         )}
         {isArchived && (
-          <button style={{...S.btnSmall, flex:1, background:"#1a2a1a", color:C.green, border:`1px solid ${C.green}`}}
+          <button style={{...S.btnSmall, flex:1, background:"#dcfce7", color:C.green, border:`1px solid ${C.green}`}}
             onClick={() => restore(j)}>↩ Restore</button>
         )}
         <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
@@ -5130,6 +5131,84 @@ function SetPasswordView({ inviteToken, onSuccess }) {
   );
 }
 
+// ─── Profile Setup Wizard (first login, non-admin roles) ──────────────────────
+// Estimator/Crew/Crew Lead/Manager accounts must complete this before they
+// can use the app. Admins get a separate, more involved company setup flow
+// (built later) and never see this screen.
+function ProfileSetupWizard({ accessToken, userId, onComplete }) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName,  setLastName]  = useState("");
+  const [phone,     setPhone]     = useState("");
+  const [dob,       setDob]       = useState(""); // optional
+  const [saving,    setSaving]    = useState(false);
+  const [error,     setError]     = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!firstName.trim() || !lastName.trim() || !phone.trim()) {
+      setError("First name, last name, and phone number are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await sbFetch("profiles?id=eq."+userId, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          phone: phone.trim(),
+          date_of_birth: dob || null,
+        }),
+      }, accessToken);
+      if (!res.ok) throw new Error(await res.text());
+      onComplete();
+    } catch(err) {
+      setError("Could not save your info. Please try again.");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+      <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
+        <img src={"data:image/png;base64," + LOGO_B64} alt="TPS"
+          style={{width:"100%", maxWidth:220, display:"block", margin:"0 auto 24px"}}/>
+        <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome to the team!</h1>
+        <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
+          Let's get your profile set up before you get started.
+        </p>
+        <form onSubmit={handleSubmit}>
+          <div style={S.formGrid}>
+            <label style={S.formLabel}>First Name *
+              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)}
+                style={S.input} placeholder="First name" required/>
+            </label>
+            <label style={S.formLabel}>Last Name *
+              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)}
+                style={S.input} placeholder="Last name" required/>
+            </label>
+          </div>
+          <label style={{...S.formLabel, marginTop:10}}>Phone Number *
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+              style={S.input} placeholder="(555) 555-5555" required/>
+          </label>
+          <label style={{...S.formLabel, marginTop:10}}>Date of Birth
+            <span style={{fontSize:11, color:C.textDim, fontWeight:400}}> (optional)</span>
+            <input type="date" value={dob} onChange={e => setDob(e.target.value)}
+              style={{...S.input, marginBottom:0}}/>
+          </label>
+          {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
+          <button type="submit" style={{...S.btnPrimary, width:"100%", marginTop:18, opacity:saving?0.6:1}} disabled={saving}>
+            {saving ? "Saving..." : "Continue →"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function LoginView({ onSuccess }) {
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
@@ -5196,12 +5275,21 @@ export default function App() {
   const [session,    setSession]    = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [userRole,   setUserRole]   = useState("crew");
+  const [profileNeedsSetup, setProfileNeedsSetup] = useState(false);
 
   const fetchProfile = async (userId, accessToken) => {
     try {
-      const res = await sbFetch("profiles?id=eq."+userId+"&select=role", {}, accessToken);
+      const res = await sbFetch("profiles?id=eq."+userId+"&select=role,first_name,last_name,phone", {}, accessToken);
       const data = await res.json();
-      if (Array.isArray(data) && data[0]?.role) setUserRole(data[0].role);
+      if (Array.isArray(data) && data[0]) {
+        const profile = data[0];
+        if (profile.role) setUserRole(profile.role);
+        // Admins get their own (future) company setup flow — only gate
+        // estimator/crew/crewlead/manager on the basic profile wizard.
+        const isAdmin = profile.role === "admin";
+        const missingRequired = !profile.first_name?.trim() || !profile.last_name?.trim() || !profile.phone?.trim();
+        setProfileNeedsSetup(!isAdmin && missingRequired);
+      }
     } catch(e) { console.error("fetchProfile error:", e); }
   };
 
@@ -5554,6 +5642,14 @@ export default function App() {
 
   if (!session) return <LoginView onSuccess={handleLoginSuccess}/>;
 
+  if (profileNeedsSetup) return (
+    <ProfileSetupWizard
+      accessToken={session.access_token}
+      userId={session.user?.id}
+      onComplete={() => setProfileNeedsSetup(false)}
+    />
+  );
+
   if (loading) return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{textAlign:"center", padding:"0 40px"}}>
@@ -5573,7 +5669,7 @@ export default function App() {
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {syncStatus && (
           <div style={{
-            background: syncStatus.startsWith("⚠️") ? "#2a1010" : "#1a2a1a",
+            background: syncStatus.startsWith("⚠️") ? "#fee2e2" : "#dcfce7",
             color: syncStatus.startsWith("⚠️") ? C.danger : C.green,
             fontSize:11, textAlign:"center", padding:"3px 0",
           }}>{syncStatus}</div>
