@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import * as LucideIcons from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import * as XLSX from "xlsx";
 
 const COMPANY  = "TPS Asphalt Maintenance";
 const PHONE    = "(570) 656-3311";
@@ -317,6 +318,7 @@ const TAB_ICONS = {
   invoice:     { emoji: "🧾", lucide: "Receipt" },
   labor:       { emoji: "👷", lucide: "HardHat" },
   materials:   { emoji: "🧴", lucide: "Beaker" },
+  crm:         { emoji: "📇", lucide: "Contact" },
   reports:     { emoji: "📊", lucide: "BarChart3" },
   rates:       { emoji: "⚙️", lucide: "Settings" },
   team:        { emoji: "👥", lucide: "Users" },
@@ -348,6 +350,7 @@ const ALL_TABS  = [
   {key:"invoice",  label:"Invoice"},
   {key:"labor",    label:"Labor"},
   {key:"materials",label:"Materials"},
+  {key:"crm",      label:"CRM"},
   {key:"reports",  label:"Reports"},
   {key:"rates",    label:"Rates"},
   {key:"team",     label:"Team"},
@@ -363,6 +366,7 @@ const DEFAULT_PERMISSIONS = {
   invoice:  { estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", admin:"edit" },
   labor:    { estimator:"hidden", crew:"edit",   crewlead:"edit", manager:"edit", admin:"edit" },
   materials:{ estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", admin:"edit" },
+  crm:      { estimator:"edit",   crew:"hidden", crewlead:"view", manager:"edit", admin:"edit" },
   reports:  { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
   rates:    { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
   team:     { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
@@ -3794,8 +3798,288 @@ function optimizeRouteCore(points, anchor = null) {
   return bestRoute;
 }
 
-// ─── Reports View ─────────────────────────────────────────────────────────────
-// ─── Outstanding Invoices Section (used inside Reports) ───────────────────────
+// ─── CRM (customers are real records with stable IDs, linked from jobs) ───────
+// Each customer gets its own persisted record (in the "customers" table) the
+// first time a matching job is found, identified by a numeric id. Once a job
+// has job.customerId set, that link is permanent — editing a customer's phone
+// or email later won't spawn a duplicate, and a customer's contact info now
+// lives independently of any single job (editable directly in the CRM tab).
+//
+// Matching for *new* jobs (no customerId yet) still uses phone → email → name,
+// in that priority, against existing customer records — this is what decides
+// whether a new job belongs to an existing customer or starts a new one.
+function normalizedPhone(s) { return (s || "").replace(/\D/g, ""); }
+function normalizedEmail(s) { return (s || "").trim().toLowerCase(); }
+function normalizedName(s)  { return (s || "").trim().toLowerCase(); }
+
+function matchExistingCustomer(job, customers) {
+  const phone = normalizedPhone(job.clientPhone);
+  const email = normalizedEmail(job.clientEmail);
+  const name  = normalizedName(job.clientName);
+  if (phone) {
+    const m = customers.find(c => normalizedPhone(c.phone) === phone);
+    if (m) return m;
+  }
+  if (email) {
+    const m = customers.find(c => normalizedEmail(c.email) === email);
+    if (m) return m;
+  }
+  if (name) {
+    const m = customers.find(c => normalizedName(c.name) === name);
+    if (m) return m;
+  }
+  return null;
+}
+
+function buildCustomerGroups(jobs, customers, rates) {
+  const byId = new Map(customers.map(c => [c.id, c]));
+  const map = new Map();
+  jobs.forEach(j => {
+    if (!j.customerId || !byId.has(j.customerId)) return; // backfill handles these
+    if (!map.has(j.customerId)) map.set(j.customerId, []);
+    map.get(j.customerId).push(j);
+  });
+  return Array.from(map.entries()).map(([id, jobsForCustomer]) => {
+    const customer = byId.get(id);
+    const sortedJobs = [...jobsForCustomer].sort((a,b) => (b.date||"").localeCompare(a.date||""));
+    const totalRevenue = jobsForCustomer.reduce((s,j) => s + calcJobFinancials(j, rates).revenue, 0);
+    return {
+      id, name: customer.name||"", phone: customer.phone||"", email: customer.email||"",
+      address: customer.address||"", city: customer.city||"", state: customer.state||"", zip: customer.zip||"",
+      jobs: sortedJobs, jobCount: jobsForCustomer.length, totalRevenue, lastJobDate: sortedJobs[0]?.date || "",
+    };
+  }).sort((a,b) => (b.lastJobDate||"").localeCompare(a.lastJobDate||""));
+}
+
+function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJobById, crmLogs, addCrmLog, deleteCrmLog, setCurrentJob, setView, userRole }) {
+  const canEdit = userRole === "estimator" || userRole === "manager" || userRole === "admin";
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [logType, setLogType] = useState("note");
+  const [logText, setLogText] = useState("");
+  const [callOutcome, setCallOutcome] = useState("");
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactDraft, setContactDraft] = useState(null);
+  const backfilledRef = useRef(new Set());
+
+  const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
+
+  // One-time backfill: any job without a customerId yet gets matched against
+  // existing customers (by phone → email → name) or, if no match, becomes a
+  // brand new customer record. Runs automatically — no separate migration
+  // step needed. backfilledRef guards against re-processing the same job
+  // while its update is still in flight.
+  useEffect(() => {
+    jobs.forEach(j => {
+      if (j.customerId || backfilledRef.current.has(j.id)) return;
+      if (!j.clientName && !j.clientPhone && !j.clientEmail) return; // nothing to link
+      backfilledRef.current.add(j.id);
+      const existing = matchExistingCustomer(j, customers);
+      if (existing) {
+        updateJobById(j.id, job => ({...job, customerId: existing.id}));
+      } else {
+        const newCustomer = {
+          id: Date.now() + Math.floor(Math.random()*1000),
+          name: j.clientName||"", phone: j.clientPhone||"", email: j.clientEmail||"",
+          address: j.address||"", city: j.city||"", state: j.state||"", zip: j.zip||"",
+        };
+        addCustomer(newCustomer);
+        updateJobById(j.id, job => ({...job, customerId: newCustomer.id}));
+      }
+    });
+  }, [jobs, customers]);
+
+  const customerGroups = buildCustomerGroups(jobs, customers, allRates);
+
+  const q = search.trim().toLowerCase();
+  const filtered = !q ? customerGroups : customerGroups.filter(c =>
+    c.name.toLowerCase().includes(q) ||
+    c.phone.toLowerCase().includes(q) ||
+    c.email.toLowerCase().includes(q) ||
+    c.address.toLowerCase().includes(q) ||
+    c.city.toLowerCase().includes(q)
+  );
+
+  const selected = customerGroups.find(c => c.id === selectedId) || null;
+  const selectedLogs = selected
+    ? [...crmLogs.filter(l => l.customerId === selected.id)].sort((a,b) => (b.date||"").localeCompare(a.date||"") || b.id - a.id)
+    : [];
+
+  const startEditingContact = () => {
+    setContactDraft({ name:selected.name, phone:selected.phone, email:selected.email, address:selected.address, city:selected.city, state:selected.state, zip:selected.zip });
+    setEditingContact(true);
+  };
+  const saveContact = () => {
+    updateCustomer(selected.id, contactDraft);
+    setEditingContact(false);
+  };
+
+  const addLog = () => {
+    if (!logText.trim()) { alert("Enter some text for this note/call log."); return; }
+    addCrmLog({
+      id: Date.now(), customerId: selected.id, type: logType,
+      date: new Date().toISOString().slice(0,10), text: logText.trim(),
+      callOutcome: logType === "call" ? callOutcome.trim() : "",
+    });
+    setLogText(""); setCallOutcome("");
+  };
+
+  const exportToExcel = () => {
+    const customerRows = filtered.map(c => ({
+      "Name": c.name, "Phone": c.phone, "Email": c.email,
+      "Address": c.address, "City": c.city, "State": c.state, "Zip": c.zip,
+      "# Jobs": c.jobCount, "Total Revenue": c.totalRevenue, "Last Job Date": c.lastJobDate,
+    }));
+    const jobRows = filtered.flatMap(c => c.jobs.map(j => ({
+      "Customer": c.name, "Job Date": j.date || "", "Status": j.status || "",
+      "Address": j.address || "", "Revenue": calcJobFinancials(j, allRates).revenue,
+    })));
+    const logRows = filtered.flatMap(c =>
+      crmLogs.filter(l => l.customerId === c.id).map(l => ({
+        "Customer": c.name, "Type": l.type, "Date": l.date,
+        "Outcome": l.callOutcome || "", "Notes": l.text,
+      }))
+    );
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(customerRows), "Customers");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(jobRows), "Jobs");
+    if (logRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(logRows), "Notes & Calls");
+    XLSX.writeFile(wb, `CRM_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>CRM</h1>
+      <p style={S.subhead}>Every customer, aggregated from their jobs — search, review history, and log notes or calls.</p>
+
+      <section style={S.section}>
+        <div style={{display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", marginBottom:14}}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, email, address..."
+            style={{...S.input, flex:1, minWidth:200}}/>
+          <button style={S.btnSecondary} onClick={exportToExcel}>📊 Export to Excel</button>
+        </div>
+
+        <div style={{display:"grid", gridTemplateColumns: selected ? "320px 1fr" : "1fr", gap:16}}>
+          <div style={{maxHeight:560, overflowY:"auto", borderRight: selected ? `1px solid ${C.border}` : "none", paddingRight: selected?12:0}}>
+            {filtered.length === 0 ? (
+              <p style={{fontSize:12, color:C.textMuted}}>No customers match that search.</p>
+            ) : filtered.map(c => (
+              <div key={c.id} onClick={() => setSelectedId(c.id)}
+                style={{
+                  padding:"10px 12px", borderRadius:8, marginBottom:6, cursor:"pointer",
+                  background: selectedId===c.id ? C.accent : C.surface2,
+                  color: selectedId===c.id ? "#000" : C.text,
+                  border:`1px solid ${selectedId===c.id ? C.accent : C.border}`,
+                }}>
+                <div style={{fontWeight:700, fontSize:13}}>{c.name || "Unnamed"}</div>
+                <div style={{fontSize:11, opacity:0.8}}>{c.phone || c.email || "no contact info"}</div>
+                <div style={{fontSize:11, opacity:0.8, marginTop:2}}>
+                  {c.jobCount} job{c.jobCount!==1?"s":""} · {formatCurrency(c.totalRevenue)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {selected && (
+            <div>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex", alignItems:"center", gap:8}}>
+                    <h2 style={{...S.h2, margin:0}}>{selected.name || "Unnamed"}</h2>
+                    {canEdit && !editingContact && (
+                      <button style={S.btnSmall} onClick={startEditingContact}>Edit</button>
+                    )}
+                  </div>
+                  {editingContact ? (
+                    <div style={{marginTop:8, maxWidth:320}}>
+                      <input value={contactDraft.name} onChange={e=>setContactDraft(d=>({...d,name:e.target.value}))} placeholder="Name" style={{...S.input, marginBottom:6}}/>
+                      <input value={contactDraft.phone} onChange={e=>setContactDraft(d=>({...d,phone:e.target.value}))} placeholder="Phone" style={{...S.input, marginBottom:6}}/>
+                      <input value={contactDraft.email} onChange={e=>setContactDraft(d=>({...d,email:e.target.value}))} placeholder="Email" style={{...S.input, marginBottom:6}}/>
+                      <input value={contactDraft.address} onChange={e=>setContactDraft(d=>({...d,address:e.target.value}))} placeholder="Address" style={{...S.input, marginBottom:6}}/>
+                      <div style={{display:"flex", gap:6, marginBottom:8}}>
+                        <input value={contactDraft.city} onChange={e=>setContactDraft(d=>({...d,city:e.target.value}))} placeholder="City" style={{...S.input, flex:2}}/>
+                        <input value={contactDraft.state} onChange={e=>setContactDraft(d=>({...d,state:e.target.value}))} placeholder="State" style={{...S.input, flex:1}}/>
+                        <input value={contactDraft.zip} onChange={e=>setContactDraft(d=>({...d,zip:e.target.value}))} placeholder="Zip" style={{...S.input, flex:1}}/>
+                      </div>
+                      <button style={S.btnPrimary} onClick={saveContact}>Save</button>
+                      <button style={{...S.btnSecondary, marginLeft:6}} onClick={()=>setEditingContact(false)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div style={{fontSize:12, color:C.textMuted, marginTop:4}}>
+                      {selected.phone && <div>{selected.phone}</div>}
+                      {selected.email && <div>{selected.email}</div>}
+                      {selected.address && <div>{selected.address}, {selected.city}, {selected.state} {selected.zip}</div>}
+                    </div>
+                  )}
+                </div>
+                <div style={{textAlign:"right", flexShrink:0}}>
+                  <div style={{fontSize:20, fontWeight:800, color:C.accent}}>{formatCurrency(selected.totalRevenue)}</div>
+                  <div style={{fontSize:11, color:C.textMuted}}>{selected.jobCount} job{selected.jobCount!==1?"s":""} total</div>
+                </div>
+              </div>
+
+              <div style={{marginBottom:16}}>
+                <h3 style={{fontSize:13, fontWeight:700, marginBottom:8}}>Jobs</h3>
+                {selected.jobs.map(j => (
+                  <div key={j.id} onClick={() => { setCurrentJob(j); setView("estimate"); }}
+                    style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px",
+                      borderRadius:6, background:C.surface2, marginBottom:4, cursor:"pointer", fontSize:12}}>
+                    <span>{j.date || "no date"} · {j.address || "no address"}</span>
+                    <span style={{display:"flex", alignItems:"center", gap:8}}>
+                      <span style={{textTransform:"capitalize", color:C.textMuted}}>{j.status}</span>
+                      <strong>{formatCurrency(calcJobFinancials(j, allRates).revenue)}</strong>
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {canEdit && (
+                <div style={{marginBottom:16, padding:12, background:C.surface2, borderRadius:8}}>
+                  <div style={{display:"flex", gap:8, marginBottom:8}}>
+                    <select value={logType} onChange={e => setLogType(e.target.value)} style={{...S.input, flex:"0 0 130px"}}>
+                      <option value="note">Note</option>
+                      <option value="call">Call Log</option>
+                    </select>
+                    {logType === "call" && (
+                      <input value={callOutcome} onChange={e => setCallOutcome(e.target.value)} placeholder="Outcome (e.g. left voicemail)"
+                        style={{...S.input, flex:1}}/>
+                    )}
+                  </div>
+                  <textarea value={logText} onChange={e => setLogText(e.target.value)} rows={2}
+                    placeholder={logType==="call" ? "What was discussed on the call?" : "Add a note..."}
+                    style={{...S.input, width:"100%", resize:"vertical", marginBottom:8}}/>
+                  <button style={S.btnPrimary} onClick={addLog}>+ Add {logType==="call" ? "Call Log" : "Note"}</button>
+                </div>
+              )}
+
+              <h3 style={{fontSize:13, fontWeight:700, marginBottom:8}}>History ({selectedLogs.length})</h3>
+              {selectedLogs.length === 0 ? (
+                <p style={{fontSize:12, color:C.textMuted}}>No notes or call logs yet.</p>
+              ) : selectedLogs.map(l => (
+                <div key={l.id} style={{padding:"10px 12px", borderRadius:8, background:C.surface2, marginBottom:6}}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
+                    <span style={{fontSize:11, fontWeight:700, color: l.type==="call" ? C.accent : C.textMuted}}>
+                      {l.type === "call" ? "📞 Call" : "📝 Note"}{l.callOutcome ? ` — ${l.callOutcome}` : ""}
+                    </span>
+                    <span style={{fontSize:11, color:C.textMuted, display:"flex", alignItems:"center", gap:8}}>
+                      {new Date(l.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                      {canEdit && (
+                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}>🗑</button>
+                      )}
+                    </span>
+                  </div>
+                  <div style={{fontSize:13}}>{l.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+
 function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
   const today = new Date();
   today.setHours(12,0,0,0);
@@ -6236,6 +6520,8 @@ export default function App() {
   const [materials,         setMaterials]         = useState([]);
   const [materialSettings,  setMaterialSettings]  = useState(null);
   const [stockChecks,       setStockChecks]       = useState([]);
+  const [crmLogs,           setCrmLogs]           = useState([]);
+  const [customers,         setCustomers]         = useState([]);
   const isDesktopLayout = useIsDesktop();
 
   // ── Auth state ──
@@ -6386,6 +6672,14 @@ export default function App() {
         const scr = await sbFetch("materialstock?select=id,data&order=id.desc");
         const scd = await scr.json();
         if (Array.isArray(scd)) setStockChecks(scd.map(row => ({...row.data, id: row.id})));
+
+        const clr = await sbFetch("crmlogs?select=id,data&order=id.desc");
+        const cld = await clr.json();
+        if (Array.isArray(cld)) setCrmLogs(cld.map(row => ({...row.data, id: row.id})));
+
+        const cur = await sbFetch("customers?select=id,data&order=id.desc");
+        const cud = await cur.json();
+        if (Array.isArray(cud)) setCustomers(cud.map(row => ({...row.data, id: row.id})));
       } catch(e) {
         console.error("Load error:", e);
         setSyncStatus("⚠️ Could not connect to database");
@@ -6576,6 +6870,52 @@ export default function App() {
     try { await sbFetch("materialstock?id=eq."+id, { method: "DELETE" }); } catch(e) {}
   };
 
+  // ── CRM notes / call logs ──
+  const syncCrmLog = async (entry) => {
+    try {
+      await sbFetch("crmlogs", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: entry.id, data: entry }),
+      });
+    } catch(e) { console.error("syncCrmLog error:", e); }
+  };
+
+  const addCrmLog = (entry) => {
+    setCrmLogs(prev => [entry, ...prev]);
+    syncCrmLog(entry);
+  };
+
+  const deleteCrmLog = async (id) => {
+    setCrmLogs(prev => prev.filter(l => l.id !== id));
+    try { await sbFetch("crmlogs?id=eq."+id, { method: "DELETE" }); } catch(e) {}
+  };
+
+  // ── Customers (CRM) ──
+  const syncCustomer = async (entry) => {
+    try {
+      await sbFetch("customers", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: entry.id, data: entry }),
+      });
+    } catch(e) { console.error("syncCustomer error:", e); }
+  };
+
+  const addCustomer = (entry) => {
+    setCustomers(prev => [entry, ...prev]);
+    syncCustomer(entry);
+  };
+
+  const updateCustomer = (id, fields) => {
+    setCustomers(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      const updated = {...c, ...fields};
+      syncCustomer(updated);
+      return updated;
+    }));
+  };
+
   // ── Upsert a single job ──
   const lastZonedAddressRef = useRef({});
 
@@ -6751,6 +7091,7 @@ export default function App() {
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/>}
         {view==="materials" && getAccessLevel(permissions,"materials",userRole)!=="hidden" && <MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/>}
+        {view==="crm" && getAccessLevel(permissions,"crm",userRole)!=="hidden" && <CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={setView} userRole={userRole}/>}
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
