@@ -2165,6 +2165,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
     // Scheduled work. This is what keeps recalculation fast as the job list grows.
     const eligibleJobs = jobs.filter(j => filterStatuses.includes(j.status));
     const skippedThinAddress = [];
+    const failedGeocode = [];
 
     // Gather points: live jobs (geocode only if missing/stale) + historical jobs (already geocoded)
     const livePoints = [];
@@ -2183,8 +2184,9 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
         livePoints.push({ lat: j.geoLat, lng: j.geoLng, jobId: j.id, source: "live" });
       } else {
         setCalcProgress(`Geocoding job ${i+1} of ${eligibleJobs.length}...`);
-        const geo = await geocodeAddress(geocodeQueryOf(j));
-        if (geo) {
+        const result = await geocodeAddressDetailed(geocodeQueryOf(j));
+        if (result.coords) {
+          const geo = result.coords;
           livePoints.push({ lat: geo.lat, lng: geo.lng, jobId: j.id, source: "live" });
           // Cache the geocode result (+ the address it matches) on the job itself —
           // both in the database AND in memory, so the very next recalculate (no
@@ -2196,6 +2198,8 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
             });
           } catch(e) {}
           setJobs(prev => prev.map(jj => jj.id === j.id ? {...jj, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} : jj));
+        } else {
+          failedGeocode.push({ job: j, status: result.status, query: geocodeQueryOf(j) });
         }
         await new Promise(r => setTimeout(r, 1100));
       }
@@ -2209,7 +2213,8 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
 
     if (allPoints.length === 0) {
       alert(`No geocodable addresses found among ${filterStatuses.map(zoneStatusLabel).join(", ")} jobs + historical imports.` +
-        (skippedThinAddress.length ? ` ${skippedThinAddress.length} job(s) skipped for having only a bare state/incomplete address (e.g. just "PA") — add a street, city, or zip.` : ""));
+        (skippedThinAddress.length ? ` ${skippedThinAddress.length} job(s) skipped for having only a bare state/incomplete address (e.g. just "PA") — add a street, city, or zip.` : "") +
+        (failedGeocode.length ? ` ${failedGeocode.length} job(s) failed to geocode: ` + failedGeocode.map(f => `${f.job.clientName||"Unnamed"} [${f.status}]`).join(", ") : ""));
       setCalculating(false); setCalcProgress("");
       return;
     }
@@ -2256,10 +2261,16 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
     await syncZones(zonesData);
     setCalcProgress("");
     setCalculating(false);
+    const notices = [];
     if (skippedThinAddress.length > 0) {
-      alert(`Zones updated. ${skippedThinAddress.length} job(s) skipped — address is too incomplete to geocode safely: ` +
+      notices.push(`${skippedThinAddress.length} job(s) skipped — address too incomplete to geocode safely: ` +
         skippedThinAddress.map(j => j.clientName || "Unnamed").join(", "));
     }
+    if (failedGeocode.length > 0) {
+      notices.push(`${failedGeocode.length} job(s) failed to geocode and were left out of zones — ` +
+        failedGeocode.map(f => `${f.job.clientName || "Unnamed"} [${f.status}]`).join("; "));
+    }
+    if (notices.length) alert("Zones updated.\n\n" + notices.join("\n\n"));
   };
 
   // ── Live re-assignment when a new job is added (nearest centroid, no full recalc) ──
@@ -2878,20 +2889,32 @@ function calcJobFinancials(job, rates) {
 // 1/second, so a single rejected attempt is retried with backoff before
 // falling through to Photon — without this, batches of new addresses lose
 // most of their results to rate-limiting.
+//
+// geocodeAddressDetailed returns { coords, status } where status explains
+// *why* it failed (rate-limited vs. no match vs. network error) instead of
+// just returning null — that distinction is what's needed to tell "the
+// provider is blocking us" apart from "this address doesn't exist."
 async function geocodeAddressOnce(addressStr) {
+  let status = "no-match";
+
   // Try Nominatim first (OpenStreetMap's official geocoder)
   try {
     const res = await fetch(
       "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(addressStr),
       { headers: { "Accept": "application/json" } }
     );
-    if (res.ok) {
+    if (res.status === 429 || res.status === 403) {
+      status = "nominatim-blocked-" + res.status;
+    } else if (!res.ok) {
+      status = "nominatim-http-" + res.status;
+    } else {
       const data = await res.json();
       if (Array.isArray(data) && data[0]) {
-        return { lat: Number(data[0].lat), lng: Number(data[0].lon) };
+        return { coords: { lat: Number(data[0].lat), lng: Number(data[0].lon) }, status: "ok" };
       }
+      status = "nominatim-no-match";
     }
-  } catch (e) { console.error("geocodeAddress (Nominatim) error:", e); }
+  } catch (e) { status = "nominatim-network-error"; }
 
   // Fallback: Photon (Komoot) — different provider, same OSM data, often
   // succeeds when Nominatim rate-limits or rejects a request.
@@ -2899,30 +2922,41 @@ async function geocodeAddressOnce(addressStr) {
     const res2 = await fetch(
       "https://photon.komoot.io/api/?limit=1&q=" + encodeURIComponent(addressStr)
     );
-    if (res2.ok) {
+    if (!res2.ok) {
+      status = status + "/photon-http-" + res2.status;
+    } else {
       const data2 = await res2.json();
       const feature = data2?.features?.[0];
       if (feature?.geometry?.coordinates) {
         const [lng, lat] = feature.geometry.coordinates;
-        return { lat: Number(lat), lng: Number(lng) };
+        return { coords: { lat: Number(lat), lng: Number(lng) }, status: "ok" };
       }
+      status = status + "/photon-no-match";
     }
-  } catch (e) { console.error("geocodeAddress (Photon) error:", e); }
+  } catch (e) { status = status + "/photon-network-error"; }
 
-  return null;
+  return { coords: null, status };
 }
 
-async function geocodeAddress(addressStr, attempts = 3) {
-  if (!addressStr || !addressStr.trim()) return null;
+async function geocodeAddressDetailed(addressStr, attempts = 3) {
+  if (!addressStr || !addressStr.trim()) return { coords: null, status: "empty-query" };
+  let last = { coords: null, status: "unknown" };
   for (let attempt = 0; attempt < attempts; attempt++) {
     const result = await geocodeAddressOnce(addressStr);
-    if (result) return result;
+    if (result.coords) return result;
+    last = result;
     if (attempt < attempts - 1) {
       // Back off before retrying — both providers reject bursts of requests.
       await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
     }
   }
-  return null;
+  return last;
+}
+
+// Simple coords-or-null wrapper for call sites that don't need the failure reason.
+async function geocodeAddress(addressStr, attempts = 3) {
+  const result = await geocodeAddressDetailed(addressStr, attempts);
+  return result.coords;
 }
 
 function fullAddressOf(job) {
