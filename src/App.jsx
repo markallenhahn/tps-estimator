@@ -5427,8 +5427,178 @@ function ExportView({ jobs, laborEntries, rates, setView }) {
   );
 }
 
+// ─── Jobs Pipeline (the main Jobs tab — kanban on desktop, stage pager on mobile) ─
+const PIPELINE_STATUSES = ["estimate","draft","sent","signed","scheduled","completed","paid"];
+const pipelineStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
+// Reuse the exact same badge colors already used everywhere else in the app
+// (S.status_*) so the pipeline's column accents match the rest of the UI.
+const pipelineStatusColor = (s) => (S[`status_${s}`] || S.status_estimate).color;
+
+function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, updateJobById, userRole, userId, crews }) {
+  const isDesktopLayout = useIsDesktop();
+  const [dragOverStatus, setDragOverStatus] = useState(null);
+  const [mobileStatus, setMobileStatus] = useState("estimate");
+
+  const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
+
+  // Same visibility scoping as the My Jobs screen — admin/manager see
+  // everything, crew lead sees self + crew, everyone else sees only what's
+  // assigned to them.
+  const myCrew = (crews||[]).find(c => c.leadId === userId);
+  const myCrewMemberIds = myCrew ? (myCrew.memberIds||[]) : [];
+  const visibleJobs = (() => {
+    if (userRole === "admin" || userRole === "manager") return jobs;
+    if (userRole === "crewlead") {
+      const allowedIds = new Set([userId, ...myCrewMemberIds]);
+      return jobs.filter(j => !j.assignedTo || allowedIds.has(j.assignedTo));
+    }
+    return jobs.filter(j => j.assignedTo === userId);
+  })();
+
+  const myJobsCount = (() => {
+    if (userRole === "admin" || userRole === "manager") return visibleJobs.filter(j => !j.assignedTo).length;
+    if (userRole === "crewlead") {
+      const allowedIds = new Set([userId, ...myCrewMemberIds]);
+      return visibleJobs.filter(j => j.assignedTo && allowedIds.has(j.assignedTo)).length;
+    }
+    return visibleJobs.filter(j => j.assignedTo === userId).length;
+  })();
+
+  const create = () => {
+    const j = initialJob(rates);
+    if (userId && userRole!=="admin" && userRole!=="manager") j.assignedTo = userId;
+    setJobs(p => [j,...p]);
+    setCurrentJob(j);
+    setView("jobdetail");
+  };
+  const open = (job) => { setCurrentJob(job); setView("jobdetail"); };
+  const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
+
+  const columns = PIPELINE_STATUSES.map(status => {
+    const jobsInStatus = visibleJobs.filter(j => (PIPELINE_STATUSES.includes(j.status) ? j.status : "estimate") === status);
+    const total = jobsInStatus.reduce((s,j) => s + calcJobFinancials(j, allRates).revenue, 0);
+    return { status, jobs: jobsInStatus, total };
+  });
+
+  const handleDrop = (e, status) => {
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData("text/plain"));
+    if (id) setStatus({id}, status);
+    setDragOverStatus(null);
+  };
+
+  const PipelineCard = ({ job, draggable }) => (
+    <div
+      draggable={draggable}
+      onDragStart={draggable ? (e => { e.dataTransfer.setData("text/plain", String(job.id)); }) : undefined}
+      onClick={() => open(job)}
+      style={{
+        background:C.surface, border:`1px solid ${C.border}`, borderRadius:10,
+        padding:12, marginBottom:8, cursor:"pointer",
+      }}>
+      <div style={{fontWeight:700, fontSize:13, marginBottom:2}}>{job.clientName||"Unnamed Client"}</div>
+      <div style={{fontSize:11, color:C.textMuted, marginBottom:8}}>{job.address||"No address"}</div>
+      {job.status==="scheduled" && (job.scheduleDays||[]).filter(d=>d.date)[0] && (
+        <div style={{fontSize:11, color:pipelineStatusColor("scheduled"), marginBottom:6}}>
+          📅 {(job.scheduleDays||[]).filter(d=>d.date)[0].date}
+        </div>
+      )}
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+        <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</span>
+        <span style={{fontSize:11, color:C.textMuted, textTransform:"capitalize"}}>
+          {(job.areas||[]).map(a=>a.serviceType).filter((v,i,a)=>a.indexOf(v)===i).join(", ") || "—"}
+        </span>
+      </div>
+    </div>
+  );
+
+  const headerRow = (
+    <div style={S.pageHeader}>
+      <h1 style={S.h1}>Jobs Pipeline</h1>
+      <div style={{display:"flex", gap:8}}>
+        <button style={S.btnSecondary} onClick={() => setView("myjobs")}>⭐ My Jobs ({myJobsCount})</button>
+        <button onClick={create} style={S.btnPrimary}>+ New Job</button>
+      </div>
+    </div>
+  );
+
+  if (!isDesktopLayout) {
+    const col = columns.find(c => c.status === mobileStatus) || columns[0];
+    return (
+      <div style={S.page}>
+        {headerRow}
+        <div style={{display:"flex", gap:6, overflowX:"auto", paddingBottom:10, marginBottom:14, borderBottom:`1px solid ${C.border}`}}>
+          {columns.map(c => (
+            <button key={c.status} onClick={() => setMobileStatus(c.status)}
+              style={{
+                flexShrink:0, padding:"6px 12px", borderRadius:20, fontSize:12, fontWeight:600, border:"none", cursor:"pointer",
+                background: mobileStatus===c.status ? C.accent : C.surface2,
+                color: mobileStatus===c.status ? "#fff" : C.textMuted,
+              }}>
+              {pipelineStatusLabel(c.status)}
+            </button>
+          ))}
+        </div>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:12}}>
+          <span style={{fontSize:16, fontWeight:700}}>{pipelineStatusLabel(col.status)}</span>
+          <span style={{fontSize:12, color:C.textMuted}}>{col.jobs.length} job{col.jobs.length!==1?"s":""} · {formatCurrency(col.total)}</span>
+        </div>
+        {col.jobs.length === 0 ? (
+          <p style={{fontSize:12, color:C.textMuted}}>No jobs in this stage.</p>
+        ) : col.jobs.map(j => (
+          <div key={j.id} style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:12, marginBottom:8}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10}}>
+              <div>
+                <div style={{fontWeight:700, fontSize:14, marginBottom:2}}>{j.clientName||"Unnamed Client"}</div>
+                <div style={{fontSize:12, color:C.textMuted}}>{j.address||"No address"}</div>
+              </div>
+              <span style={{fontWeight:700, fontSize:15}}>{formatCurrency(calcJobFinancials(j, allRates).revenue)}</span>
+            </div>
+            <div style={{display:"flex", gap:8}}>
+              <button style={{...S.btnSmall, flex:1}} onClick={() => open(j)}>Open</button>
+              <select value={j.status} onChange={e => setStatus(j, e.target.value)}
+                style={{flex:1, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
+                  padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text, cursor:"pointer", outline:"none"}}>
+                {PIPELINE_STATUSES.map(s => <option key={s} value={s}>{pipelineStatusLabel(s)}</option>)}
+              </select>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={S.page}>
+      {headerRow}
+      <div style={{display:"flex", gap:14, overflowX:"auto", paddingBottom:10}}>
+        {columns.map(c => (
+          <div key={c.status}
+            onDragOver={e => { e.preventDefault(); setDragOverStatus(c.status); }}
+            onDragLeave={() => setDragOverStatus(prev => prev===c.status ? null : prev)}
+            onDrop={e => handleDrop(e, c.status)}
+            style={{
+              flex:"0 0 240px", borderRadius:10, padding:8,
+              background: dragOverStatus===c.status ? C.surface2 : "transparent",
+              border: dragOverStatus===c.status ? `2px dashed ${pipelineStatusColor(c.status)}` : "2px dashed transparent",
+            }}>
+            <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:4}}>
+              <div style={{width:8, height:8, borderRadius:"50%", background:pipelineStatusColor(c.status)}}/>
+              <span style={{fontSize:14, fontWeight:700}}>{pipelineStatusLabel(c.status)}</span>
+            </div>
+            <div style={{fontSize:12, color:C.textMuted, marginBottom:10}}>{c.jobs.length} job{c.jobs.length!==1?"s":""} · {formatCurrency(c.total)}</div>
+            <div style={{minHeight:40}}>
+              {c.jobs.map(j => <PipelineCard key={j.id} job={j} draggable/>)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Jobs List ────────────────────────────────────────────────────────────────
-function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById, userRole, userId, crews }) {
+function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById, userRole, userId, crews, showBackButton }) {
   const [openSections, setOpenSections] = useState({});
 
   // ── Visibility scoping ──
@@ -5546,8 +5716,11 @@ function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, upd
 
   return (
     <div style={S.page}>
+      {showBackButton && (
+        <button style={{...S.btnSecondary, marginBottom:10}} onClick={() => setView("jobs")}>← Back to Pipeline</button>
+      )}
       <div style={S.pageHeader}>
-        <h1 style={S.h1}>Jobs</h1>
+        <h1 style={S.h1}>My Jobs</h1>
         <button onClick={create} style={S.btnPrimary}>+ New Job</button>
       </div>
       {visibleJobs.length === 0 && (
@@ -7082,7 +7255,8 @@ export default function App() {
           }}>{syncStatus}</div>
         )}
         <div style={S.content}>
-        {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} readOnly={getAccessLevel(permissions,"jobs",userRole)==="view"} userRole={userRole} userId={session?.user?.id} crews={crews}/>}
+        {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userId={session?.user?.id} crews={crews}/>}
+        {view==="myjobs"   && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} readOnly={getAccessLevel(permissions,"jobs",userRole)==="view"} userRole={userRole} userId={session?.user?.id} crews={crews} showBackButton/>}
         {view==="schedule" && getAccessLevel(permissions,"schedule",userRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
         {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews}/>}
