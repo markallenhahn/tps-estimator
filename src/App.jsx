@@ -2938,10 +2938,11 @@ async function geocodeAddressOnce(addressStr) {
   // Fallback #3: U.S. Census Bureau Geocoder — built from USPS/TIGER address
   // reference data rather than crowd-sourced map edits, so it covers many
   // rural US addresses that Nominatim/Photon simply have no record of at all.
+  // Routed through our own /api/geocode-census serverless function because
+  // the Census API itself doesn't send CORS headers — calling it directly
+  // from browser JS fails with a generic network error every time.
   try {
-    const res3 = await fetch(
-      "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=" + encodeURIComponent(addressStr)
-    );
+    const res3 = await fetch("/api/geocode-census?address=" + encodeURIComponent(addressStr));
     if (!res3.ok) {
       status = status + "/census-http-" + res3.status;
     } else {
