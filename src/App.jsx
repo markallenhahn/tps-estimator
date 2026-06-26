@@ -1610,6 +1610,10 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
   const [editHours,    setEditHours]    = useState("");
 
   const canManualEntry = userRole === "admin" || userRole === "manager" || userRole === "crewlead";
+  // Admins and managers can log hours for anyone — subs, day laborers, anyone not
+  // registered in the app — not just people with a user account. Crew Leads stay
+  // restricted to the registered-user list.
+  const canFreeTypeName = userRole === "admin" || userRole === "manager";
 
   const myProfile = (teamUsers||[]).find(u => u.id === currentUserId);
   const myName = myProfile
@@ -1901,14 +1905,27 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
         </h2>
         {canManualEntry && (
           <div style={{display:"flex", gap:8, marginBottom:10}}>
-            <select value={newName} onChange={e => setNewName(e.target.value)}
-              style={{...S.input, flex:2}}>
-              <option value="">Select name...</option>
-              {(teamUsers||[]).map(u => {
-                const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
-                return <option key={u.id} value={label}>{label}</option>;
-              })}
-            </select>
+            {canFreeTypeName ? (
+              <>
+                <input type="text" list="laborNamesList" value={newName} onChange={e => setNewName(e.target.value)}
+                  placeholder="Name (pick or type any name)" style={{...S.input, flex:2}}/>
+                <datalist id="laborNamesList">
+                  {(teamUsers||[]).map(u => {
+                    const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                    return <option key={u.id} value={label}/>;
+                  })}
+                </datalist>
+              </>
+            ) : (
+              <select value={newName} onChange={e => setNewName(e.target.value)}
+                style={{...S.input, flex:2}}>
+                <option value="">Select name...</option>
+                {(teamUsers||[]).map(u => {
+                  const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                  return <option key={u.id} value={label}>{label}</option>;
+                })}
+              </select>
+            )}
             <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
               min="0" step="0.5" style={{...S.input, flex:1}} placeholder="Hrs"
               onKeyDown={e => e.key==="Enter" && addEntry()}/>
@@ -1924,13 +1941,26 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                 {editingId === e.id ? (
                   <div>
                     <div style={{display:"flex", gap:8, marginBottom:8}}>
-                      <select value={editName} onChange={e2 => setEditName(e2.target.value)}
-                        style={{...S.input, flex:2}}>
-                        {(teamUsers||[]).map(u => {
-                          const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
-                          return <option key={u.id} value={label}>{label}</option>;
-                        })}
-                      </select>
+                      {canFreeTypeName ? (
+                        <>
+                          <input type="text" list="laborNamesListEdit" value={editName} onChange={e2 => setEditName(e2.target.value)}
+                            style={{...S.input, flex:2}}/>
+                          <datalist id="laborNamesListEdit">
+                            {(teamUsers||[]).map(u => {
+                              const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                              return <option key={u.id} value={label}/>;
+                            })}
+                          </datalist>
+                        </>
+                      ) : (
+                        <select value={editName} onChange={e2 => setEditName(e2.target.value)}
+                          style={{...S.input, flex:2}}>
+                          {(teamUsers||[]).map(u => {
+                            const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                            return <option key={u.id} value={label}>{label}</option>;
+                          })}
+                        </select>
+                      )}
                       <input type="number" value={editHours} onChange={e2 => setEditHours(e2.target.value)}
                         min="0" step="0.5" style={{...S.input, flex:1}}/>
                     </div>
