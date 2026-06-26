@@ -2077,6 +2077,14 @@ function earliestScheduledDate(job) {
   return days[0] || job.scheduledDate || "";
 }
 
+// Raw job measurement (sq ft or lin ft), undivided by any coverage rate —
+// used to back-calculate the *actual* coverage ratio from real stock-check
+// consumption data, as opposed to estimateJobMaterials() which applies the
+// coverage rate to produce an estimated material quantity.
+function jobRawMeasurement(job, serviceType) {
+  return (job.areas || []).filter(a => a.serviceType===serviceType).reduce((s,a)=>s+Number(a.measurement||0), 0);
+}
+
 // "Done" = work that has actually happened and consumed material — used as
 // the basis for both "what's on hand" and "your real historical buying
 // pattern" (the waste factor). "Upcoming" = committed future demand to
@@ -2158,6 +2166,16 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
     setShowSettings(false);
   };
 
+  const applyActualCoverage = (key) => {
+    const ratio = actualCoverage[key]?.ratio;
+    if (!ratio) return;
+    const updated = key === "sealcoat"
+      ? { ...settings, sealcoatSqFtPerGal: Number(ratio.toFixed(2)) }
+      : { ...settings, crackfillLinFtPerUnit: Number(ratio.toFixed(2)) };
+    setMaterialSettings(updated);
+    syncMaterialSettings(updated);
+  };
+
   // Which categories have a fixed-coverage model (job measurement ÷ coverage
   // = material quantity) vs. ones that already resolve to a real quantity
   // directly from job data (Patch/Stone) or have no estimate concept (Other).
@@ -2211,6 +2229,35 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
 
   // ── Forecast: what to buy for upcoming (Signed + Scheduled) jobs ──
   const doneJobs = jobs.filter(j => MATERIAL_DONE_STATUSES.includes(j.status));
+
+  // ── Actual coverage ratio, derived from real stock-check periods ──
+  // (sealcoat/crackfill only — patch and stone already resolve to real
+  // quantities directly, with no coverage rate to calibrate.)
+  const COVERAGE_SERVICE_TYPE = { sealcoat:"sealcoat", crackfill:"crackfill" };
+  const actualCoverage = {};
+  ["sealcoat","crackfill"].forEach(key => {
+    const checks = (stockChecks||[]).filter(c => c.category===key).sort((a,b) => a.date.localeCompare(b.date) || a.id - b.id);
+    let totalMeasurement = 0, totalUsed = 0, periodsUsed = 0;
+    for (let i = 0; i < checks.length - 1; i++) {
+      const a = checks[i], b = checks[i+1];
+      const purchasedInPeriod = materials
+        .filter(m => m.category===key && m.date > a.date && m.date <= b.date)
+        .reduce((s,m)=>s+Number(m.qty||0), 0);
+      const usedInPeriod = a.qty + purchasedInPeriod - b.qty;
+      if (usedInPeriod <= 0) continue; // skip nonsensical/zero periods (e.g. no consumption recorded)
+      const measurementInPeriod = doneJobs
+        .filter(j => { const d = earliestScheduledDate(j) || j.date || ""; return d && d > a.date && d <= b.date; })
+        .reduce((s,j)=>s+jobRawMeasurement(j, COVERAGE_SERVICE_TYPE[key]), 0);
+      totalMeasurement += measurementInPeriod;
+      totalUsed += usedInPeriod;
+      periodsUsed++;
+    }
+    actualCoverage[key] = {
+      ratio: totalUsed > 0 ? totalMeasurement / totalUsed : null,
+      periodsUsed, totalMeasurement, totalUsed,
+    };
+  });
+
   const historyUsed = { sealcoat:0, crackfill:0, patch:0, stone:0 };
   doneJobs.forEach(j => {
     const e = estimateJobMaterials(j, settings);
@@ -2461,6 +2508,51 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           </div>
         </section>
       )}
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Actual Coverage Ratio (from Stock Checks)</h2>
+        <p style={{fontSize:11, color:C.textDim, margin:"0 0 12px"}}>
+          Calculated from real consumption between consecutive stock checks, divided by the real job measurements completed in that same window — your true coverage, not the manufacturer's.
+        </p>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:12}}>
+          {["sealcoat","crackfill"].map(key => {
+            const m = MATERIAL_TYPES.find(t => t.key===key);
+            const ac = actualCoverage[key];
+            const specVal = key==="sealcoat" ? settings.sealcoatSqFtPerGal : settings.crackfillLinFtPerUnit;
+            const u = key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit;
+            const basisLabel = key==="sealcoat" ? "sq ft" : "lin ft";
+            return (
+              <div key={key} style={{background:C.surface2, borderRadius:10, border:`1px solid ${C.border}`, padding:14}}>
+                <div style={{fontWeight:700, fontSize:14, marginBottom:8}}>{m.label}</div>
+                {!ac || ac.periodsUsed === 0 ? (
+                  <p style={{fontSize:12, color:C.textMuted, margin:0}}>
+                    Log at least 2 stock checks for {m.label} (with jobs completed between them) to calculate a real coverage ratio.
+                  </p>
+                ) : (
+                  <>
+                    <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
+                      <span style={{color:C.textMuted}}>Manufacturer Spec</span>
+                      <span style={{fontWeight:600}}>{specVal} {basisLabel}/{u}</span>
+                    </div>
+                    <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:8}}>
+                      <span style={{color:C.textMuted}}>Your Actual ({ac.periodsUsed} period{ac.periodsUsed!==1?"s":""})</span>
+                      <span style={{fontWeight:700, color:C.accent}}>{ac.ratio.toFixed(2)} {basisLabel}/{u}</span>
+                    </div>
+                    <p style={{fontSize:11, color:C.textDim, margin:"0 0 8px"}}>
+                      {ac.ratio < specVal
+                        ? `Covering ${((1-ac.ratio/specVal)*100).toFixed(0)}% less area per ${u} than spec.`
+                        : ac.ratio > specVal
+                        ? `Covering ${((ac.ratio/specVal-1)*100).toFixed(0)}% more area per ${u} than spec.`
+                        : "Matches manufacturer spec."}
+                    </p>
+                    <button style={S.btnSmall} onClick={() => applyActualCoverage(key)}>Use this as my coverage rate</button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       <section style={S.section}>
         <h2 style={S.h2}>Material Forecast — What to Buy Next</h2>
