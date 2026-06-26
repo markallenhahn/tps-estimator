@@ -6699,7 +6699,7 @@ export default function App() {
         <img
           src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64}
           alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:280, display:"block", margin:"0 auto"}}
+          style={{width:"100%", maxWidth: isDesktopLayout ? 560 : 420, display:"block", margin:"0 auto"}}
         />
       </div>
     </div>
@@ -6723,7 +6723,7 @@ export default function App() {
         <img
           src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64}
           alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:280, display:"block", margin:"0 auto"}}
+          style={{width:"100%", maxWidth: isDesktopLayout ? 560 : 420, display:"block", margin:"0 auto"}}
         />
         <div style={{color:C.textMuted, fontSize:13, marginTop:20, letterSpacing:"0.08em"}}>Loading...</div>
       </div>
