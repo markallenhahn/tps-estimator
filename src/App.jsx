@@ -2071,22 +2071,27 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const [qty,        setQty]       = useState("");
   const [unit,        setUnit]       = useState(MATERIAL_TYPES[0].defaultUnit);
   const [cost,        setCost]       = useState("");
+  const [coverage,    setCoverage]   = useState("");
   const [supplier,    setSupplier]   = useState("");
   const [notes,        setNotes]      = useState("");
   const [date,        setDate]       = useState(new Date().toISOString().slice(0,10));
   const [showSettings, setShowSettings] = useState(false);
 
   // Coverage settings — defaults match the existing estimate-calculation
-  // constants where one already exists (sealcoat). Crack Filling has no
-  // pre-existing material-quantity formula, so it starts unset until entered.
+  // constants where one already exists (sealcoat), or manufacturer spec
+  // (crack filling: 7.5 linear ft per lb, per a 30lb/$26.13 box — ≈$0.116/linft).
   const settings = {
     sealcoatSqFtPerGal: materialSettings?.sealcoatSqFtPerGal ?? 70,
-    crackfillLinFtPerUnit: materialSettings?.crackfillLinFtPerUnit ?? 0,
+    crackfillLinFtPerUnit: materialSettings?.crackfillLinFtPerUnit ?? 7.5,
     crackfillUnitLabel: materialSettings?.crackfillUnitLabel || "lb",
     countedStatuses: materialSettings?.countedStatuses || ["signed","scheduled","completed","paid"],
   };
   const [draftSettings, setDraftSettings] = useState(settings);
   useEffect(() => { setDraftSettings(settings); }, [JSON.stringify(settings)]);
+  useEffect(() => {
+    const cur = currentCoverageValue(category);
+    setCoverage(cur ? String(cur) : "");
+  }, [materialSettings]);
 
   const toggleCountedStatus = (s) => {
     setDraftSettings(prev => ({
@@ -2103,21 +2108,44 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
     setShowSettings(false);
   };
 
+  // Which categories have a fixed-coverage model (job measurement ÷ coverage
+  // = material quantity) vs. ones that already resolve to a real quantity
+  // directly from job data (Patch/Stone) or have no estimate concept (Other).
+  const coverageBasisFor = (key) => key==="sealcoat" ? "sqft" : key==="crackfill" ? "linft" : null;
+  const currentCoverageValue = (key) => key==="sealcoat" ? settings.sealcoatSqFtPerGal : key==="crackfill" ? settings.crackfillLinFtPerUnit : null;
+
   const onCategoryChange = (key) => {
     setCategory(key);
     const def = MATERIAL_TYPES.find(m => m.key===key);
     setUnit(def?.defaultUnit || "unit");
+    const cur = currentCoverageValue(key);
+    setCoverage(cur ? String(cur) : "");
   };
 
   const addEntry = () => {
     if (!qty || isNaN(Number(qty)) || Number(qty) <= 0) { alert("Enter a valid quantity."); return; }
     if (!cost || isNaN(Number(cost)) || Number(cost) < 0) { alert("Enter a valid cost."); return; }
+    const basis = coverageBasisFor(category);
+    const coverageNum = coverage && !isNaN(Number(coverage)) ? Number(coverage) : null;
     addMaterial({
       id: Date.now(), date, category, qty: Number(qty), unit: unit.trim() || "unit",
       cost: Number(cost), supplier: supplier.trim(), notes: notes.trim(),
+      ...(basis && coverageNum ? { coverageRate: coverageNum, coverageBasis: basis } : {}),
     });
+    // Keep this category's "active" coverage rate in sync with whatever was
+    // just entered, so future Estimated Use calculations use it — until the
+    // planned product-catalog import replaces this manual entry entirely.
+    if (basis && coverageNum) {
+      const updated = category === "sealcoat"
+        ? { ...settings, sealcoatSqFtPerGal: coverageNum }
+        : { ...settings, crackfillLinFtPerUnit: coverageNum, crackfillUnitLabel: unit.trim() || settings.crackfillUnitLabel };
+      setMaterialSettings(updated);
+      syncMaterialSettings(updated);
+    }
     setQty(""); setCost(""); setSupplier(""); setNotes("");
   };
+
+  const coverageBasis = coverageBasisFor(category);
 
   // ── Estimated usage per category, summed across counted-status jobs ──
   const countedJobs = jobs.filter(j => settings.countedStatuses.includes(j.status));
@@ -2218,6 +2246,12 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
             <label style={S.formLabel}>Unit
               <input value={unit} onChange={e => setUnit(e.target.value)} style={S.input} placeholder="gal, ton, lb..."/>
             </label>
+            {coverageBasis && (
+              <label style={S.formLabel}>Coverage ({coverageBasis==="sqft"?"sq ft":"lin ft"} per {unit || "unit"})
+                <input type="number" min="0" step="0.01" value={coverage} onChange={e => setCoverage(e.target.value)}
+                  style={S.input} placeholder="from manufacturer spec"/>
+              </label>
+            )}
             <label style={S.formLabel}>Total Cost ($)
               <input type="number" min="0" step="0.01" value={cost} onChange={e => setCost(e.target.value)} style={S.input} placeholder="0.00"/>
             </label>
@@ -2225,6 +2259,12 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <input value={supplier} onChange={e => setSupplier(e.target.value)} style={S.input}/>
             </label>
           </div>
+          {coverageBasis && qty && cost && coverage && !isNaN(Number(qty)) && !isNaN(Number(cost)) && !isNaN(Number(coverage)) && Number(coverage)>0 && Number(qty)>0 && (
+            <p style={{fontSize:12, color:C.accent, margin:"0 0 10px", fontWeight:600}}>
+              ≈ {formatCurrency((Number(cost)/Number(qty))/Number(coverage))} per {coverageBasis==="sqft"?"sq ft":"linear ft"}
+              {" "}({formatCurrency(Number(cost)/Number(qty))}/{unit||"unit"} ÷ {coverage} {coverageBasis==="sqft"?"sq ft":"lin ft"} per {unit||"unit"})
+            </p>
+          )}
           <label style={{...S.formLabel, marginBottom:10}}>Notes (optional)
             <input value={notes} onChange={e => setNotes(e.target.value)} style={S.input}/>
           </label>
