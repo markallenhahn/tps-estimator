@@ -2094,7 +2094,7 @@ const MATERIAL_TYPES = [
 const MATERIAL_STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
 const materialStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
-function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, userRole }) {
+function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole }) {
   const canEdit = userRole === "admin" || userRole === "manager";
 
   const [category,  setCategory]  = useState("sealcoat");
@@ -2110,6 +2110,22 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const in30 = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
   const [forecastFrom, setForecastFrom] = useState(todayStr);
   const [forecastTo,   setForecastTo]   = useState(in30);
+  const [checkCategory, setCheckCategory] = useState("sealcoat");
+  const [checkQty,       setCheckQty]       = useState("");
+  const [checkDate,      setCheckDate]      = useState(todayStr);
+  const [checkNotes,     setCheckNotes]     = useState("");
+
+  const addCheck = () => {
+    if (checkQty === "" || isNaN(Number(checkQty)) || Number(checkQty) < 0) { alert("Enter a valid quantity reading."); return; }
+    addStockCheck({ id: Date.now(), date: checkDate, category: checkCategory, qty: Number(checkQty), notes: checkNotes.trim() });
+    setCheckQty(""); setCheckNotes("");
+  };
+
+  // Most recent stock check per category — the anchor point for On Hand.
+  const lastCheckFor = (key) => {
+    const checks = (stockChecks||[]).filter(c => c.category===key).sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+    return checks[0] || null;
+  };
 
   // Coverage settings — defaults match the existing estimate-calculation
   // constants where one already exists (sealcoat), or manufacturer spec
@@ -2221,13 +2237,34 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   MATERIAL_TYPES.filter(m => m.key !== "other").forEach(m => {
     const key = m.key;
     const totalPurchasedQty = materials.filter(mm => mm.category===key).reduce((s,mm)=>s+Number(mm.qty||0),0);
-    const onHand = totalPurchasedQty - historyUsed[key];
+    const lastCheck = lastCheckFor(key);
+    let onHand;
+    if (lastCheck) {
+      // Anchored to a real reading: that quantity, plus anything bought since,
+      // minus what done-status jobs dated after the check are estimated to
+      // have used. A purchase logged the same day as the check is assumed to
+      // already be reflected in the reading itself (e.g. you filled the tank,
+      // then logged the resulting level) — only purchases strictly after count.
+      const purchasedSinceCheck = materials
+        .filter(mm => mm.category===key && mm.date > lastCheck.date)
+        .reduce((s,mm)=>s+Number(mm.qty||0),0);
+      const usedSinceCheck = doneJobs.reduce((s,j) => {
+        const jobDate = earliestScheduledDate(j) || j.date || "";
+        if (jobDate && jobDate > lastCheck.date) return s + estimateJobMaterials(j, settings)[key];
+        return s;
+      }, 0);
+      onHand = lastCheck.qty + purchasedSinceCheck - usedSinceCheck;
+    } else {
+      // No stock check logged yet for this material — fall back to the
+      // all-time estimate (purchased minus estimated-used by done jobs).
+      onHand = totalPurchasedQty - historyUsed[key];
+    }
     // How much more (or less) you actually buy than the spec predicts, based
     // on completed/paid jobs — 1.0 means "buying matches the spec exactly."
     const wasteFactor = historyUsed[key] > 0 ? totalPurchasedQty / historyUsed[key] : 1;
     const histNeed = specNeed[key] * wasteFactor;
     forecast[key] = {
-      onHand, wasteFactor,
+      onHand, wasteFactor, lastCheck,
       specNeed: specNeed[key], histNeed,
       suggestedSpec: Math.max(0, specNeed[key] - onHand),
       suggestedHist: Math.max(0, histNeed - onHand),
@@ -2383,6 +2420,48 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
         </div>
       </section>
 
+      {canEdit && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Stock Check (Physical Reading)</h2>
+          <p style={{fontSize:11, color:C.textDim, margin:"0 0 12px"}}>
+            Log what's actually on hand when you check it (e.g. filling the sealcoat tank) — this becomes the new starting point for "On Hand" below, instead of relying purely on the job-measurement estimate.
+          </p>
+          <div style={S.formGrid}>
+            <label style={S.formLabel}>Material
+              <select value={checkCategory} onChange={e => setCheckCategory(e.target.value)} style={S.input}>
+                {MATERIAL_TYPES.filter(m => m.key !== "other").map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+              </select>
+            </label>
+            <label style={S.formLabel}>Date
+              <input type="date" value={checkDate} onChange={e => setCheckDate(e.target.value)} style={S.input}/>
+            </label>
+            <label style={S.formLabel}>Quantity On Hand Right Now
+              <input type="number" min="0" step="0.1" value={checkQty} onChange={e => setCheckQty(e.target.value)} style={S.input}
+                placeholder={checkCategory==="crackfill" ? settings.crackfillUnitLabel : MATERIAL_TYPES.find(m=>m.key===checkCategory)?.defaultUnit}/>
+            </label>
+            <label style={S.formLabel}>Notes (optional)
+              <input value={checkNotes} onChange={e => setCheckNotes(e.target.value)} style={S.input} placeholder="e.g. tank filled to 480 gal"/>
+            </label>
+          </div>
+          <button style={S.btnPrimary} onClick={addCheck}>📏 Log Stock Check</button>
+          <div style={{marginTop:14, display:"flex", flexWrap:"wrap", gap:10}}>
+            {MATERIAL_TYPES.filter(m => m.key !== "other").map(m => {
+              const lc = lastCheckFor(m.key);
+              const u = m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit;
+              return (
+                <div key={m.key} style={{fontSize:12, color:C.textMuted, background:C.surface2, borderRadius:8, padding:"6px 10px", border:`1px solid ${C.border}`}}>
+                  <strong style={{color:C.text}}>{m.label}:</strong>{" "}
+                  {lc ? `${lc.qty} ${u} on ${new Date(lc.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}` : "no check logged"}
+                  {lc && canEdit && (
+                    <button style={{...S.btnSmallDanger, marginLeft:6}} onClick={() => { if (confirm("Delete this stock check?")) deleteStockCheck(lc.id); }}>🗑</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <section style={S.section}>
         <h2 style={S.h2}>Material Forecast — What to Buy Next</h2>
         <p style={{fontSize:11, color:C.textDim, margin:"0 0 12px"}}>
@@ -2416,7 +2495,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <div key={m.key} style={{background:C.surface2, borderRadius:10, border:`1px solid ${C.border}`, padding:14}}>
                 <div style={{fontWeight:700, fontSize:14, marginBottom:8}}>{m.label}</div>
                 <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
-                  <span style={{color:C.textMuted}}>On Hand (est.)</span>
+                  <span style={{color:C.textMuted}}>On Hand {f.lastCheck ? "(from stock check)" : "(est., no check logged)"}</span>
                   <span style={{fontWeight:600}}>{f.onHand.toFixed(1)} {u}</span>
                 </div>
                 <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
@@ -6063,6 +6142,7 @@ export default function App() {
   const [crews,         setCrews]        = useState([]);
   const [materials,         setMaterials]         = useState([]);
   const [materialSettings,  setMaterialSettings]  = useState(null);
+  const [stockChecks,       setStockChecks]       = useState([]);
   const isDesktopLayout = useIsDesktop();
 
   // ── Auth state ──
@@ -6209,6 +6289,10 @@ export default function App() {
         const msr = await sbFetch("materialsettings?select=data&limit=1");
         const msd = await msr.json();
         if (Array.isArray(msd) && msd.length > 0) setMaterialSettings(msd[0].data);
+
+        const scr = await sbFetch("materialstock?select=id,data&order=id.desc");
+        const scd = await scr.json();
+        if (Array.isArray(scd)) setStockChecks(scd.map(row => ({...row.data, id: row.id})));
       } catch(e) {
         console.error("Load error:", e);
         setSyncStatus("⚠️ Could not connect to database");
@@ -6376,6 +6460,27 @@ export default function App() {
         body: JSON.stringify({ id: 1, data: settingsData }),
       });
     } catch(e) { console.error("syncMaterialSettings error:", e); }
+  };
+
+  // ── Material stock checks (physical on-hand readings) ──
+  const syncStockCheck = async (entry) => {
+    try {
+      await sbFetch("materialstock", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: entry.id, data: entry }),
+      });
+    } catch(e) { console.error("syncStockCheck error:", e); }
+  };
+
+  const addStockCheck = (entry) => {
+    setStockChecks(prev => [entry, ...prev]);
+    syncStockCheck(entry);
+  };
+
+  const deleteStockCheck = async (id) => {
+    setStockChecks(prev => prev.filter(c => c.id !== id));
+    try { await sbFetch("materialstock?id=eq."+id, { method: "DELETE" }); } catch(e) {}
   };
 
   // ── Upsert a single job ──
@@ -6552,7 +6657,7 @@ export default function App() {
         {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/>}
-        {view==="materials" && getAccessLevel(permissions,"materials",userRole)!=="hidden" && <MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} userRole={userRole}/>}
+        {view==="materials" && getAccessLevel(permissions,"materials",userRole)!=="hidden" && <MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/>}
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
