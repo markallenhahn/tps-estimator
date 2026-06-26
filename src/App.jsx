@@ -2029,6 +2029,26 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
   const [optimizedRoute, setOptimizedRoute] = useState(null);
   const fileInputRef = useRef(null);
 
+  // ── Which job status categories get geocoded/clustered/shown on the map ──
+  // Defaults to Signed + Scheduled — the statuses you'd actually drive a route to.
+  const ZONE_STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
+  const zoneStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
+  const [filterStatuses, setFilterStatuses] = useState(zones?.filterStatuses || ["signed","scheduled"]);
+  const filterInitRef = useRef(false);
+  useEffect(() => {
+    if (!filterInitRef.current && zones?.filterStatuses) {
+      setFilterStatuses(zones.filterStatuses);
+      filterInitRef.current = true;
+    }
+  }, [zones]);
+  const toggleFilterStatus = (s) => {
+    setFilterStatuses(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  };
+  // True once the on-screen filter selection no longer matches the filter that
+  // produced the zones currently being displayed — used to nudge a recalculate.
+  const filtersDirty = !!zones?.filterStatuses &&
+    (filterStatuses.length !== zones.filterStatuses.length || filterStatuses.some(s => !zones.filterStatuses.includes(s)));
+
   // ── Load historical jobs (CSV-imported, separate from live jobs) on mount ──
   useEffect(() => {
     const load = async () => {
@@ -2100,27 +2120,38 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
 
   // ── Zone calculation ──
   const recalculateZones = async () => {
+    if (filterStatuses.length === 0) {
+      alert("Select at least one job category to calculate zones/routes for.");
+      return;
+    }
     setCalculating(true);
     setCalcProgress("Preparing addresses...");
 
-    // Gather all points: live jobs (geocode if missing) + historical jobs (already geocoded)
+    // Only jobs in the selected status categories are eligible — e.g. skip Estimates,
+    // Drafts, Paid/Completed history, etc. when you only care about routing Signed +
+    // Scheduled work. This is what keeps recalculation fast as the job list grows.
+    const eligibleJobs = jobs.filter(j => filterStatuses.includes(j.status));
+
+    // Gather points: live jobs (geocode only if missing/stale) + historical jobs (already geocoded)
     const livePoints = [];
-    for (let i = 0; i < jobs.length; i++) {
-      const j = jobs[i];
+    for (let i = 0; i < eligibleJobs.length; i++) {
+      const j = eligibleJobs[i];
       const addrStr = fullAddressOf(j);
       if (!addrStr) continue;
-      if (j.geoLat && j.geoLng) {
+      // Already geocoded for this exact address — reuse it, no need to calculate again.
+      if (j.geoLat && j.geoLng && j.geoAddr === addrStr) {
         livePoints.push({ lat: j.geoLat, lng: j.geoLng, jobId: j.id, source: "live" });
       } else {
-        setCalcProgress(`Geocoding live job ${i+1} of ${jobs.length}...`);
+        setCalcProgress(`Geocoding job ${i+1} of ${eligibleJobs.length}...`);
         const geo = await geocodeAddress(addrStr);
         if (geo) {
           livePoints.push({ lat: geo.lat, lng: geo.lng, jobId: j.id, source: "live" });
-          // Cache the geocode result on the job itself (best-effort, fire and forget)
+          // Cache the geocode result (+ the address it matches) on the job itself,
+          // so the next recalculate can skip this job entirely.
           try {
             await sbFetch("jobs?id=eq."+j.id, {
               method: "PATCH",
-              body: JSON.stringify({ data: {...j, geoLat: geo.lat, geoLng: geo.lng} }),
+              body: JSON.stringify({ data: {...j, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} }),
             });
           } catch(e) {}
         }
@@ -2135,7 +2166,7 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
     const allPoints = [...livePoints, ...historicalPoints];
 
     if (allPoints.length < 4) {
-      alert("Need at least 4 geocoded addresses (live jobs + historical imports combined) to calculate 4 zones.");
+      alert(`Need at least 4 geocoded addresses (matching ${filterStatuses.map(zoneStatusLabel).join(", ")} + historical imports combined) to calculate 4 zones.`);
       setCalculating(false); setCalcProgress("");
       return;
     }
@@ -2166,6 +2197,7 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
         jobIds: overflow.filter(o => o.jobId).map(o => o.jobId),
         count: overflow.length,
       },
+      filterStatuses,
       lastCalculated: new Date().toISOString(),
       totalPoints: allPoints.length,
     };
@@ -2230,7 +2262,7 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
       <div style={S.pageHeader}>
         <h1 style={S.h1}>Zones &amp; Routing</h1>
       </div>
-      <p style={S.subhead}>4 zones calculated from job density, plus overflow</p>
+      <p style={S.subhead}>4 zones calculated from job density (filtered by category below), plus overflow</p>
 
       {/* Tab switcher */}
       <div style={{display:"flex", gap:8, marginBottom:16}}>
@@ -2247,6 +2279,33 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
           </button>
         ))}
       </div>
+
+      {/* ── Job category filter — which statuses get zoned/routed ── */}
+      <section style={S.section}>
+        <h2 style={{...S.h2, margin:0, marginBottom:10}}>Job Categories to Route</h2>
+        <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:10}}>
+          {ZONE_STATUS_OPTS.map(s => {
+            const selected = filterStatuses.includes(s);
+            return (
+              <button key={s} onClick={() => toggleFilterStatus(s)}
+                style={{
+                  fontSize:12, fontWeight:600, padding:"6px 12px", borderRadius:20, cursor:"pointer",
+                  background: selected ? C.accent : C.surface2,
+                  color: selected ? "#000" : C.textMuted,
+                  border: `1px solid ${selected ? C.accent : C.border}`,
+                }}>
+                {selected ? "✓ " : ""}{zoneStatusLabel(s)}
+              </button>
+            );
+          })}
+        </div>
+        <p style={{fontSize:11, color:C.textDim, margin:0}}>
+          {filterStatuses.length === 0
+            ? "Select at least one category — only those jobs will be geocoded, clustered, and shown on the map."
+            : `Only ${filterStatuses.map(zoneStatusLabel).join(", ")} jobs are included in zones/routes/map.`}
+          {filtersDirty && " Recalculate to apply this change."}
+        </p>
+      </section>
 
       {/* ── Recalculate button + status, always visible ── */}
       <section style={S.section}>
@@ -2266,10 +2325,10 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
           <div style={{fontSize:12, color:C.accent, marginBottom:8}}>⏳ {calcProgress}</div>
         )}
         <button style={{...S.btnPrimary, width:"100%", opacity:calculating?0.6:1}} onClick={recalculateZones} disabled={calculating}>
-          {calculating ? "Calculating..." : "🔄 Recalculate Zones"}
+          {calculating ? "Calculating..." : filtersDirty ? "🔄 Recalculate Zones (filter changed)" : "🔄 Recalculate Zones"}
         </button>
         <p style={{fontSize:11, color:C.textDim, marginTop:8, marginBottom:0}}>
-          Uses all live job addresses + imported historical addresses. Outlier jobs more than 25 miles from any zone center go to Overflow.
+          Only re-geocodes jobs that haven't been calculated yet — already-geocoded jobs are reused instantly. Outlier jobs more than 25 miles from any zone center go to Overflow.
         </p>
       </section>
 
@@ -5559,9 +5618,31 @@ export default function App() {
   // (lightweight live update — does not recalculate centroids themselves)
   const assignJobToNearestZone = async (job) => {
     if (!zones?.list?.length) return;
+
+    // If this job's status isn't one of the categories the zones were built for,
+    // make sure it isn't sitting in a zone/overflow list, and stop — no geocoding needed.
+    if (zones.filterStatuses && !zones.filterStatuses.includes(job.status)) {
+      const stillPresent = zones.list.some(z => z.jobIds.includes(job.id)) || (zones.overflow?.jobIds||[]).includes(job.id);
+      if (!stillPresent) return;
+      const cleared = {...zones};
+      cleared.list = zones.list.map(z => ({
+        ...z,
+        jobIds: z.jobIds.filter(id => id !== job.id),
+        jobCount: z.jobIds.filter(id => id !== job.id).length,
+      }));
+      cleared.overflow = {...cleared.overflow, jobIds: (cleared.overflow?.jobIds||[]).filter(id => id !== job.id)};
+      cleared.overflow.count = cleared.overflow.jobIds.length;
+      setZones(cleared);
+      syncZones(cleared);
+      return;
+    }
+
     const addrStr = fullAddressOf(job);
     if (!addrStr) return;
-    const geo = job.geoLat && job.geoLng ? { lat: job.geoLat, lng: job.geoLng } : await geocodeAddress(addrStr);
+    // Already geocoded for this exact address — no need to calculate it again.
+    const geo = (job.geoLat && job.geoLng && job.geoAddr === addrStr)
+      ? { lat: job.geoLat, lng: job.geoLng }
+      : await geocodeAddress(addrStr);
     if (!geo) return;
 
     let bestIdx = -1, bestDist = Infinity;
