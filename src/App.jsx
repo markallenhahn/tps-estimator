@@ -2587,15 +2587,15 @@ function ZonesMapView({ jobs, zones, zoneColors, fullAddressOf }) {
     const html = `<!DOCTYPE html>
 <html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#1a1a1a}
 #loadErr{color:#fff;font-family:sans-serif;padding:20px;text-align:center;display:none}</style>
 </head><body>
 <div id="map"></div>
-<div id="loadErr">Map failed to load — your network or browser security settings may be blocking cdnjs.cloudflare.com (needed to load the map library). Try a different network, or whitelist cdnjs.cloudflare.com and tile.openstreetmap.org.</div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<div id="loadErr">Map failed to load — your network/browser security settings (or this site's Content-Security-Policy) may be blocking unpkg.com or tile.openstreetmap.org.</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// If Leaflet's script tag itself got blocked (firewall/extension), there's
+// If Leaflet's script tag itself got blocked (firewall/extension/CSP), there's
 // nothing to retry against — show a clear message instead of a silent blank.
 setTimeout(function(){
   if (typeof L === 'undefined') {
@@ -2636,7 +2636,7 @@ try {
         <>
           <div style={{borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}`, height:380}}>
             <iframe srcDoc={mapHtml} style={{width:"100%", height:"100%", border:"none"}}
-              title="Zones map" sandbox="allow-scripts allow-popups allow-same-origin"/>
+              title="Zones map" sandbox="allow-scripts allow-popups"/>
           </div>
           <div style={{display:"flex", flexWrap:"wrap", gap:12, marginTop:12}}>
             {zones.list.map((z,i) => (
