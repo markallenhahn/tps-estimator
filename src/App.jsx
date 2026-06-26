@@ -2014,7 +2014,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
 
 // ─── Schedule View ────────────────────────────────────────────────────────────
 // ─── Zones View (route optimization) ───────────────────────────────────────────
-function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, homeBase }) {
+function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, setView, homeBase }) {
   const [tab,           setTab]           = useState("list"); // "list" | "map" | "import"
   const [calculating,   setCalculating]   = useState(false);
   const [calcProgress,  setCalcProgress]  = useState("");
@@ -2094,11 +2094,14 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
     if (!csvRows.length) return;
     setImporting(true);
     const imported = [];
+    let skippedThin = 0;
     for (let i = 0; i < csvRows.length; i++) {
       const row = csvRows[i];
       const addrStr = [row.address, row.city, row.state, row.zip].filter(Boolean).join(", ");
+      // A bare state with nothing else isn't specific enough to geocode reliably.
+      if (!row.address && !row.city && !row.zip) { skippedThin++; continue; }
       setCalcProgress(`Geocoding ${i+1} of ${csvRows.length}...`);
-      const geo = await geocodeAddress(addrStr);
+      const geo = await geocodeAddress(addrStr + ", USA");
       if (geo) {
         const entry = { id: Date.now()+i, ...row, lat: geo.lat, lng: geo.lng };
         imported.push(entry);
@@ -2115,7 +2118,7 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
     setHistoricalJobs(prev => [...imported, ...prev]);
     setCsvRows([]); setCsvFile(null); setCalcProgress("");
     setImporting(false);
-    alert(`Imported and geocoded ${imported.length} of ${csvRows.length} addresses.`);
+    alert(`Imported and geocoded ${imported.length} of ${csvRows.length} addresses.` + (skippedThin ? ` ${skippedThin} skipped for having only a bare state/incomplete address.` : ""));
   };
 
   // ── Zone calculation ──
@@ -2131,6 +2134,7 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
     // Drafts, Paid/Completed history, etc. when you only care about routing Signed +
     // Scheduled work. This is what keeps recalculation fast as the job list grows.
     const eligibleJobs = jobs.filter(j => filterStatuses.includes(j.status));
+    const skippedThinAddress = [];
 
     // Gather points: live jobs (geocode only if missing/stale) + historical jobs (already geocoded)
     const livePoints = [];
@@ -2138,6 +2142,10 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
       const j = eligibleJobs[i];
       const addrStr = fullAddressOf(j);
       if (!addrStr) continue;
+      // A bare state with nothing else isn't specific enough to geocode reliably
+      // ("PA" alone matches Panama's country code before Pennsylvania) — skip it
+      // rather than silently plotting the job in the wrong country.
+      if (!hasSufficientAddress(j)) { skippedThinAddress.push(j); continue; }
       // Already geocoded — reuse it. Trust legacy records with no geoAddr yet
       // (they predate this field); only force a re-geocode when geoAddr is
       // present and no longer matches the job's current address.
@@ -2145,17 +2153,19 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
         livePoints.push({ lat: j.geoLat, lng: j.geoLng, jobId: j.id, source: "live" });
       } else {
         setCalcProgress(`Geocoding job ${i+1} of ${eligibleJobs.length}...`);
-        const geo = await geocodeAddress(addrStr);
+        const geo = await geocodeAddress(geocodeQueryOf(j));
         if (geo) {
           livePoints.push({ lat: geo.lat, lng: geo.lng, jobId: j.id, source: "live" });
-          // Cache the geocode result (+ the address it matches) on the job itself,
-          // so the next recalculate can skip this job entirely.
+          // Cache the geocode result (+ the address it matches) on the job itself —
+          // both in the database AND in memory, so the very next recalculate (no
+          // page reload needed) reuses it instead of geocoding it all over again.
           try {
             await sbFetch("jobs?id=eq."+j.id, {
               method: "PATCH",
               body: JSON.stringify({ data: {...j, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} }),
             });
           } catch(e) {}
+          setJobs(prev => prev.map(jj => jj.id === j.id ? {...jj, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} : jj));
         }
         await new Promise(r => setTimeout(r, 1100));
       }
@@ -2167,20 +2177,27 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
 
     const allPoints = [...livePoints, ...historicalPoints];
 
-    if (allPoints.length < 4) {
-      alert(`Need at least 4 geocoded addresses (matching ${filterStatuses.map(zoneStatusLabel).join(", ")} + historical imports combined) to calculate 4 zones.`);
+    if (allPoints.length === 0) {
+      alert(`No geocodable addresses found among ${filterStatuses.map(zoneStatusLabel).join(", ")} jobs + historical imports.` +
+        (skippedThinAddress.length ? ` ${skippedThinAddress.length} job(s) skipped for having only a bare state/incomplete address (e.g. just "PA") — add a street, city, or zip.` : ""));
       setCalculating(false); setCalcProgress("");
       return;
     }
 
     setCalcProgress("Calculating zones...");
-    const clusters = kMeansCluster(allPoints, 4);
+    const MAX_ZONES = 4;
+    const ZONE_MERGE_MILES = 8; // jobs within this distance of each other don't need separate zones
+    const clusters = kMeansCluster(allPoints, MAX_ZONES);
     const { overflow, kept } = findOverflowPoints(allPoints, clusters, 25);
 
     // Re-cluster the kept points (overflow removed) for cleaner zone shapes
-    const finalClusters = kMeansCluster(kept.length >= 4 ? kept : allPoints, 4);
+    const finalClusters = kMeansCluster(kept.length >= MAX_ZONES ? kept : allPoints, MAX_ZONES);
+    // Jobs that are close enough together don't need to be split into separate
+    // zones just to fill out 4 — merge any zones whose centroids end up within
+    // ZONE_MERGE_MILES of each other.
+    const mergedClusters = mergeCloseClusters(finalClusters, ZONE_MERGE_MILES);
 
-    const newZones = finalClusters.map((cluster, i) => {
+    const newZones = mergedClusters.map((cluster, i) => {
       const existingName = zones?.list?.[i]?.name;
       return {
         id: i,
@@ -2200,6 +2217,7 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
         count: overflow.length,
       },
       filterStatuses,
+      skippedJobIds: skippedThinAddress.map(j => j.id),
       lastCalculated: new Date().toISOString(),
       totalPoints: allPoints.length,
     };
@@ -2208,6 +2226,10 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
     await syncZones(zonesData);
     setCalcProgress("");
     setCalculating(false);
+    if (skippedThinAddress.length > 0) {
+      alert(`Zones updated. ${skippedThinAddress.length} job(s) skipped — address is too incomplete to geocode safely: ` +
+        skippedThinAddress.map(j => j.clientName || "Unnamed").join(", "));
+    }
   };
 
   // ── Live re-assignment when a new job is added (nearest centroid, no full recalc) ──
@@ -2877,6 +2899,21 @@ function fullAddressOf(job) {
   return [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
 }
 
+// A bare 2-letter state with nothing else (no street, city, or zip) isn't
+// specific enough to geocode reliably — "PA" alone matches Panama's country
+// code before it matches Pennsylvania. Require at least one more anchor.
+function hasSufficientAddress(job) {
+  return !!(job.address || job.city || job.zip);
+}
+
+// Appends ", USA" so US state/city names and abbreviations aren't mismatched
+// against country codes or similarly-named places abroad (only used for the
+// geocoding query itself — display and directions still use fullAddressOf).
+function geocodeQueryOf(job) {
+  const addr = fullAddressOf(job);
+  return addr ? addr + ", USA" : addr;
+}
+
 // ─── Weighted K-Means Zone Clustering ──────────────────────────────────────────
 // Clusters geocoded points into k zones. Because every point is one job, denser
 // areas naturally pull more zone "weight" toward them — this is what produces
@@ -2936,6 +2973,32 @@ function haversine(a, b) {
   const lat1 = a.lat * Math.PI / 180, lat2 = b.lat * Math.PI / 180;
   const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+// Collapses clusters whose centroids end up within `thresholdMiles` of each
+// other into one zone — jobs that are all close together don't need to be
+// artificially split just to fill out a fixed zone count. Recomputes each
+// merged centroid as the mean of all combined member points.
+function mergeCloseClusters(clusters, thresholdMiles) {
+  let merged = clusters.map(c => ({ centroid: {...c.centroid}, members: [...c.members] }));
+  let didMerge = true;
+  while (didMerge && merged.length > 1) {
+    didMerge = false;
+    for (let i = 0; i < merged.length && !didMerge; i++) {
+      for (let j = i + 1; j < merged.length; j++) {
+        if (haversine(merged[i].centroid, merged[j].centroid) <= thresholdMiles) {
+          const combinedMembers = [...merged[i].members, ...merged[j].members];
+          const lat = combinedMembers.reduce((s,p) => s + p.lat, 0) / combinedMembers.length;
+          const lng = combinedMembers.reduce((s,p) => s + p.lng, 0) / combinedMembers.length;
+          merged.splice(j, 1);
+          merged.splice(i, 1, { centroid: { lat, lng }, members: combinedMembers });
+          didMerge = true;
+          break;
+        }
+      }
+    }
+  }
+  return merged;
 }
 
 // Detect outliers relative to all 4 zone centroids — used to populate "Overflow"
@@ -5657,10 +5720,21 @@ export default function App() {
     // only force a re-geocode when geoAddr is present and no longer matches.
     const addrStr = fullAddressOf(job);
     if (!addrStr) return;
-    const geo = (job.geoLat && job.geoLng && (!job.geoAddr || job.geoAddr === addrStr))
-      ? { lat: job.geoLat, lng: job.geoLng }
-      : await geocodeAddress(addrStr);
+    // A bare state alone isn't specific enough to geocode reliably — skip rather
+    // than risk plotting the job in the wrong country (e.g. "PA" → Panama).
+    if (!hasSufficientAddress(job)) return;
+    const cached = job.geoLat && job.geoLng && (!job.geoAddr || job.geoAddr === addrStr);
+    const geo = cached ? { lat: job.geoLat, lng: job.geoLng } : await geocodeAddress(geocodeQueryOf(job));
     if (!geo) return;
+    if (!cached) {
+      try {
+        await sbFetch("jobs?id=eq."+job.id, {
+          method: "PATCH",
+          body: JSON.stringify({ data: {...job, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} }),
+        });
+      } catch(e) {}
+      setJobs(prev => prev.map(jj => jj.id === job.id ? {...jj, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} : jj));
+    }
 
     let bestIdx = -1, bestDist = Infinity;
     zones.list.forEach((z, i) => {
@@ -5873,7 +5947,7 @@ export default function App() {
         <div style={S.content}>
         {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} readOnly={getAccessLevel(permissions,"jobs",userRole)==="view"} userRole={userRole} userId={session?.user?.id} crews={crews}/>}
         {view==="schedule" && getAccessLevel(permissions,"schedule",userRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
+        {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
         {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRole)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRole)==="view"}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
