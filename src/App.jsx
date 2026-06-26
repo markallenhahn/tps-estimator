@@ -5502,8 +5502,8 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
       draggable={draggable}
       onDragStart={draggable ? (e => { e.dataTransfer.setData("text/plain", String(job.id)); }) : undefined}
       style={{
-        background:C.surface, border:`1px solid ${C.border}`, borderRadius:10,
-        padding:12, marginBottom:8,
+        background:C.surface, borderBottom:`1px solid ${C.border}`,
+        padding:10,
       }}>
       <div onClick={() => open(job)} style={{cursor:"pointer"}}>
         <div style={{fontWeight:700, fontSize:13, marginBottom:2}}>{job.clientName||"Unnamed Client"}</div>
@@ -5595,25 +5595,27 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
   return (
     <div style={S.page}>
       {headerRow}
-      <div style={{display:"grid", gridTemplateColumns:"repeat(7, minmax(0, 1fr))", gap:10}}>
-        {columns.map(c => (
+      <div style={{display:"grid", gridTemplateColumns:"repeat(7, minmax(0, 1fr))", border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden"}}>
+        {columns.map((c, i) => (
           <div key={c.status}
             onDragOver={e => { e.preventDefault(); setDragOverStatus(c.status); }}
             onDragLeave={() => setDragOverStatus(prev => prev===c.status ? null : prev)}
             onDrop={e => handleDrop(e, c.status)}
             style={{
-              minWidth:0, borderRadius:10, padding:8,
-              background: dragOverStatus===c.status ? C.surface2 : "transparent",
-              border: dragOverStatus===c.status ? `2px dashed ${pipelineStatusColor(c.status)}` : "2px dashed transparent",
+              minWidth:0,
+              borderRight: i < columns.length-1 ? `1px solid ${C.border}` : "none",
+              background: dragOverStatus===c.status ? C.surface2 : C.surface,
+              outline: dragOverStatus===c.status ? `2px dashed ${pipelineStatusColor(c.status)}` : "none",
+              outlineOffset:-2,
             }}>
             <div style={{
-              display:"flex", alignItems:"center", gap:6, padding:"6px 10px", borderRadius:8, marginBottom:8,
-              background: pipelineStatusBg(c.status),
+              display:"flex", alignItems:"center", gap:6, padding:"8px 10px",
+              background: pipelineStatusBg(c.status), borderBottom:`1px solid ${C.border}`,
             }}>
               <div style={{width:7, height:7, borderRadius:"50%", background:pipelineStatusColor(c.status), flexShrink:0}}/>
               <span style={{fontSize:13, fontWeight:700, color:pipelineStatusColor(c.status), overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{pipelineStatusLabel(c.status)}</span>
             </div>
-            <div style={{fontSize:11, color:C.textMuted, marginBottom:10}}>{c.jobs.length} · {formatCurrency(c.total)}</div>
+            <div style={{fontSize:11, color:C.textMuted, padding:"6px 10px", borderBottom:`1px solid ${C.border}`}}>{c.jobs.length} · {formatCurrency(c.total)}</div>
             <div style={{minHeight:40}}>
               {c.jobs.map(j => <PipelineCard key={j.id} job={j} draggable/>)}
             </div>
