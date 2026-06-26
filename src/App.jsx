@@ -2181,8 +2181,10 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
       if (!hasSufficientAddress(j)) { skippedThinAddress.push(j); continue; }
       // Already geocoded — reuse it. Trust legacy records with no geoAddr yet
       // (they predate this field); only force a re-geocode when geoAddr is
-      // present and no longer matches the job's current address.
-      if (j.geoLat && j.geoLng && (!j.geoAddr || j.geoAddr === addrStr)) {
+      // present and no longer matches the job's current address, OR the
+      // cached coordinates are implausibly far from home base (e.g. a bad
+      // result that got cached before the regional check existed).
+      if (j.geoLat && j.geoLng && (!j.geoAddr || j.geoAddr === addrStr) && !isImplausibleLocation({lat:j.geoLat, lng:j.geoLng}, homeBase)) {
         livePoints.push({ lat: j.geoLat, lng: j.geoLng, jobId: j.id, source: "live" });
       } else {
         setCalcProgress(`Geocoding job ${i+1} of ${eligibleJobs.length}...`);
@@ -5840,13 +5842,15 @@ export default function App() {
     }
 
     // Already geocoded — reuse it. Trust legacy records with no geoAddr yet;
-    // only force a re-geocode when geoAddr is present and no longer matches.
+    // only force a re-geocode when geoAddr is present and no longer matches,
+    // or the cached coordinates are implausibly far from home base.
     const addrStr = fullAddressOf(job);
     if (!addrStr) return;
     // A bare state alone isn't specific enough to geocode reliably — skip rather
     // than risk plotting the job in the wrong country (e.g. "PA" → Panama).
     if (!hasSufficientAddress(job)) return;
-    const cached = job.geoLat && job.geoLng && (!job.geoAddr || job.geoAddr === addrStr);
+    const cached = job.geoLat && job.geoLng && (!job.geoAddr || job.geoAddr === addrStr)
+      && !isImplausibleLocation({lat: job.geoLat, lng: job.geoLng}, homeBase);
     const geo = cached ? { lat: job.geoLat, lng: job.geoLng } : await geocodeAddress(geocodeQueryOf(job), homeBase);
     if (!geo) return;
     if (!cached) {
