@@ -5475,7 +5475,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
   const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
 
   const columns = PIPELINE_STATUSES.map(status => {
-    const jobsInStatus = visibleJobs.filter(j => (PIPELINE_STATUSES.includes(j.status) ? j.status : "estimate") === status);
+    const jobsInStatus = visibleJobs.filter(j => j.status === status);
     const total = jobsInStatus.reduce((s,j) => s + calcJobFinancials(j, allRates).revenue, 0);
     return { status, jobs: jobsInStatus, total };
   });
@@ -5491,24 +5491,29 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
     <div
       draggable={draggable}
       onDragStart={draggable ? (e => { e.dataTransfer.setData("text/plain", String(job.id)); }) : undefined}
-      onClick={() => open(job)}
       style={{
         background:C.surface, border:`1px solid ${C.border}`, borderRadius:10,
-        padding:12, marginBottom:8, cursor:"pointer",
+        padding:12, marginBottom:8,
       }}>
-      <div style={{fontWeight:700, fontSize:13, marginBottom:2}}>{job.clientName||"Unnamed Client"}</div>
-      <div style={{fontSize:11, color:C.textMuted, marginBottom:8}}>{job.address||"No address"}</div>
-      {job.status==="scheduled" && (job.scheduleDays||[]).filter(d=>d.date)[0] && (
-        <div style={{fontSize:11, color:pipelineStatusColor("scheduled"), marginBottom:6}}>
-          📅 {(job.scheduleDays||[]).filter(d=>d.date)[0].date}
+      <div onClick={() => open(job)} style={{cursor:"pointer"}}>
+        <div style={{fontWeight:700, fontSize:13, marginBottom:2}}>{job.clientName||"Unnamed Client"}</div>
+        <div style={{fontSize:11, color:C.textMuted, marginBottom:8}}>{job.address||"No address"}</div>
+        {job.status==="scheduled" && (job.scheduleDays||[]).filter(d=>d.date)[0] && (
+          <div style={{fontSize:11, color:pipelineStatusColor("scheduled"), marginBottom:6}}>
+            📅 {(job.scheduleDays||[]).filter(d=>d.date)[0].date}
+          </div>
+        )}
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+          <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</span>
+          <span style={{fontSize:11, color:C.textMuted, textTransform:"capitalize"}}>
+            {(job.areas||[]).map(a=>a.serviceType).filter((v,i,a)=>a.indexOf(v)===i).join(", ") || "—"}
+          </span>
         </div>
-      )}
-      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-        <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</span>
-        <span style={{fontSize:11, color:C.textMuted, textTransform:"capitalize"}}>
-          {(job.areas||[]).map(a=>a.serviceType).filter((v,i,a)=>a.indexOf(v)===i).join(", ") || "—"}
-        </span>
       </div>
+      <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark ${job.clientName||"this job"} as Lost? It'll drop off the pipeline.`)) setStatus(job, "lost"); }}
+        style={{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer", padding:0}}>
+        Mark Lost
+      </button>
     </div>
   );
 
@@ -5560,6 +5565,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
                 style={{flex:1, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
                   padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text, cursor:"pointer", outline:"none"}}>
                 {PIPELINE_STATUSES.map(s => <option key={s} value={s}>{pipelineStatusLabel(s)}</option>)}
+                <option value="lost">Lost</option>
               </select>
             </div>
           </div>
