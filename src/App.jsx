@@ -435,7 +435,7 @@ function TopNav({ view, setView, userRole, permissions, onLogout, iconStyle }) {
         {tabs.map(t => (
           <button key={t.key} onClick={() => setView(t.key)}
             data-active={view===t.key?"true":"false"}
-            style={{...S.navTab,...(view===t.key?S.navTabActive:{})}}>
+            style={{...S.navTab, color: view===t.key ? C.accent : C.textMuted, borderBottomColor: view===t.key ? C.accent : "transparent"}}>
             <span style={S.navTabIcon}><TabIcon tabKey={t.key} iconStyle={iconStyle} size={16}/></span>
             <span style={S.navTabLabel}>{t.label}</span>
           </button>
@@ -445,7 +445,7 @@ function TopNav({ view, setView, userRole, permissions, onLogout, iconStyle }) {
             <div style={S.navDivider}/>
             <button onClick={() => setView("admin")}
               data-active={adminActive?"true":"false"}
-              style={{...S.navTab,...(adminActive?S.navTabActive:{})}}>
+              style={{...S.navTab, color: adminActive ? C.accent : C.textMuted, borderBottomColor: adminActive ? C.accent : "transparent"}}>
               <span style={S.navTabIcon}><TabIcon tabKey="admin" iconStyle={iconStyle} size={16}/></span>
               <span style={S.navTabLabel}>Admin</span>
             </button>
@@ -454,7 +454,7 @@ function TopNav({ view, setView, userRole, permissions, onLogout, iconStyle }) {
         <div style={S.navDivider}/>
         <button onClick={() => setView("account")}
           data-active={view==="account"?"true":"false"}
-          style={{...S.navTab,...(view==="account"?S.navTabActive:{})}}>
+          style={{...S.navTab, color: view==="account" ? C.accent : C.textMuted, borderBottomColor: view==="account" ? C.accent : "transparent"}}>
           <span style={S.navTabIcon}><TabIcon tabKey="account" iconStyle={iconStyle} size={16}/></span>
           <span style={S.navTabLabel}>Account</span>
         </button>
@@ -6007,7 +6007,7 @@ function SetPasswordView({ inviteToken, onSuccess }) {
   return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
-        <img src={"data:image/png;base64," + LOGO_B64} alt="TPS"
+        <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
           style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome!</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
@@ -6074,7 +6074,7 @@ function ProfileSetupWizard({ accessToken, userId, onComplete }) {
   return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
-        <img src={"data:image/png;base64," + LOGO_B64} alt="TPS"
+        <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
           style={{width:"100%", maxWidth:220, display:"block", margin:"0 auto 24px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome to the team!</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
@@ -6147,7 +6147,7 @@ function LoginView({ onSuccess }) {
     return (
       <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
         <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
-          <img src={"data:image/png;base64," + LOGO_B64} alt="TPS"
+          <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
             style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
           {resetSent ? (
             <>
@@ -6190,7 +6190,7 @@ function LoginView({ onSuccess }) {
   return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
-        <img src={"data:image/png;base64," + LOGO_B64} alt="TPS"
+        <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
           style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
         <form onSubmit={handleLogin}>
           <label style={S.formLabel}>Email
