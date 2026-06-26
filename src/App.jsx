@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import * as LucideIcons from "lucide-react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 const COMPANY  = "TPS Asphalt Maintenance";
 const PHONE    = "(570) 656-3311";
@@ -2559,84 +2561,88 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
   );
 }
 
-// ─── Zones Map View (Leaflet, sandboxed iframe approach) ───────────────────────
+// ─── Zones Map View (Leaflet, rendered directly — no iframe) ──────────────────
+// Previously this rendered Leaflet inside a sandboxed srcDoc iframe loading
+// Leaflet from a CDN. That meant fighting the app's own Content-Security-Policy
+// (which only whitelists specific external domains) every time the CDN or
+// sandbox attributes changed, plus iframe/CSP-inheritance quirks that caused
+// inconsistent blank/black-box rendering. Rendering Leaflet directly in the
+// page — as a normal bundled npm dependency — sidesteps all of that: it's
+// same-origin code, no external script/style tags, no sandboxing involved.
 function ZonesMapView({ jobs, zones, zoneColors, fullAddressOf }) {
-  const [mapHtml, setMapHtml] = useState("");
+  const mapElRef = useRef(null);   // the div Leaflet mounts into
+  const mapRef = useRef(null);     // the L.Map instance, persisted across renders
+  const [mapError, setMapError] = useState("");
+
+  const zonesList = zones?.list || [];
 
   useEffect(() => {
-    const zonesList = zones?.list || [];
-    const markers = [];
+    if (!zonesList.length || !mapElRef.current) return;
+    setMapError("");
 
-    zonesList.forEach((z, i) => {
-      const zoneJobs = jobs.filter(j => z.jobIds.includes(j.id) && j.geoLat && j.geoLng);
-      zoneJobs.forEach(j => {
-        markers.push({ lat: j.geoLat, lng: j.geoLng, color: zoneColors[i], label: j.clientName||"Job", zone: z.name });
-      });
-      if (z.centroid) {
-        markers.push({ lat: z.centroid.lat, lng: z.centroid.lng, color: zoneColors[i], label: "★ "+z.name+" Center", zone: z.name, isCentroid: true });
+    try {
+      // Reuse the existing map instance instead of recreating it every time
+      // zones/jobs change — avoids the flicker/black-tile issue that comes
+      // from tearing down and rebuilding Leaflet's tile layer repeatedly.
+      if (!mapRef.current) {
+        mapRef.current = L.map(mapElRef.current).setView([41.05, -75.35], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors', maxZoom: 19,
+        }).addTo(mapRef.current);
+        mapRef.current._markerLayer = L.layerGroup().addTo(mapRef.current);
       }
-    });
+      const map = mapRef.current;
+      // Leaflet sizes itself off the container's dimensions at creation time —
+      // if the container was hidden/zero-size at that moment (e.g. a freshly
+      // switched-to tab), tiles render as black squares until this is called.
+      map.invalidateSize();
 
-    const overflowJobs = jobs.filter(j => zones?.overflow?.jobIds?.includes(j.id) && j.geoLat && j.geoLng);
-    overflowJobs.forEach(j => {
-      markers.push({ lat: j.geoLat, lng: j.geoLng, color: "#888", label: j.clientName||"Job", zone: "Overflow" });
-    });
+      map._markerLayer.clearLayers();
+      const markers = [];
+      zonesList.forEach((z, i) => {
+        const zoneJobs = jobs.filter(j => z.jobIds.includes(j.id) && j.geoLat && j.geoLng);
+        zoneJobs.forEach(j => markers.push({ lat: j.geoLat, lng: j.geoLng, color: zoneColors[i], label: j.clientName||"Job", zone: z.name }));
+        if (z.centroid) markers.push({ lat: z.centroid.lat, lng: z.centroid.lng, color: zoneColors[i], label: "★ "+z.name+" Center", zone: z.name, isCentroid: true });
+      });
+      const overflowJobs = jobs.filter(j => zones?.overflow?.jobIds?.includes(j.id) && j.geoLat && j.geoLng);
+      overflowJobs.forEach(j => markers.push({ lat: j.geoLat, lng: j.geoLng, color: "#888", label: j.clientName||"Job", zone: "Overflow" }));
 
-    const markersJson = JSON.stringify(markers);
-
-    const html = `<!DOCTYPE html>
-<html><head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<style>html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#1a1a1a}
-#loadErr{color:#fff;font-family:sans-serif;padding:20px;text-align:center;display:none}</style>
-</head><body>
-<div id="map"></div>
-<div id="loadErr">Map failed to load — your network/browser security settings (or this site's Content-Security-Policy) may be blocking unpkg.com or tile.openstreetmap.org.</div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-// If Leaflet's script tag itself got blocked (firewall/extension/CSP), there's
-// nothing to retry against — show a clear message instead of a silent blank.
-setTimeout(function(){
-  if (typeof L === 'undefined') {
-    document.getElementById('map').style.display = 'none';
-    document.getElementById('loadErr').style.display = 'block';
-  }
-}, 4000);
-try {
-  const MARKERS = ${markersJson};
-  const map = L.map('map').setView([41.05,-75.35],10);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
-  const bounds = [];
-  MARKERS.forEach(m => {
-    bounds.push([m.lat,m.lng]);
-    const size = m.isCentroid ? 18 : 14;
-    const icon = L.divIcon({
-      className:'',
-      html:'<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+m.color+';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)'+(m.isCentroid?';display:flex;align-items:center;justify-content:center;font-size:10px':'')+'">'+(m.isCentroid?'★':'')+'</div>',
-      iconSize:[size,size],iconAnchor:[size/2,size/2]
-    });
-    L.marker([m.lat,m.lng],{icon}).addTo(map).bindPopup('<b>'+m.label+'</b><br><span style="color:#888">'+m.zone+'</span>');
-  });
-  if(bounds.length>0) map.fitBounds(bounds,{padding:[30,30],maxZoom:13});
-} catch(e) {
-  document.body.innerHTML = '<div style="color:#fff;font-family:sans-serif;padding:20px;text-align:center">Map failed to load: '+e.message+'</div>';
-}
-</script></body></html>`;
-
-    setMapHtml(html);
+      const bounds = [];
+      markers.forEach(m => {
+        bounds.push([m.lat, m.lng]);
+        const size = m.isCentroid ? 18 : 14;
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${m.color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)${m.isCentroid?';display:flex;align-items:center;justify-content:center;font-size:10px':''}">${m.isCentroid?'★':''}</div>`,
+          iconSize: [size, size], iconAnchor: [size/2, size/2],
+        });
+        L.marker([m.lat, m.lng], { icon }).addTo(map._markerLayer)
+          .bindPopup(`<b>${m.label}</b><br><span style="color:#888">${m.zone}</span>`);
+      });
+      if (bounds.length > 0) map.fitBounds(bounds, { padding: [30,30], maxZoom: 13 });
+    } catch (e) {
+      setMapError(e.message || "Unknown error rendering the map.");
+    }
   }, [jobs, zones]);
+
+  // Clean up the map instance when this view unmounts (e.g. switching tabs)
+  useEffect(() => () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } }, []);
 
   return (
     <section style={S.section}>
       <h2 style={S.h2}>Zone Map</h2>
-      {!zones?.list?.length ? (
+      {!zonesList.length ? (
         <p style={{fontSize:12, color:C.textMuted}}>Calculate zones first to see them on the map.</p>
       ) : (
         <>
-          <div style={{borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}`, height:380}}>
-            <iframe srcDoc={mapHtml} style={{width:"100%", height:"100%", border:"none"}}
-              title="Zones map" sandbox="allow-scripts allow-popups"/>
+          <div style={{borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}`, height:380, background:"#1a1a1a", position:"relative"}}>
+            <div ref={mapElRef} style={{width:"100%", height:"100%"}}/>
+            {mapError && (
+              <div style={{position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
+                background:"#1a1a1a", color:"#fff", fontSize:12, padding:20, textAlign:"center"}}>
+                Map failed to load: {mapError}
+              </div>
+            )}
           </div>
           <div style={{display:"flex", flexWrap:"wrap", gap:12, marginTop:12}}>
             {zones.list.map((z,i) => (
