@@ -2935,6 +2935,25 @@ async function geocodeAddressOnce(addressStr) {
     }
   } catch (e) { status = status + "/photon-network-error"; }
 
+  // Fallback #3: U.S. Census Bureau Geocoder — built from USPS/TIGER address
+  // reference data rather than crowd-sourced map edits, so it covers many
+  // rural US addresses that Nominatim/Photon simply have no record of at all.
+  try {
+    const res3 = await fetch(
+      "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=" + encodeURIComponent(addressStr)
+    );
+    if (!res3.ok) {
+      status = status + "/census-http-" + res3.status;
+    } else {
+      const data3 = await res3.json();
+      const match = data3?.result?.addressMatches?.[0];
+      if (match?.coordinates) {
+        return { coords: { lat: Number(match.coordinates.y), lng: Number(match.coordinates.x) }, status: "ok" };
+      }
+      status = status + "/census-no-match";
+    }
+  } catch (e) { status = status + "/census-network-error"; }
+
   return { coords: null, status };
 }
 
