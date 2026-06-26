@@ -2138,8 +2138,10 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
       const j = eligibleJobs[i];
       const addrStr = fullAddressOf(j);
       if (!addrStr) continue;
-      // Already geocoded for this exact address — reuse it, no need to calculate again.
-      if (j.geoLat && j.geoLng && j.geoAddr === addrStr) {
+      // Already geocoded — reuse it. Trust legacy records with no geoAddr yet
+      // (they predate this field); only force a re-geocode when geoAddr is
+      // present and no longer matches the job's current address.
+      if (j.geoLat && j.geoLng && (!j.geoAddr || j.geoAddr === addrStr)) {
         livePoints.push({ lat: j.geoLat, lng: j.geoLng, jobId: j.id, source: "live" });
       } else {
         setCalcProgress(`Geocoding job ${i+1} of ${eligibleJobs.length}...`);
@@ -5637,10 +5639,11 @@ export default function App() {
       return;
     }
 
+    // Already geocoded — reuse it. Trust legacy records with no geoAddr yet;
+    // only force a re-geocode when geoAddr is present and no longer matches.
     const addrStr = fullAddressOf(job);
     if (!addrStr) return;
-    // Already geocoded for this exact address — no need to calculate it again.
-    const geo = (job.geoLat && job.geoLng && job.geoAddr === addrStr)
+    const geo = (job.geoLat && job.geoLng && (!job.geoAddr || job.geoAddr === addrStr))
       ? { lat: job.geoLat, lng: job.geoLng }
       : await geocodeAddress(addrStr);
     if (!geo) return;
