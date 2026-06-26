@@ -67,14 +67,14 @@ const S = {
   navTitle:{ fontWeight:800, fontSize:14, color:C.accent, letterSpacing:"0.06em" },
   navTabs:{ display:"flex", overflowX:"auto", flex:1, scrollbarWidth:"none", msOverflowStyle:"none" },
   navDivider:{ width:1, alignSelf:"stretch", margin:"8px 4px", background:C.border, flexShrink:0 },
-  navTab:{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1, padding:"6px 10px", background:"none", border:"none", color:C.textMuted, cursor:"pointer", fontSize:10, borderBottom:"2px solid transparent", transition:"all .15s", flexShrink:0, minWidth:52 },
+  navTab:{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1, padding:"6px 10px", background:"none", border:"none", outline:"none", color:C.textMuted, cursor:"pointer", fontSize:10, borderBottom:"2px solid transparent", transition:"all .15s", flexShrink:0, minWidth:52, WebkitTapHighlightColor:"transparent" },
   navTabActive:{ color:C.accent, borderBottomColor:C.accent },
   navTabIcon:{ fontSize:15 }, navTabLabel:{whiteSpace:"nowrap"},
   // Desktop sidebar nav
   sidebar:{ width:220, flexShrink:0, background:C.surface, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", overflowY:"auto" },
   sidebarBrand:{ padding:"24px 20px 20px" },
   sidebarTabs:{ display:"flex", flexDirection:"column", gap:2, padding:"0 12px 20px" },
-  sidebarTab:{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:8, background:"none", border:"none", color:C.textMuted, cursor:"pointer", fontSize:14, fontWeight:500, textAlign:"left", transition:"all .15s" },
+  sidebarTab:{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:8, background:"none", border:"none", outline:"none", color:C.textMuted, cursor:"pointer", fontSize:14, fontWeight:500, textAlign:"left", transition:"all .15s", WebkitTapHighlightColor:"transparent" },
   sidebarTabActive:{ background:C.surface2, color:C.accent, fontWeight:700 },
   sidebarDivider:{ height:1, margin:"10px 14px", background:C.border },
   content:{ flex:1 },
@@ -271,7 +271,7 @@ const S = {
 if (typeof document !== "undefined" && !document.getElementById("tps-nav-css")) {
   const style = document.createElement("style");
   style.id = "tps-nav-css";
-  style.textContent = "html,body,#root{margin:0;padding:0;width:100%;min-height:100%} .tps-nav-tabs::-webkit-scrollbar{display:none} select{color-scheme:dark} select option{color:#000;background:#fff}";
+  style.textContent = "html,body,#root{margin:0;padding:0;width:100%;min-height:100%} .tps-nav-tabs::-webkit-scrollbar{display:none} select{color-scheme:dark} select option{color:#000;background:#fff} .tps-nav-tabs button:focus,.tps-sidebar-tabs button:focus{outline:none;box-shadow:none}";
   document.head.appendChild(style);
 }
 if (typeof document !== "undefined" && !document.getElementById("tps-font-link")) {
@@ -390,7 +390,7 @@ function TopNav({ view, setView, userRole, permissions, onLogout, iconStyle }) {
         <div style={S.sidebarBrand}>
           <img src={"data:image/png;base64," + LOGO_B64} alt="TPS" style={{width:"100%", maxWidth:140, display:"block"}}/>
         </div>
-        <div style={S.sidebarTabs}>
+        <div className="tps-sidebar-tabs" style={S.sidebarTabs}>
           {tabs.map(t => (
             <button key={t.key} onClick={() => setView(t.key)}
               style={{...S.sidebarTab,...(view===t.key?S.sidebarTabActive:{})}}>
@@ -1599,7 +1599,7 @@ function InvoiceView({ currentJob, updateJob, rates }) {
 }
 
 // ─── Labor View ───────────────────────────────────────────────────────────────
-function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
+function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId }) {
   const isDesktop = useIsDesktop();
   const today = new Date().toISOString().slice(0,10);
   const [selectedDate, setSelectedDate] = useState(today);
@@ -1609,9 +1609,15 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
   const [editName,     setEditName]     = useState("");
   const [editHours,    setEditHours]    = useState("");
 
+  const canManualEntry = userRole === "admin" || userRole === "manager" || userRole === "crewlead";
+
+  const myProfile = (teamUsers||[]).find(u => u.id === currentUserId);
+  const myName = myProfile
+    ? [myProfile.first_name, myProfile.last_name].filter(Boolean).join(" ") || myProfile.email
+    : "";
+
   // ── Clock in/out state (per-device, stored locally) ──
   const CLOCK_KEY = "tps_active_clock";
-  const [clockName, setClockName] = useState("");
   const [activeClock, setActiveClock] = useState(() => {
     try { const s = localStorage.getItem(CLOCK_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; }
   });
@@ -1661,13 +1667,13 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
   };
 
   const clockIn = async () => {
-    if (!clockName.trim()) { setClockErr("Enter your name first."); return; }
+    if (!myName) { setClockErr("Could not find your name on file. Please contact your admin."); return; }
     setClockErr(""); setPermDenied(false); setClockBusy(true);
     try {
       const { lat, lng } = await getLocation();
       const address = await reverseGeocode(lat, lng);
       const session = {
-        name: clockName.trim(),
+        name: myName,
         date: new Date().toISOString().slice(0,10),
         clockInTime: new Date().toISOString(),
         clockInLat: lat, clockInLng: lng, clockInAddress: address,
@@ -1700,7 +1706,6 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
       });
       localStorage.removeItem(CLOCK_KEY);
       setActiveClock(null);
-      setClockName("");
     } catch(e) {
       if (e.type === "denied") { setPermDenied(true); setPendingAction("out"); }
       else { setClockErr(e.message); }
@@ -1782,8 +1787,10 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
         <h2 style={S.h2}>📍 Clock {activeClock ? "Out" : "In"}</h2>
         {!activeClock ? (
           <>
-            <input type="text" value={clockName} onChange={e => setClockName(e.target.value)}
-              style={{...S.input, marginBottom:10}} placeholder="Your name"/>
+            <div style={{background:C.surface2, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
+              <div style={{fontSize:11, color:C.textMuted}}>Clocking in as</div>
+              <div style={{fontWeight:700, fontSize:15}}>{myName || "—"}</div>
+            </div>
             {clockErr && (
               <div style={{background:"#fee2e2", border:`1px solid ${C.danger}`, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
                 <div style={{color:C.danger, fontSize:12, fontWeight:600}}>⚠️ {clockErr}</div>
@@ -1882,7 +1889,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
         </section>
       )}
 
-      {/* Date picker + add entry */}
+      {/* Date picker + manual entry — admin/manager/crew lead only */}
       <section style={S.section}>
         <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:14}}>
           <input type="date" value={selectedDate}
@@ -1892,15 +1899,22 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
         <h2 style={S.h2}>
           {new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
         </h2>
-        <div style={{display:"flex", gap:8, marginBottom:10}}>
-          <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-            style={{...S.input, flex:2}} placeholder="Contractor name"
-            onKeyDown={e => e.key==="Enter" && addEntry()}/>
-          <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
-            min="0" step="0.5" style={{...S.input, flex:1}} placeholder="Hrs"
-            onKeyDown={e => e.key==="Enter" && addEntry()}/>
-          <button style={{...S.btnPrimary, whiteSpace:"nowrap", padding:"8px 14px"}} onClick={addEntry}>+ Add</button>
-        </div>
+        {canManualEntry && (
+          <div style={{display:"flex", gap:8, marginBottom:10}}>
+            <select value={newName} onChange={e => setNewName(e.target.value)}
+              style={{...S.input, flex:2}}>
+              <option value="">Select name...</option>
+              {(teamUsers||[]).map(u => {
+                const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                return <option key={u.id} value={label}>{label}</option>;
+              })}
+            </select>
+            <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
+              min="0" step="0.5" style={{...S.input, flex:1}} placeholder="Hrs"
+              onKeyDown={e => e.key==="Enter" && addEntry()}/>
+            <button style={{...S.btnPrimary, whiteSpace:"nowrap", padding:"8px 14px"}} onClick={addEntry}>+ Add</button>
+          </div>
+        )}
 
         {dayEntries.length > 0 ? (
           <>
@@ -1910,8 +1924,13 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
                 {editingId === e.id ? (
                   <div>
                     <div style={{display:"flex", gap:8, marginBottom:8}}>
-                      <input type="text" value={editName} onChange={e2 => setEditName(e2.target.value)}
-                        style={{...S.input, flex:2}} autoFocus/>
+                      <select value={editName} onChange={e2 => setEditName(e2.target.value)}
+                        style={{...S.input, flex:2}}>
+                        {(teamUsers||[]).map(u => {
+                          const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                          return <option key={u.id} value={label}>{label}</option>;
+                        })}
+                      </select>
                       <input type="number" value={editHours} onChange={e2 => setEditHours(e2.target.value)}
                         min="0" step="0.5" style={{...S.input, flex:1}}/>
                     </div>
@@ -1926,8 +1945,12 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry }) {
                       <span style={{fontWeight:600, fontSize:14}}>{e.name}</span>
                       <div style={{display:"flex", alignItems:"center", gap:8}}>
                         <span style={{fontSize:14, fontWeight:700, color:C.accent}}>{e.hours} hr{e.hours!==1?"s":""}</span>
-                        <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(e)}>✎</button>
-                        <button style={S.btnSmallDanger} onClick={() => deleteLaborEntry(e.id)}>✕</button>
+                        {canManualEntry && (
+                          <>
+                            <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(e)}>✎</button>
+                            <button style={S.btnSmallDanger} onClick={() => deleteLaborEntry(e.id)}>✕</button>
+                          </>
+                        )}
                       </div>
                     </div>
                     {e.clockInTime && (
@@ -5029,6 +5052,19 @@ const authSignIn = async (email, password) => {
   return data; // { access_token, refresh_token, user, expires_at, ... }
 };
 
+const authRequestPasswordReset = async (email) => {
+  const res = await fetch(SUPABASE_URL + "/auth/v1/recover", {
+    method: "POST",
+    headers: { "apikey": SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error_description || data.msg || "Could not send reset email.");
+  }
+  return true;
+};
+
 const authRefresh = async (refreshToken) => {
   const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
     method: "POST",
@@ -5080,23 +5116,22 @@ function SetPasswordView({ inviteToken, onSuccess }) {
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     setSaving(true);
     try {
-      await authUpdatePassword(inviteToken, password);
-      // Fetch the user's identity using the invite token so we can build a full session
+      // Grab the user's email BEFORE changing the password, while the invite
+      // token's session is still alive.
       const userRes = await fetch(SUPABASE_URL + "/auth/v1/user", {
         headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + inviteToken },
       });
       const userData = await userRes.json();
-      if (!userRes.ok || !userData?.id) throw new Error("Could not finish setting up your account. Please ask your admin to resend the invite.");
-      // Build a session object compatible with the rest of the app.
-      // The invite token itself acts as a valid access token going forward
-      // until it naturally expires; after that, normal login takes over.
-      const session = {
-        access_token: inviteToken,
-        refresh_token: null,
-        user: userData,
-        expires_at: Math.floor(Date.now()/1000) + 3600, // treat as 1hr fresh from now
-      };
-      onSuccess(session);
+      if (!userRes.ok || !userData?.email) throw new Error("Could not finish setting up your account. Please ask your admin to resend the invite.");
+
+      // Setting the password invalidates the invite token's session (this is
+      // intentional Supabase behavior) — so we must NOT reuse inviteToken
+      // after this point for anything.
+      await authUpdatePassword(inviteToken, password);
+
+      // Sign in fresh with the new password to get a brand new, valid session.
+      const freshSession = await authSignIn(userData.email, password);
+      onSuccess(freshSession);
     } catch(err) {
       setError(err.message || "Something went wrong setting your password.");
     }
@@ -5214,6 +5249,8 @@ function LoginView({ onSuccess }) {
   const [password, setPassword] = useState("");
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
+  const [mode,     setMode]     = useState("login"); // "login" | "forgot"
+  const [resetSent, setResetSent] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -5227,6 +5264,62 @@ function LoginView({ onSuccess }) {
     }
     setLoading(false);
   };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      await authRequestPasswordReset(email.trim());
+      setResetSent(true);
+    } catch(err) {
+      setError(err.message || "Could not send reset email. Check the address and try again.");
+    }
+    setLoading(false);
+  };
+
+  if (mode === "forgot") {
+    return (
+      <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+        <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
+          <img src={"data:image/png;base64," + LOGO_B64} alt="TPS"
+            style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+          {resetSent ? (
+            <>
+              <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Check your email</h1>
+              <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
+                If an account exists for <strong>{email.trim()}</strong>, a password reset link is on its way. Click it to set a new password.
+              </p>
+              <button style={{...S.btnSecondary, width:"100%"}}
+                onClick={() => { setMode("login"); setResetSent(false); }}>
+                ← Back to Sign In
+              </button>
+            </>
+          ) : (
+            <>
+              <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Reset Password</h1>
+              <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
+                Enter your email and we'll send you a link to set a new password.
+              </p>
+              <form onSubmit={handleForgotPassword}>
+                <label style={S.formLabel}>Email
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    style={S.input} autoCapitalize="none" autoCorrect="off" required/>
+                </label>
+                {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
+                <button type="submit" style={{...S.btnPrimary, width:"100%", marginTop:18, opacity:loading?0.6:1}} disabled={loading}>
+                  {loading ? "Sending..." : "Send Reset Link"}
+                </button>
+              </form>
+              <button style={{...S.btnSecondary, width:"100%", marginTop:10}}
+                onClick={() => { setMode("login"); setError(""); }}>
+                ← Back to Sign In
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
@@ -5247,6 +5340,11 @@ function LoginView({ onSuccess }) {
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
+        <button
+          onClick={() => { setMode("forgot"); setError(""); }}
+          style={{background:"none", border:"none", color:C.accent, fontSize:13, cursor:"pointer", display:"block", margin:"14px auto 0", textAlign:"center"}}>
+          Forgot password?
+        </button>
         <p style={{fontSize:12, color:C.textMuted, textAlign:"center", marginTop:16}}>
           Need an account? Ask your admin to create one for you.
         </p>
@@ -5682,7 +5780,7 @@ export default function App() {
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRole)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRole)==="view"}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
-        {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry}/>}
+        {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/>}
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
