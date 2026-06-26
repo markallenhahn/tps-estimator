@@ -2133,7 +2133,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
       // A bare state with nothing else isn't specific enough to geocode reliably.
       if (!row.address && !row.city && !row.zip) { skippedThin++; continue; }
       setCalcProgress(`Geocoding ${i+1} of ${csvRows.length}...`);
-      const geo = await geocodeAddress(addrStr + ", USA");
+      const geo = await geocodeAddress(addrStr + ", USA", homeBase);
       if (geo) {
         const entry = { id: Date.now()+i, ...row, lat: geo.lat, lng: geo.lng };
         imported.push(entry);
@@ -2186,7 +2186,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
         livePoints.push({ lat: j.geoLat, lng: j.geoLng, jobId: j.id, source: "live" });
       } else {
         setCalcProgress(`Geocoding job ${i+1} of ${eligibleJobs.length}...`);
-        const result = await geocodeAddressDetailed(geocodeQueryOf(j));
+        const result = await geocodeAddressDetailed(geocodeQueryOf(j), homeBase);
         if (result.coords) {
           const geo = result.coords;
           livePoints.push({ lat: geo.lat, lng: geo.lng, jobId: j.id, source: "live" });
@@ -2910,7 +2910,21 @@ function calcJobFinancials(job, rates) {
 // *why* it failed (rate-limited vs. no match vs. network error) instead of
 // just returning null — that distinction is what's needed to tell "the
 // provider is blocking us" apart from "this address doesn't exist."
-async function geocodeAddressOnce(addressStr) {
+//
+// Every successful match is also checked against `homeBase` (if set) — a
+// vague or ambiguous address can get fuzzy-matched to a similarly-named place
+// anywhere in the country with full "success" and no warning otherwise. The
+// radius is generous (150mi) so it doesn't reject real long-distance jobs,
+// just results that are obviously the wrong place entirely. This is based on
+// wherever the business's own home base is set, not a hardcoded region — so
+// a contractor anywhere else using this app gets correctly bounded too.
+const MAX_JOB_DISTANCE_FROM_HOME_MILES = 150;
+function isImplausibleLocation(coords, homeBase) {
+  if (!homeBase?.lat || !homeBase?.lng) return false; // no reference point set — can't check, don't block
+  return haversine(coords, { lat: homeBase.lat, lng: homeBase.lng }) > MAX_JOB_DISTANCE_FROM_HOME_MILES;
+}
+
+async function geocodeAddressOnce(addressStr, homeBase) {
   let status = "no-match";
 
   // Try Nominatim first (OpenStreetMap's official geocoder)
@@ -2926,9 +2940,12 @@ async function geocodeAddressOnce(addressStr) {
     } else {
       const data = await res.json();
       if (Array.isArray(data) && data[0]) {
-        return { coords: { lat: Number(data[0].lat), lng: Number(data[0].lon) }, status: "ok" };
+        const coords = { lat: Number(data[0].lat), lng: Number(data[0].lon) };
+        if (isImplausibleLocation(coords, homeBase)) { status = "nominatim-out-of-region"; }
+        else return { coords, status: "ok" };
+      } else {
+        status = "nominatim-no-match";
       }
-      status = "nominatim-no-match";
     }
   } catch (e) { status = "nominatim-network-error"; }
 
@@ -2945,9 +2962,12 @@ async function geocodeAddressOnce(addressStr) {
       const feature = data2?.features?.[0];
       if (feature?.geometry?.coordinates) {
         const [lng, lat] = feature.geometry.coordinates;
-        return { coords: { lat: Number(lat), lng: Number(lng) }, status: "ok" };
+        const coords = { lat: Number(lat), lng: Number(lng) };
+        if (isImplausibleLocation(coords, homeBase)) { status = status + "/photon-out-of-region"; }
+        else return { coords, status: "ok" };
+      } else {
+        status = status + "/photon-no-match";
       }
-      status = status + "/photon-no-match";
     }
   } catch (e) { status = status + "/photon-network-error"; }
 
@@ -2965,20 +2985,23 @@ async function geocodeAddressOnce(addressStr) {
       const data3 = await res3.json();
       const match = data3?.result?.addressMatches?.[0];
       if (match?.coordinates) {
-        return { coords: { lat: Number(match.coordinates.y), lng: Number(match.coordinates.x) }, status: "ok" };
+        const coords = { lat: Number(match.coordinates.y), lng: Number(match.coordinates.x) };
+        if (isImplausibleLocation(coords, homeBase)) { status = status + "/census-out-of-region"; }
+        else return { coords, status: "ok" };
+      } else {
+        status = status + "/census-no-match";
       }
-      status = status + "/census-no-match";
     }
   } catch (e) { status = status + "/census-network-error"; }
 
   return { coords: null, status };
 }
 
-async function geocodeAddressDetailed(addressStr, attempts = 3) {
+async function geocodeAddressDetailed(addressStr, homeBase, attempts = 3) {
   if (!addressStr || !addressStr.trim()) return { coords: null, status: "empty-query" };
   let last = { coords: null, status: "unknown" };
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const result = await geocodeAddressOnce(addressStr);
+    const result = await geocodeAddressOnce(addressStr, homeBase);
     if (result.coords) return result;
     last = result;
     if (attempt < attempts - 1) {
@@ -2990,8 +3013,8 @@ async function geocodeAddressDetailed(addressStr, attempts = 3) {
 }
 
 // Simple coords-or-null wrapper for call sites that don't need the failure reason.
-async function geocodeAddress(addressStr, attempts = 3) {
-  const result = await geocodeAddressDetailed(addressStr, attempts);
+async function geocodeAddress(addressStr, homeBase, attempts = 3) {
+  const result = await geocodeAddressDetailed(addressStr, homeBase, attempts);
   return result.coords;
 }
 
@@ -5824,7 +5847,7 @@ export default function App() {
     // than risk plotting the job in the wrong country (e.g. "PA" → Panama).
     if (!hasSufficientAddress(job)) return;
     const cached = job.geoLat && job.geoLng && (!job.geoAddr || job.geoAddr === addrStr);
-    const geo = cached ? { lat: job.geoLat, lng: job.geoLng } : await geocodeAddress(geocodeQueryOf(job));
+    const geo = cached ? { lat: job.geoLat, lng: job.geoLng } : await geocodeAddress(geocodeQueryOf(job), homeBase);
     if (!geo) return;
     if (!cached) {
       try {
