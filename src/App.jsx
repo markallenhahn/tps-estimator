@@ -630,7 +630,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
 }
 
 // ─── Media View ───────────────────────────────────────────────────────────────
-function JobDetailView({ currentJob, updateJob, rates, setView, teamUsers, crews }) {
+function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews }) {
   const isDesktop = useIsDesktop();
   // ── Photo capture ──
   const [capturing, setCapturing] = useState(null);
@@ -796,7 +796,15 @@ function JobDetailView({ currentJob, updateJob, rates, setView, teamUsers, crews
         <h1 style={S.h1}>{currentJob.clientName||"Unnamed Job"}</h1>
         <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Jobs</button>
       </div>
-      <p style={S.subhead}>{currentJob.address||"No address"}</p>
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+        <p style={{...S.subhead, margin:0}}>{currentJob.address||"No address"}</p>
+        {deleteJob && (
+          <button onClick={() => { if (confirm(`Delete this job for ${currentJob.clientName||"this client"}? This can't be undone.`)) { deleteJob(currentJob.id); setView("jobs"); } }}
+            style={{fontSize:12, color:C.danger, background:"none", border:"none", cursor:"pointer", padding:0}}>
+            🗑 Delete Job
+          </button>
+        )}
+      </div>
 
       {/* ── ASSIGNMENT ── */}
       {teamUsers && teamUsers.length > 0 && (
@@ -5443,35 +5451,20 @@ const pipelineStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toU
 const pipelineStatusColor = (s) => (S[`status_${s}`] || S.status_estimate).color;
 const pipelineStatusBg = (s) => (S[`status_${s}`] || S.status_estimate).background;
 
-function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, updateJobById, userRole, userId, crews }) {
+function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, updateJobById, userRole, userId, scope, showBackButton }) {
   const isDesktopLayout = useIsDesktop();
   const [dragOverStatus, setDragOverStatus] = useState(null);
   const [mobileStatus, setMobileStatus] = useState("estimate");
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
 
-  // Same visibility scoping as the My Jobs screen — admin/manager see
-  // everything, crew lead sees self + crew, everyone else sees only what's
-  // assigned to them.
-  const myCrew = (crews||[]).find(c => c.leadId === userId);
-  const myCrewMemberIds = myCrew ? (myCrew.memberIds||[]) : [];
-  const visibleJobs = (() => {
-    if (userRole === "admin" || userRole === "manager") return jobs;
-    if (userRole === "crewlead") {
-      const allowedIds = new Set([userId, ...myCrewMemberIds]);
-      return jobs.filter(j => !j.assignedTo || allowedIds.has(j.assignedTo));
-    }
-    return jobs.filter(j => j.assignedTo === userId);
-  })();
-
-  const myJobsCount = (() => {
-    if (userRole === "admin" || userRole === "manager") return visibleJobs.filter(j => !j.assignedTo).length;
-    if (userRole === "crewlead") {
-      const allowedIds = new Set([userId, ...myCrewMemberIds]);
-      return visibleJobs.filter(j => j.assignedTo && allowedIds.has(j.assignedTo)).length;
-    }
-    return visibleJobs.filter(j => j.assignedTo === userId).length;
-  })();
+  const canSeeAllJobs = userRole === "admin" || userRole === "manager";
+  // Anyone who isn't an admin or manager only ever sees jobs assigned
+  // directly to them — no crew-wide visibility. Admins/managers see
+  // everything on the main Jobs tab, but get the same strict "assigned to
+  // me" filter on their own My Jobs screen (scope="mine").
+  const mineOnly = scope === "mine" || !canSeeAllJobs;
+  const visibleJobs = mineOnly ? jobs.filter(j => j.assignedTo === userId) : jobs;
 
   const create = () => {
     const j = initialJob(rates);
@@ -5526,19 +5519,23 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
     </div>
   );
 
+  const myJobsCount = jobs.filter(j => j.assignedTo === userId).length;
+  const title = mineOnly ? "My Jobs" : "Jobs Pipeline";
   const headerRow = isDesktopLayout ? (
     <div style={S.pageHeader}>
-      <h1 style={S.h1}>Jobs Pipeline</h1>
+      <h1 style={S.h1}>{title}</h1>
       <div style={{display:"flex", gap:8}}>
-        <button style={S.btnSecondary} onClick={() => setView("myjobs")}>⭐ My Jobs ({myJobsCount})</button>
+        {showBackButton && <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Pipeline</button>}
+        {canSeeAllJobs && !showBackButton && <button style={S.btnSecondary} onClick={() => setView("myjobs")}>⭐ My Jobs ({myJobsCount})</button>}
         <button onClick={create} style={S.btnPrimary}>+ New Job</button>
       </div>
     </div>
   ) : (
     <div style={{marginBottom:16}}>
-      <h1 style={{...S.h1, marginBottom:10}}>Jobs Pipeline</h1>
+      <h1 style={{...S.h1, marginBottom:10}}>{title}</h1>
       <div style={{display:"flex", gap:8}}>
-        <button style={{...S.btnSecondary, flex:1}} onClick={() => setView("myjobs")}>⭐ My Jobs ({myJobsCount})</button>
+        {showBackButton && <button style={{...S.btnSecondary, flex:1}} onClick={() => setView("jobs")}>← Pipeline</button>}
+        {canSeeAllJobs && !showBackButton && <button style={{...S.btnSecondary, flex:1}} onClick={() => setView("myjobs")}>⭐ My Jobs ({myJobsCount})</button>}
         <button onClick={create} style={{...S.btnPrimary, flex:1}}>+ New Job</button>
       </div>
     </div>
@@ -5621,190 +5618,6 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ─── Jobs List ────────────────────────────────────────────────────────────────
-function JobsView({ jobs, setJobs, deleteJob, setCurrentJob, setView, rates, updateJobById, userRole, userId, crews, showBackButton }) {
-  const [openSections, setOpenSections] = useState({});
-
-  // ── Visibility scoping ──
-  // Admin/Manager: see everything. Crew Lead: self + their crew's members.
-  // Crew/Estimator: only jobs assigned directly to them.
-  const myCrew = (crews||[]).find(c => c.leadId === userId);
-  const myCrewMemberIds = myCrew ? (myCrew.memberIds||[]) : [];
-
-  const visibleJobs = (() => {
-    if (userRole === "admin" || userRole === "manager") return jobs;
-    if (userRole === "crewlead") {
-      const allowedIds = new Set([userId, ...myCrewMemberIds]);
-      return jobs.filter(j => !j.assignedTo || allowedIds.has(j.assignedTo));
-    }
-    // crew, estimator
-    return jobs.filter(j => j.assignedTo === userId);
-  })();
-
-  const create    = () => { const j=initialJob(rates); if (userId && userRole!=="admin" && userRole!=="manager") j.assignedTo = userId; setJobs(p=>[j,...p]); setCurrentJob(j); setView("jobdetail"); };
-  const open      = (job) => { setCurrentJob(job); setView("jobdetail"); };
-  const remove    = (id)  => { if(confirm("Delete this job?")) deleteJob(id); };
-  const schedule  = (job, date) => updateJobById(job.id, j => ({...j, scheduledDate:date, status: date ? "scheduled" : j.status==="scheduled" ? "draft" : j.status}));
-  const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
-  const restore   = (job) => updateJobById(job.id, j => ({...j, status:"draft"}));
-
-  const STATUS_ORDER    = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
-  const ARCHIVE_STATUSES = ["completed","paid","lost"];
-  const safeStatus = (s) => (s && STATUS_ORDER.includes(s)) ? s : "estimate";
-
-  // ── "My Jobs" — assigned to me, my crew, or (for admin/manager) unassigned ──
-  const myJobs = (() => {
-    if (userRole === "admin" || userRole === "manager") {
-      return visibleJobs.filter(j => !j.assignedTo);
-    }
-    if (userRole === "crewlead") {
-      const allowedIds = new Set([userId, ...myCrewMemberIds]);
-      return visibleJobs.filter(j => j.assignedTo && allowedIds.has(j.assignedTo));
-    }
-    return visibleJobs.filter(j => j.assignedTo === userId);
-  })().sort((a,b) => STATUS_ORDER.indexOf(safeStatus(a.status)) - STATUS_ORDER.indexOf(safeStatus(b.status)));
-
-  const renderCard = (j, isArchived) => (
-    <div key={j.id} style={S.jobCard}>
-      <div style={S.jobCardTop} onClick={() => open(j)}>
-        <div style={{flex:1, minWidth:0}}>
-          <div style={S.jobCardName}>{j.clientName||"Unnamed Client"}</div>
-          <div style={S.jobCardAddr}>{j.address||"No address"}</div>
-          <div style={S.jobCardMeta}>{j.date} · {j.areas.length} area{j.areas.length!==1?"s":""}</div>
-          {(j.scheduleDays||[]).filter(d=>d.date).map((day,di) => (
-            <div key={day.id} style={S.jobScheduledDate}>
-              📅 Day {di+1}{day.label ? " — "+day.label : ""}: {day.date}
-            </div>
-          ))}
-        </div>
-        <span style={{...S.statusBadge,...(S[`status_${safeStatus(j.status)}`]||S.status_estimate)}}>
-          {safeStatus(j.status)==="estimate" ? "Estimate" : safeStatus(j.status)}
-        </span>
-      </div>
-      <div style={S.jobCardActions}>
-        <button style={S.btnSmall} onClick={() => open(j)}>Open</button>
-        {!isArchived && (
-          <select
-            value={safeStatus(j.status)}
-            onChange={e => { e.stopPropagation(); setStatus(j, e.target.value); }}
-            onClick={e => e.stopPropagation()}
-            style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
-              padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text, cursor:"pointer", outline:"none", flex:1}}>
-            {STATUS_ORDER.map(s => (
-              <option key={s} value={s}>{s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1)}</option>
-            ))}
-          </select>
-        )}
-        {!isArchived && (
-          <>
-            {/* Multi-day scheduler */}
-            <div style={{width:"100%", marginTop:4}}>
-              {(j.scheduleDays||[]).map((day, di) => (
-                <div key={day.id} style={{display:"flex", gap:6, alignItems:"center", marginBottom:4}}>
-                  <input type="date" value={day.date||""}
-                    onChange={e => {
-                      const days = (j.scheduleDays||[]).map(d => d.id===day.id ? {...d, date:e.target.value} : d);
-                      updateJobById(j.id, jj => ({...jj, scheduleDays:days, scheduledDate: days[0]?.date||""}));
-                    }}
-                    style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, width:"auto"}}/>
-                  <input type="text" value={day.label||""}
-                    onChange={e => {
-                      const days = (j.scheduleDays||[]).map(d => d.id===day.id ? {...d, label:e.target.value} : d);
-                      updateJobById(j.id, jj => ({...jj, scheduleDays:days}));
-                    }}
-                    placeholder={"Day "+(di+1)+" label"}
-                    style={{...S.input, fontSize:11, padding:"4px 6px", flex:1, width:"auto"}}/>
-                  <button style={{...S.btnSmall, padding:"4px 8px", background:"#ffedd5", color:C.danger, border:`1px solid ${C.danger}`, flexShrink:0}}
-                    onClick={() => {
-                      const days = (j.scheduleDays||[]).filter(d => d.id!==day.id);
-                      updateJobById(j.id, jj => ({...jj, scheduleDays:days, scheduledDate: days[0]?.date||""}));
-                    }}>✕</button>
-                </div>
-              ))}
-              <button style={{...S.btnSecondary, fontSize:11, padding:"4px 10px", marginTop:2}}
-                onClick={() => {
-                  const days = [...(j.scheduleDays||[]), {id:Date.now(), date:"", label:""}];
-                  updateJobById(j.id, jj => ({...jj, scheduleDays:days}));
-                }}>+ Add Day</button>
-            </div>
-          </>
-        )}
-        {isArchived && (
-          <button style={{...S.btnSmall, flex:1, background:"#dcfce7", color:C.green, border:`1px solid ${C.green}`}}
-            onClick={() => restore(j)}>↩ Restore</button>
-        )}
-        <button style={{...S.btnSmall,...S.btnDanger}} onClick={() => remove(j.id)}>Delete</button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={S.page}>
-      {showBackButton && (
-        <button style={{...S.btnSecondary, marginBottom:10}} onClick={() => setView("jobs")}>← Back to Pipeline</button>
-      )}
-      <div style={S.pageHeader}>
-        <h1 style={S.h1}>My Jobs</h1>
-        <button onClick={create} style={S.btnPrimary}>+ New Job</button>
-      </div>
-      {visibleJobs.length === 0 && (
-        <div style={S.empty}>
-          <div style={S.emptyIcon}>📋</div>
-          <p style={S.emptyText}>No jobs yet. Tap <strong>+ New Job</strong> to start.</p>
-        </div>
-      )}
-      {myJobs.length > 0 && (() => {
-        const isOpen = openSections["__my_jobs"] ?? false;
-        return (
-          <div style={{marginBottom:16}}>
-            <button
-              style={{...S.btnSecondary, width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
-                background:C.surface, border:`1px solid ${C.accent}`}}
-              onClick={() => setOpenSections(prev => ({...prev, __my_jobs: !isOpen}))}>
-              <span style={{display:"flex", alignItems:"center", gap:8}}>
-                <span style={{fontWeight:700, fontSize:14, color:C.accent}}>⭐ My Jobs</span>
-                <span style={{color:C.textMuted, fontSize:13}}>{myJobs.length} job{myJobs.length!==1?"s":""}</span>
-              </span>
-              <span style={{color:C.textMuted}}>{isOpen ? "▲" : "▼"}</span>
-            </button>
-            {isOpen && (
-              <div style={{...S.cardGrid, marginTop:10}}>
-                {myJobs.map(j => renderCard(j, ARCHIVE_STATUSES.includes(safeStatus(j.status))))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
-      {STATUS_ORDER.map(status => {
-        const jobsInStatus = visibleJobs.filter(j => safeStatus(j.status) === status);
-        if (jobsInStatus.length === 0) return null;
-        const isArchivedStatus = ARCHIVE_STATUSES.includes(status);
-        const isOpen = openSections[status] ?? false; // all sections start collapsed
-        const label = status==="estimate" ? "Estimate" : status.charAt(0).toUpperCase()+status.slice(1);
-        return (
-          <div key={status} style={{marginBottom:16}}>
-            <button
-              style={{...S.btnSecondary, width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
-                background:C.surface, border:`1px solid ${C.border}`}}
-              onClick={() => setOpenSections(prev => ({...prev, [status]: !isOpen}))}>
-              <span style={{display:"flex", alignItems:"center", gap:8}}>
-                <span style={{...S.statusBadge,...(S[`status_${status}`]||S.status_estimate), margin:0}}>{label}</span>
-                <span style={{color:C.textMuted, fontSize:13}}>{jobsInStatus.length} job{jobsInStatus.length!==1?"s":""}</span>
-              </span>
-              <span style={{color:C.textMuted}}>{isOpen ? "▲" : "▼"}</span>
-            </button>
-            {isOpen && (
-              <div style={{...S.cardGrid, marginTop:10}}>
-                {jobsInStatus.map(j => renderCard(j, isArchivedStatus))}
-              </div>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -7196,7 +7009,7 @@ export default function App() {
     });
   };
 
-  // Update any job by ID (used for scheduling from JobsView)
+  // Update any job by ID (used for scheduling, status changes, etc.)
   const updateJobById = (id, fn) => {
     setJobs(prev => {
       const next = prev.map(j => j.id===id ? fn(j) : j);
@@ -7218,7 +7031,7 @@ export default function App() {
   const handleSetRates = (r) => { setRates(r); syncRates(r); };
 
   const handleSetJobs = (fnOrArr) => {
-    // Used by JobsView for create/delete
+    // Used by the Jobs pipeline for create/delete
     setJobs(prev => {
       const next = typeof fnOrArr === "function" ? fnOrArr(prev) : fnOrArr;
       // Detect new job (added to front)
@@ -7283,11 +7096,11 @@ export default function App() {
           }}>{syncStatus}</div>
         )}
         <div style={S.content}>
-        {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userId={session?.user?.id} crews={crews}/>}
-        {view==="myjobs"   && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} readOnly={getAccessLevel(permissions,"jobs",userRole)==="view"} userRole={userRole} userId={session?.user?.id} crews={crews} showBackButton/>}
+        {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userId={session?.user?.id}/>}
+        {view==="myjobs"   && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userId={session?.user?.id} scope="mine" showBackButton/>}
         {view==="schedule" && getAccessLevel(permissions,"schedule",userRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
-        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews}/>}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRole)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRole)==="view"}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
