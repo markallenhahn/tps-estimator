@@ -2110,7 +2110,7 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
           });
         } catch(e) { console.error(e); }
       }
-      await new Promise(r => setTimeout(r, 350)); // be polite to the geocoder
+      await new Promise(r => setTimeout(r, 1100)); // be polite to the geocoder
     }
     setHistoricalJobs(prev => [...imported, ...prev]);
     setCsvRows([]); setCsvFile(null); setCalcProgress("");
@@ -2157,7 +2157,7 @@ function ZonesView({ jobs, zones, setZones, syncZones, setCurrentJob, setView, h
             });
           } catch(e) {}
         }
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 1100));
       }
     }
 
@@ -2822,10 +2822,11 @@ function calcJobFinancials(job, rates) {
 // ─── Geocoding (forward: address → lat/lng) ────────────────────────────────────
 // Uses Nominatim (OpenStreetMap) — free, no API key. Results are cached on the
 // record itself (job.geoLat/geoLng or historicalJob.lat/lng) so we only ever
-// geocode an address once.
-async function geocodeAddress(addressStr) {
-  if (!addressStr || !addressStr.trim()) return null;
-
+// geocode an address once. Nominatim's usage policy caps requests at roughly
+// 1/second, so a single rejected attempt is retried with backoff before
+// falling through to Photon — without this, batches of new addresses lose
+// most of their results to rate-limiting.
+async function geocodeAddressOnce(addressStr) {
   // Try Nominatim first (OpenStreetMap's official geocoder)
   try {
     const res = await fetch(
@@ -2856,6 +2857,19 @@ async function geocodeAddress(addressStr) {
     }
   } catch (e) { console.error("geocodeAddress (Photon) error:", e); }
 
+  return null;
+}
+
+async function geocodeAddress(addressStr, attempts = 3) {
+  if (!addressStr || !addressStr.trim()) return null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await geocodeAddressOnce(addressStr);
+    if (result) return result;
+    if (attempt < attempts - 1) {
+      // Back off before retrying — both providers reject bursts of requests.
+      await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
+    }
+  }
   return null;
 }
 
