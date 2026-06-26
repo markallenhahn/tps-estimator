@@ -315,6 +315,7 @@ const TAB_ICONS = {
   costs:       { emoji: "🧮", lucide: "Calculator" },
   invoice:     { emoji: "🧾", lucide: "Receipt" },
   labor:       { emoji: "👷", lucide: "HardHat" },
+  materials:   { emoji: "🧴", lucide: "Beaker" },
   reports:     { emoji: "📊", lucide: "BarChart3" },
   rates:       { emoji: "⚙️", lucide: "Settings" },
   team:        { emoji: "👥", lucide: "Users" },
@@ -345,6 +346,7 @@ const ALL_TABS  = [
   {key:"costs",    label:"Costs"},
   {key:"invoice",  label:"Invoice"},
   {key:"labor",    label:"Labor"},
+  {key:"materials",label:"Materials"},
   {key:"reports",  label:"Reports"},
   {key:"rates",    label:"Rates"},
   {key:"team",     label:"Team"},
@@ -359,6 +361,7 @@ const DEFAULT_PERMISSIONS = {
   costs:    { estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", admin:"edit" },
   invoice:  { estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", admin:"edit" },
   labor:    { estimator:"hidden", crew:"edit",   crewlead:"edit", manager:"edit", admin:"edit" },
+  materials:{ estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", admin:"edit" },
   reports:  { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
   rates:    { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
   team:     { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
@@ -2036,6 +2039,260 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                   <span style={{color:C.accent, fontWeight:600}}>{e.hours} hr{e.hours!==1?"s":""}</span>
                 </div>
               ))}
+            </div>
+          );
+        })}
+      </section>
+    </div>
+  );
+}
+
+// ─── Materials View (purchases vs. estimated usage) ────────────────────────────
+// Tracks every material purchase (gallons of sealcoat, etc.) against what the
+// job estimates *say* should have been used, based on manufacturer coverage
+// rates. Sealcoat and Patch/Asphalt already resolve to a real material
+// quantity from job measurements (gallons, tons); Stone is whatever tons were
+// manually entered per job in Costs; Crack Filling needs its own coverage
+// rate since the per-job pricing rate doesn't imply a material quantity.
+const MATERIAL_TYPES = [
+  { key:"sealcoat",  label:"Sealcoat",        defaultUnit:"gal" },
+  { key:"crackfill", label:"Crack Filling",   defaultUnit:"lb"  },
+  { key:"patch",     label:"Patch / Asphalt", defaultUnit:"ton" },
+  { key:"stone",     label:"Stone",           defaultUnit:"ton" },
+  { key:"other",     label:"Other",           defaultUnit:"unit"},
+];
+const MATERIAL_STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
+const materialStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
+
+function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, userRole }) {
+  const canEdit = userRole === "admin" || userRole === "manager";
+
+  const [category,  setCategory]  = useState("sealcoat");
+  const [qty,        setQty]       = useState("");
+  const [unit,        setUnit]       = useState(MATERIAL_TYPES[0].defaultUnit);
+  const [cost,        setCost]       = useState("");
+  const [supplier,    setSupplier]   = useState("");
+  const [notes,        setNotes]      = useState("");
+  const [date,        setDate]       = useState(new Date().toISOString().slice(0,10));
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Coverage settings — defaults match the existing estimate-calculation
+  // constants where one already exists (sealcoat). Crack Filling has no
+  // pre-existing material-quantity formula, so it starts unset until entered.
+  const settings = {
+    sealcoatSqFtPerGal: materialSettings?.sealcoatSqFtPerGal ?? 70,
+    crackfillLinFtPerUnit: materialSettings?.crackfillLinFtPerUnit ?? 0,
+    crackfillUnitLabel: materialSettings?.crackfillUnitLabel || "lb",
+    countedStatuses: materialSettings?.countedStatuses || ["signed","scheduled","completed","paid"],
+  };
+  const [draftSettings, setDraftSettings] = useState(settings);
+  useEffect(() => { setDraftSettings(settings); }, [JSON.stringify(settings)]);
+
+  const toggleCountedStatus = (s) => {
+    setDraftSettings(prev => ({
+      ...prev,
+      countedStatuses: prev.countedStatuses.includes(s)
+        ? prev.countedStatuses.filter(x => x !== s)
+        : [...prev.countedStatuses, s],
+    }));
+  };
+
+  const saveSettings = async () => {
+    setMaterialSettings(draftSettings);
+    await syncMaterialSettings(draftSettings);
+    setShowSettings(false);
+  };
+
+  const onCategoryChange = (key) => {
+    setCategory(key);
+    const def = MATERIAL_TYPES.find(m => m.key===key);
+    setUnit(def?.defaultUnit || "unit");
+  };
+
+  const addEntry = () => {
+    if (!qty || isNaN(Number(qty)) || Number(qty) <= 0) { alert("Enter a valid quantity."); return; }
+    if (!cost || isNaN(Number(cost)) || Number(cost) < 0) { alert("Enter a valid cost."); return; }
+    addMaterial({
+      id: Date.now(), date, category, qty: Number(qty), unit: unit.trim() || "unit",
+      cost: Number(cost), supplier: supplier.trim(), notes: notes.trim(),
+    });
+    setQty(""); setCost(""); setSupplier(""); setNotes("");
+  };
+
+  // ── Estimated usage per category, summed across counted-status jobs ──
+  const countedJobs = jobs.filter(j => settings.countedStatuses.includes(j.status));
+
+  const estimates = { sealcoat:0, crackfill:0, patch:0, stone:0 };
+  countedJobs.forEach(j => {
+    const areas = j.areas || [];
+    const sealcoatSqFt = areas.filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
+    const crackFillLinFt = areas.filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
+    const patchSqFt = areas.filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+    estimates.sealcoat += settings.sealcoatSqFtPerGal > 0 ? sealcoatSqFt / settings.sealcoatSqFtPerGal : 0;
+    estimates.crackfill += settings.crackfillLinFtPerUnit > 0 ? crackFillLinFt / settings.crackfillLinFtPerUnit : 0;
+    estimates.patch += calcPatchTons(patchSqFt);
+    estimates.stone += Number(j.costs?.stoneTons || 0);
+  });
+
+  // ── Purchased totals per category ──
+  const purchased = { sealcoat:{qty:0,cost:0}, crackfill:{qty:0,cost:0}, patch:{qty:0,cost:0}, stone:{qty:0,cost:0}, other:{qty:0,cost:0} };
+  materials.forEach(m => {
+    if (!purchased[m.category]) purchased[m.category] = { qty:0, cost:0 };
+    purchased[m.category].qty += Number(m.qty||0);
+    purchased[m.category].cost += Number(m.cost||0);
+  });
+
+  const sortedMaterials = [...materials].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Materials</h1>
+      <p style={S.subhead}>Log every material purchase and compare it against what the job estimates say should have been used.</p>
+
+      {canEdit && (
+        <section style={S.section}>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: showSettings ? 12 : 0}}>
+            <h2 style={{...S.h2, margin:0}}>Coverage Settings</h2>
+            <button style={S.btnSmall} onClick={() => setShowSettings(s => !s)}>{showSettings ? "Hide" : "Edit"}</button>
+          </div>
+          {showSettings && (
+            <>
+              <div style={S.formGrid}>
+                <label style={S.formLabel}>Sealcoat coverage (sq ft per gallon)
+                  <input type="number" min="1" step="1" value={draftSettings.sealcoatSqFtPerGal}
+                    onChange={e => setDraftSettings(p => ({...p, sealcoatSqFtPerGal: Number(e.target.value)}))}
+                    style={S.input}/>
+                </label>
+                <label style={S.formLabel}>Crack Filling unit label
+                  <input value={draftSettings.crackfillUnitLabel}
+                    onChange={e => setDraftSettings(p => ({...p, crackfillUnitLabel: e.target.value}))}
+                    style={S.input} placeholder="e.g. lb, box, pail"/>
+                </label>
+                <label style={S.formLabel}>Crack Filling coverage (lin ft per {draftSettings.crackfillUnitLabel || "unit"})
+                  <input type="number" min="0" step="1" value={draftSettings.crackfillLinFtPerUnit}
+                    onChange={e => setDraftSettings(p => ({...p, crackfillLinFtPerUnit: Number(e.target.value)}))}
+                    style={S.input} placeholder="from manufacturer spec"/>
+                </label>
+              </div>
+              <p style={{fontSize:11, color:C.textDim, margin:"4px 0 10px"}}>
+                Patch/Asphalt and Stone already resolve to real tons from job measurements and Costs entries — no coverage rate needed.
+              </p>
+              <h2 style={{...S.h2, marginBottom:8}}>Job Categories Counted as "Used"</h2>
+              <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:12}}>
+                {MATERIAL_STATUS_OPTS.map(s => {
+                  const selected = draftSettings.countedStatuses.includes(s);
+                  return (
+                    <button key={s} onClick={() => toggleCountedStatus(s)}
+                      style={{
+                        fontSize:12, fontWeight:600, padding:"6px 12px", borderRadius:20, cursor:"pointer",
+                        background: selected ? C.accent : C.surface2,
+                        color: selected ? "#000" : C.textMuted,
+                        border: `1px solid ${selected ? C.accent : C.border}`,
+                      }}>
+                      {selected ? "✓ " : ""}{materialStatusLabel(s)}
+                    </button>
+                  );
+                })}
+              </div>
+              <button style={S.btnPrimary} onClick={saveSettings}>💾 Save Settings</button>
+            </>
+          )}
+        </section>
+      )}
+
+      {canEdit && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Log a Purchase</h2>
+          <div style={S.formGrid}>
+            <label style={S.formLabel}>Material
+              <select value={category} onChange={e => onCategoryChange(e.target.value)} style={S.input}>
+                {MATERIAL_TYPES.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+              </select>
+            </label>
+            <label style={S.formLabel}>Date
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={S.input}/>
+            </label>
+            <label style={S.formLabel}>Quantity
+              <input type="number" min="0" step="0.01" value={qty} onChange={e => setQty(e.target.value)} style={S.input} placeholder="0"/>
+            </label>
+            <label style={S.formLabel}>Unit
+              <input value={unit} onChange={e => setUnit(e.target.value)} style={S.input} placeholder="gal, ton, lb..."/>
+            </label>
+            <label style={S.formLabel}>Total Cost ($)
+              <input type="number" min="0" step="0.01" value={cost} onChange={e => setCost(e.target.value)} style={S.input} placeholder="0.00"/>
+            </label>
+            <label style={S.formLabel}>Supplier (optional)
+              <input value={supplier} onChange={e => setSupplier(e.target.value)} style={S.input}/>
+            </label>
+          </div>
+          <label style={{...S.formLabel, marginBottom:10}}>Notes (optional)
+            <input value={notes} onChange={e => setNotes(e.target.value)} style={S.input}/>
+          </label>
+          <button style={S.btnPrimary} onClick={addEntry}>+ Add Purchase</button>
+        </section>
+      )}
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Estimated Use vs. Actual Spent</h2>
+        <p style={{fontSize:11, color:C.textDim, margin:"0 0 12px"}}>
+          Estimated usage is calculated from {settings.countedStatuses.map(materialStatusLabel).join(", ")} jobs, based on the coverage rates above.
+        </p>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:12}}>
+          {MATERIAL_TYPES.filter(m => m.key !== "other").map(m => {
+            const est = estimates[m.key] || 0;
+            const purch = purchased[m.key] || { qty:0, cost:0 };
+            const hasEstimate = m.key === "crackfill" ? settings.crackfillLinFtPerUnit > 0 : true;
+            const variance = purch.qty - est;
+            const variancePct = est > 0 ? (variance/est)*100 : null;
+            const overBuying = variance > 0;
+            return (
+              <div key={m.key} style={{background:C.surface2, borderRadius:10, border:`1px solid ${C.border}`, padding:14}}>
+                <div style={{fontWeight:700, fontSize:14, marginBottom:8}}>{m.label}</div>
+                <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
+                  <span style={{color:C.textMuted}}>Purchased</span>
+                  <span style={{fontWeight:600}}>{purch.qty.toFixed(1)} {purchased[m.key] ? (materials.find(mm=>mm.category===m.key)?.unit || m.defaultUnit) : m.defaultUnit} · {formatCurrency(purch.cost)}</span>
+                </div>
+                <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
+                  <span style={{color:C.textMuted}}>Estimated Used</span>
+                  <span style={{fontWeight:600}}>{hasEstimate ? `${est.toFixed(1)} ${m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit}` : "set coverage rate"}</span>
+                </div>
+                {hasEstimate && est > 0 && (
+                  <div style={{display:"flex", justifyContent:"space-between", fontSize:13, paddingTop:6, borderTop:`1px solid ${C.border}`, marginTop:4}}>
+                    <span style={{color:C.textMuted}}>Variance</span>
+                    <span style={{fontWeight:700, color: overBuying ? C.danger : C.green}}>
+                      {overBuying ? "+" : ""}{variance.toFixed(1)} {m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit}
+                      {variancePct !== null && ` (${overBuying?"+":""}${variancePct.toFixed(0)}%)`}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Purchase History ({materials.length})</h2>
+        {sortedMaterials.length === 0 ? (
+          <p style={{fontSize:12, color:C.textMuted}}>No purchases logged yet.</p>
+        ) : sortedMaterials.map(m => {
+          const def = MATERIAL_TYPES.find(t => t.key===m.category);
+          return (
+            <div key={m.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"10px 12px", borderRadius:8, background:C.surface2, marginBottom:6}}>
+              <div>
+                <div style={{fontWeight:600, fontSize:13}}>{def?.label || m.category} — {m.qty} {m.unit}</div>
+                <div style={{fontSize:11, color:C.textMuted}}>
+                  {new Date(m.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                  {m.supplier && ` · ${m.supplier}`}{m.notes && ` · ${m.notes}`}
+                </div>
+              </div>
+              <div style={{display:"flex", alignItems:"center", gap:10}}>
+                <span style={{fontWeight:700, color:C.accent}}>{formatCurrency(m.cost)}</span>
+                {canEdit && (
+                  <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this purchase entry?")) deleteMaterial(m.id); }}>🗑</button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -5630,6 +5887,8 @@ export default function App() {
   const [iconStyle,     setIconStyle]    = useState("emoji"); // "emoji" | "lucide" — global, admin-set
   const [teamUsers,     setTeamUsers]    = useState([]);
   const [crews,         setCrews]        = useState([]);
+  const [materials,         setMaterials]         = useState([]);
+  const [materialSettings,  setMaterialSettings]  = useState(null);
   const isDesktopLayout = useIsDesktop();
 
   // ── Auth state ──
@@ -5768,6 +6027,14 @@ export default function App() {
         const sr = await sbFetch("appsettings?select=data&limit=1");
         const sd = await sr.json();
         if (Array.isArray(sd) && sd.length > 0 && sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
+
+        const mr = await sbFetch("materials?select=id,data&order=id.desc");
+        const md = await mr.json();
+        if (Array.isArray(md)) setMaterials(md.map(row => ({...row.data, id: row.id})));
+
+        const msr = await sbFetch("materialsettings?select=data&limit=1");
+        const msd = await msr.json();
+        if (Array.isArray(msd) && msd.length > 0) setMaterialSettings(msd[0].data);
       } catch(e) {
         console.error("Load error:", e);
         setSyncStatus("⚠️ Could not connect to database");
@@ -5904,6 +6171,37 @@ export default function App() {
   const addLaborEntry = (entry) => {
     setLaborEntries(prev => [entry, ...prev]);
     syncLaborEntry(entry);
+  };
+
+  // ── Material purchases (Materials tab) ──
+  const syncMaterial = async (entry) => {
+    try {
+      await sbFetch("materials", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: entry.id, data: entry }),
+      });
+    } catch(e) { console.error("syncMaterial error:", e); }
+  };
+
+  const addMaterial = (entry) => {
+    setMaterials(prev => [entry, ...prev]);
+    syncMaterial(entry);
+  };
+
+  const deleteMaterial = async (id) => {
+    setMaterials(prev => prev.filter(m => m.id !== id));
+    try { await sbFetch("materials?id=eq."+id, { method: "DELETE" }); } catch(e) {}
+  };
+
+  const syncMaterialSettings = async (settingsData) => {
+    try {
+      await sbFetch("materialsettings", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: 1, data: settingsData }),
+      });
+    } catch(e) { console.error("syncMaterialSettings error:", e); }
   };
 
   // ── Upsert a single job ──
@@ -6080,6 +6378,7 @@ export default function App() {
         {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/>}
+        {view==="materials" && getAccessLevel(permissions,"materials",userRole)!=="hidden" && <MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} userRole={userRole}/>}
         {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
