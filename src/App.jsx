@@ -2054,6 +2054,36 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
 // quantity from job measurements (gallons, tons); Stone is whatever tons were
 // manually entered per job in Costs; Crack Filling needs its own coverage
 // rate since the per-job pricing rate doesn't imply a material quantity.
+// Per-job estimated material quantities, by category, given current coverage
+// settings. Shared between the "Estimated Use vs Actual Spent" card and the
+// upcoming-jobs forecast so both use identical math.
+function estimateJobMaterials(job, settings) {
+  const areas = job.areas || [];
+  const sealcoatSqFt = areas.filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const crackFillLinFt = areas.filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const patchSqFt = areas.filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+  return {
+    sealcoat: settings.sealcoatSqFtPerGal > 0 ? sealcoatSqFt / settings.sealcoatSqFtPerGal : 0,
+    crackfill: settings.crackfillLinFtPerUnit > 0 ? crackFillLinFt / settings.crackfillLinFtPerUnit : 0,
+    patch: calcPatchTons(patchSqFt),
+    stone: Number(job.costs?.stoneTons || 0),
+  };
+}
+
+// Earliest scheduled date for a job, across either the multi-day scheduleDays
+// list or the legacy single scheduledDate field. Empty string if undated.
+function earliestScheduledDate(job) {
+  const days = (job.scheduleDays || []).filter(d => d.date).map(d => d.date).sort();
+  return days[0] || job.scheduledDate || "";
+}
+
+// "Done" = work that has actually happened and consumed material — used as
+// the basis for both "what's on hand" and "your real historical buying
+// pattern" (the waste factor). "Upcoming" = committed future demand to
+// forecast for, per Mark's choice of Signed + Scheduled.
+const MATERIAL_DONE_STATUSES = ["completed","paid"];
+const MATERIAL_UPCOMING_STATUSES = ["signed","scheduled"];
+
 const MATERIAL_TYPES = [
   { key:"sealcoat",  label:"Sealcoat",        defaultUnit:"gal" },
   { key:"crackfill", label:"Crack Filling",   defaultUnit:"lb"  },
@@ -2076,6 +2106,10 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const [notes,        setNotes]      = useState("");
   const [date,        setDate]       = useState(new Date().toISOString().slice(0,10));
   const [showSettings, setShowSettings] = useState(false);
+  const todayStr = new Date().toISOString().slice(0,10);
+  const in30 = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
+  const [forecastFrom, setForecastFrom] = useState(todayStr);
+  const [forecastTo,   setForecastTo]   = useState(in30);
 
   // Coverage settings — defaults match the existing estimate-calculation
   // constants where one already exists (sealcoat), or manufacturer spec
@@ -2152,14 +2186,52 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
 
   const estimates = { sealcoat:0, crackfill:0, patch:0, stone:0 };
   countedJobs.forEach(j => {
-    const areas = j.areas || [];
-    const sealcoatSqFt = areas.filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
-    const crackFillLinFt = areas.filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
-    const patchSqFt = areas.filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
-    estimates.sealcoat += settings.sealcoatSqFtPerGal > 0 ? sealcoatSqFt / settings.sealcoatSqFtPerGal : 0;
-    estimates.crackfill += settings.crackfillLinFtPerUnit > 0 ? crackFillLinFt / settings.crackfillLinFtPerUnit : 0;
-    estimates.patch += calcPatchTons(patchSqFt);
-    estimates.stone += Number(j.costs?.stoneTons || 0);
+    const e = estimateJobMaterials(j, settings);
+    estimates.sealcoat += e.sealcoat;
+    estimates.crackfill += e.crackfill;
+    estimates.patch += e.patch;
+    estimates.stone += e.stone;
+  });
+
+  // ── Forecast: what to buy for upcoming (Signed + Scheduled) jobs ──
+  const doneJobs = jobs.filter(j => MATERIAL_DONE_STATUSES.includes(j.status));
+  const historyUsed = { sealcoat:0, crackfill:0, patch:0, stone:0 };
+  doneJobs.forEach(j => {
+    const e = estimateJobMaterials(j, settings);
+    historyUsed.sealcoat += e.sealcoat; historyUsed.crackfill += e.crackfill;
+    historyUsed.patch += e.patch; historyUsed.stone += e.stone;
+  });
+
+  const upcomingAll = jobs.filter(j => MATERIAL_UPCOMING_STATUSES.includes(j.status));
+  const upcomingDated = upcomingAll.filter(j => {
+    const d = earliestScheduledDate(j);
+    return d && d >= forecastFrom && d <= forecastTo;
+  });
+  const upcomingUndated = upcomingAll.filter(j => !earliestScheduledDate(j));
+  const upcomingForForecast = [...upcomingDated, ...upcomingUndated];
+
+  const specNeed = { sealcoat:0, crackfill:0, patch:0, stone:0 };
+  upcomingForForecast.forEach(j => {
+    const e = estimateJobMaterials(j, settings);
+    specNeed.sealcoat += e.sealcoat; specNeed.crackfill += e.crackfill;
+    specNeed.patch += e.patch; specNeed.stone += e.stone;
+  });
+
+  const forecast = {};
+  MATERIAL_TYPES.filter(m => m.key !== "other").forEach(m => {
+    const key = m.key;
+    const totalPurchasedQty = materials.filter(mm => mm.category===key).reduce((s,mm)=>s+Number(mm.qty||0),0);
+    const onHand = totalPurchasedQty - historyUsed[key];
+    // How much more (or less) you actually buy than the spec predicts, based
+    // on completed/paid jobs — 1.0 means "buying matches the spec exactly."
+    const wasteFactor = historyUsed[key] > 0 ? totalPurchasedQty / historyUsed[key] : 1;
+    const histNeed = specNeed[key] * wasteFactor;
+    forecast[key] = {
+      onHand, wasteFactor,
+      specNeed: specNeed[key], histNeed,
+      suggestedSpec: Math.max(0, specNeed[key] - onHand),
+      suggestedHist: Math.max(0, histNeed - onHand),
+    };
   });
 
   // ── Purchased totals per category ──
@@ -2305,6 +2377,68 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                     </span>
                   </div>
                 )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Material Forecast — What to Buy Next</h2>
+        <p style={{fontSize:11, color:C.textDim, margin:"0 0 12px"}}>
+          Demand is calculated from Signed + Scheduled jobs. Dated jobs are included if they fall in the range below; Signed jobs without a date yet are always included, since their timing isn't known yet.
+        </p>
+        <div style={{display:"flex", gap:12, alignItems:"flex-end", marginBottom:14, flexWrap:"wrap"}}>
+          <label style={S.formLabel}>From
+            <input type="date" value={forecastFrom} onChange={e => setForecastFrom(e.target.value)} style={S.input}/>
+          </label>
+          <label style={S.formLabel}>To
+            <input type="date" value={forecastTo} onChange={e => setForecastTo(e.target.value)} style={S.input}/>
+          </label>
+          <div style={{fontSize:11, color:C.textMuted, paddingBottom:8}}>
+            {upcomingDated.length} dated job{upcomingDated.length!==1?"s":""} in range + {upcomingUndated.length} undated Signed job{upcomingUndated.length!==1?"s":""}
+          </div>
+        </div>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:12}}>
+          {MATERIAL_TYPES.filter(m => m.key !== "other").map(m => {
+            const f = forecast[m.key];
+            const u = m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit;
+            const hasEstimate = m.key === "crackfill" ? settings.crackfillLinFtPerUnit > 0 : true;
+            if (!hasEstimate) {
+              return (
+                <div key={m.key} style={{background:C.surface2, borderRadius:10, border:`1px solid ${C.border}`, padding:14}}>
+                  <div style={{fontWeight:700, fontSize:14, marginBottom:8}}>{m.label}</div>
+                  <p style={{fontSize:12, color:C.textMuted, margin:0}}>Set a coverage rate above to forecast this material.</p>
+                </div>
+              );
+            }
+            return (
+              <div key={m.key} style={{background:C.surface2, borderRadius:10, border:`1px solid ${C.border}`, padding:14}}>
+                <div style={{fontWeight:700, fontSize:14, marginBottom:8}}>{m.label}</div>
+                <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
+                  <span style={{color:C.textMuted}}>On Hand (est.)</span>
+                  <span style={{fontWeight:600}}>{f.onHand.toFixed(1)} {u}</span>
+                </div>
+                <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
+                  <span style={{color:C.textMuted}}>Your buying vs. spec</span>
+                  <span style={{fontWeight:600}}>{(f.wasteFactor*100).toFixed(0)}%{f.wasteFactor>1 ? " (buying more than spec)" : f.wasteFactor<1 ? " (buying less than spec)" : ""}</span>
+                </div>
+                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}`}}>
+                  <div>
+                    <div style={{fontSize:11, color:C.textDim, marginBottom:2}}>Manufacturer Spec</div>
+                    <div style={{fontSize:13}}>Need: {f.specNeed.toFixed(1)} {u}</div>
+                    <div style={{fontWeight:800, fontSize:16, color: f.suggestedSpec>0 ? C.accent : C.green}}>
+                      {f.suggestedSpec>0 ? `Buy ${f.suggestedSpec.toFixed(1)} ${u}` : "Stocked ✓"}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11, color:C.textDim, marginBottom:2}}>Your History</div>
+                    <div style={{fontSize:13}}>Need: {f.histNeed.toFixed(1)} {u}</div>
+                    <div style={{fontWeight:800, fontSize:16, color: f.suggestedHist>0 ? C.accent : C.green}}>
+                      {f.suggestedHist>0 ? `Buy ${f.suggestedHist.toFixed(1)} ${u}` : "Stocked ✓"}
+                    </div>
+                  </div>
+                </div>
               </div>
             );
           })}
