@@ -796,7 +796,16 @@ function JobDetailView({ currentJob, updateJob, rates, setView, teamUsers, crews
         <h1 style={S.h1}>{currentJob.clientName||"Unnamed Job"}</h1>
         <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Jobs</button>
       </div>
-      <p style={S.subhead}>{currentJob.address||"No address"}</p>
+      <div style={{display:"flex", alignItems:"center", gap:10, flexWrap:"wrap"}}>
+        <p style={{...S.subhead, margin:0}}>{currentJob.address||"No address"}</p>
+        {currentJob.address && (
+          <a href={`https://maps.google.com/maps?daddr=${encodeURIComponent([currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", "))}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{fontSize:13, fontWeight:600, color:C.accent, textDecoration:"none"}}>
+            🧭 Directions
+          </a>
+        )}
+      </div>
 
       {/* ── ASSIGNMENT ── */}
       {teamUsers && teamUsers.length > 0 && (
