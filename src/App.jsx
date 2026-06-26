@@ -5442,6 +5442,7 @@ const pipelineStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toU
 // Reuse the exact same badge colors already used everywhere else in the app
 // (S.status_*) so the pipeline's column accents match the rest of the UI.
 const pipelineStatusColor = (s) => (S[`status_${s}`] || S.status_estimate).color;
+const pipelineStatusBg = (s) => (S[`status_${s}`] || S.status_estimate).background;
 
 function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, updateJobById, userRole, userId, crews }) {
   const isDesktopLayout = useIsDesktop();
@@ -5605,9 +5606,12 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
               background: dragOverStatus===c.status ? C.surface2 : "transparent",
               border: dragOverStatus===c.status ? `2px dashed ${pipelineStatusColor(c.status)}` : "2px dashed transparent",
             }}>
-            <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:4}}>
-              <div style={{width:8, height:8, borderRadius:"50%", background:pipelineStatusColor(c.status), flexShrink:0}}/>
-              <span style={{fontSize:13, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{pipelineStatusLabel(c.status)}</span>
+            <div style={{
+              display:"flex", alignItems:"center", gap:6, padding:"6px 10px", borderRadius:8, marginBottom:8,
+              background: pipelineStatusBg(c.status),
+            }}>
+              <div style={{width:7, height:7, borderRadius:"50%", background:pipelineStatusColor(c.status), flexShrink:0}}/>
+              <span style={{fontSize:13, fontWeight:700, color:pipelineStatusColor(c.status), overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{pipelineStatusLabel(c.status)}</span>
             </div>
             <div style={{fontSize:11, color:C.textMuted, marginBottom:10}}>{c.jobs.length} · {formatCurrency(c.total)}</div>
             <div style={{minHeight:40}}>
