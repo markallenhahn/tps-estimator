@@ -372,18 +372,38 @@ const DEFAULT_PERMISSIONS = {
   team:     { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
 };
 
+const ACCESS_RANK = { hidden: 0, view: 1, edit: 2 };
+
 function getAccessLevel(permissions, tabKey, role) {
   // Fall back to the built-in default for this specific tab if it's missing
   // from the saved permissions object (e.g. an older saved permissions blob
   // that predates a newly added tab) — not just when the whole object is null.
   const tabPerms = permissions?.[tabKey] || DEFAULT_PERMISSIONS[tabKey];
+  // Multi-role users get the most permissive level across all their roles —
+  // "blended" access, e.g. someone who's both Crew and Estimator gets
+  // whichever of those two grants more on a given tab.
+  if (Array.isArray(role)) {
+    let best = "hidden";
+    role.forEach(r => {
+      const level = tabPerms?.[r] || "hidden";
+      if (ACCESS_RANK[level] > ACCESS_RANK[best]) best = level;
+    });
+    return best;
+  }
   return tabPerms?.[role] || "hidden";
 }
 
-function TopNav({ view, setView, userRole, permissions, onLogout, iconStyle }) {
+// Does this user (single role string OR multi-role array) have a given role?
+// Use this instead of `userRole === "x"` anywhere blended multi-role behavior
+// matters — string equality silently breaks the moment someone has 2 roles.
+function hasRole(userRoleOrRoles, role) {
+  return Array.isArray(userRoleOrRoles) ? userRoleOrRoles.includes(role) : userRoleOrRoles === role;
+}
+
+function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle }) {
   const tabsRef = useRef(null);
   const isDesktop = useIsDesktop();
-  const tabs = ALL_TABS.filter(t => getAccessLevel(permissions, t.key, userRole) !== "hidden");
+  const tabs = ALL_TABS.filter(t => getAccessLevel(permissions, t.key, userRoles||userRole) !== "hidden");
 
   useEffect(() => {
     if (!tabsRef.current) return;
@@ -630,7 +650,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
 }
 
 // ─── Media View ───────────────────────────────────────────────────────────────
-function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userId, jobs }) {
+function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userRoles, userId, jobs }) {
   const isDesktop = useIsDesktop();
   // ── Photo capture ──
   const [capturing, setCapturing] = useState(null);
@@ -655,8 +675,10 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   const [showKickBack, setShowKickBack] = useState(false);
   const [kickBackNote, setKickBackNote] = useState("");
 
-  const isEstimator = userRole === "estimator";
-  const canSeeAllJobs = userRole === "admin" || userRole === "manager";
+  const roles = userRoles || [userRole];
+  const isEstimator = hasRole(roles, "estimator");
+  const canSeeAllJobs = hasRole(roles, "admin") || hasRole(roles, "manager");
+  const isCrewLead = hasRole(roles, "crewlead");
   const myCrew = (crews||[]).find(c => c.leadId === userId);
 
   // Compute (and cache) this job's zone, then derive estimator/crew
@@ -877,7 +899,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           && ["estimate","draft"].includes(currentJob.status) && !currentJob.readyForReview;
         const waitingOnReview = isEstimator && currentJob.assignedTo === userId && currentJob.readyForReview;
         const managerCanReview = canSeeAllJobs && currentJob.readyForReview;
-        const canMarkCompleted = userRole === "crewlead" && currentJob.status === "scheduled" && myCrew && currentJob.crewId === myCrew.id;
+        const canMarkCompleted = isCrewLead && currentJob.status === "scheduled" && myCrew && currentJob.crewId === myCrew.id;
         const canMarkPaid = canSeeAllJobs && currentJob.status === "completed";
         const showSection = needsReview || waitingOnReview || managerCanReview || canMarkCompleted || canMarkPaid || currentJob.revisionNote;
         if (!showSection) return null;
@@ -5668,14 +5690,15 @@ const pipelineStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toU
 const pipelineStatusColor = (s) => (S[`status_${s}`] || S.status_estimate).color;
 const pipelineStatusBg = (s) => (S[`status_${s}`] || S.status_estimate).background;
 
-function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, updateJobById, userRole, userId, scope, showBackButton }) {
+function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, updateJobById, userRole, userRoles, userId, scope, showBackButton }) {
   const isDesktopLayout = useIsDesktop();
   const [dragOverStatus, setDragOverStatus] = useState(null);
   const [mobileStatus, setMobileStatus] = useState("estimate");
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
 
-  const canSeeAllJobs = userRole === "admin" || userRole === "manager";
+  const roles = userRoles || [userRole];
+  const canSeeAllJobs = hasRole(roles, "admin") || hasRole(roles, "manager");
   // Anyone who isn't an admin or manager only ever sees jobs assigned
   // directly to them — no crew-wide visibility. Admins/managers see
   // everything on the main Jobs tab, but get the same strict "assigned to
@@ -6753,15 +6776,17 @@ export default function App() {
   const [session,    setSession]    = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [userRole,   setUserRole]   = useState("crew");
+  const [userRoles,  setUserRoles]  = useState(["crew"]); // multi-role; userRole stays as the "primary" role for legacy single-role checks
   const [profileNeedsSetup, setProfileNeedsSetup] = useState(false);
 
   const fetchProfile = async (userId, accessToken) => {
     try {
-      const res = await sbFetch("profiles?id=eq."+userId+"&select=role,first_name,last_name,phone", {}, accessToken);
+      const res = await sbFetch("profiles?id=eq."+userId+"&select=role,roles,first_name,last_name,phone", {}, accessToken);
       const data = await res.json();
       if (Array.isArray(data) && data[0]) {
         const profile = data[0];
         if (profile.role) setUserRole(profile.role);
+        setUserRoles(Array.isArray(profile.roles) && profile.roles.length ? profile.roles : (profile.role ? [profile.role] : ["crew"]));
         // Admins get their own (future) company setup flow — only gate
         // estimator/crew/crewlead/manager on the basic profile wizard.
         const isAdmin = profile.role === "admin";
@@ -6842,6 +6867,7 @@ export default function App() {
     clearSession();
     setSession(null);
     setUserRole("crew");
+    setUserRoles(["crew"]);
   };
 
   // ── Load all data on mount ──
@@ -7297,7 +7323,7 @@ export default function App() {
 
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
-      <TopNav view={view} setView={setView} userRole={userRole} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle}/>
+      <TopNav view={view} setView={setView} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle}/>
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {syncStatus && (
           <div style={{
@@ -7307,19 +7333,19 @@ export default function App() {
           }}>{syncStatus}</div>
         )}
         <div style={S.content}>
-        {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userId={session?.user?.id}/>}
-        {view==="myjobs"   && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userId={session?.user?.id} scope="mine" showBackButton/>}
-        {view==="schedule" && getAccessLevel(permissions,"schedule",userRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
-        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userId={session?.user?.id} jobs={jobs}/>}
-        {view==="estimate" && getAccessLevel(permissions,"estimate",userRole)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRole)==="view"}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
-        {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
-        {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/>}
-        {view==="materials" && getAccessLevel(permissions,"materials",userRole)!=="hidden" && <MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/>}
-        {view==="crm" && getAccessLevel(permissions,"crm",userRole)!=="hidden" && <CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={setView} userRole={userRole}/>}
-        {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
+        {view==="jobs"     && getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/>}
+        {view==="myjobs"   && getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/>}
+        {view==="schedule" && getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="zones"    && getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs}/>}
+        {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRoles)==="view"}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="labor"    && getAccessLevel(permissions,"labor",userRoles)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/>}
+        {view==="materials" && getAccessLevel(permissions,"materials",userRoles)!=="hidden" && <MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/>}
+        {view==="crm" && getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={setView} userRole={userRole}/>}
+        {view==="reports"  && getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
         {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
