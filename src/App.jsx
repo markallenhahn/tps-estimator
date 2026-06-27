@@ -5529,25 +5529,20 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
       onDragStart={draggable ? (e => { e.dataTransfer.setData("text/plain", String(job.id)); }) : undefined}
       style={{
         background:C.surface, borderBottom:`1px solid ${C.border}`,
-        padding:10,
+        padding:10, height:92, boxSizing:"border-box",
+        display:"flex", flexDirection:"column", justifyContent:"space-between",
       }}>
-      <div onClick={() => open(job)} style={{cursor:"pointer"}}>
-        <div style={{fontWeight:700, fontSize:13, marginBottom:2}}>{job.clientName||"Unnamed Client"}</div>
-        <div style={{fontSize:11, color:C.textMuted, marginBottom:8}}>{job.address||"No address"}</div>
-        {job.status==="scheduled" && (job.scheduleDays||[]).filter(d=>d.date)[0] && (
-          <div style={{fontSize:11, color:pipelineStatusColor("scheduled"), marginBottom:6}}>
-            📅 {(job.scheduleDays||[]).filter(d=>d.date)[0].date}
-          </div>
-        )}
-        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
-          <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</span>
-          <span style={{fontSize:11, color:C.textMuted, textTransform:"capitalize"}}>
-            {(job.areas||[]).map(a=>a.serviceType).filter((v,i,a)=>a.indexOf(v)===i).join(", ") || "—"}
-          </span>
+      <div onClick={() => open(job)} style={{cursor:"pointer", overflow:"hidden"}}>
+        <div style={{fontWeight:700, fontSize:13, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+          {job.clientName||"Unnamed Client"}
         </div>
+        <div style={{fontSize:11, color:C.textMuted, textTransform:"capitalize", marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+          {(job.areas||[]).map(a=>a.serviceType).filter((v,i,a)=>a.indexOf(v)===i).join(", ") || "—"}
+        </div>
+        <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</div>
       </div>
       <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark ${job.clientName||"this job"} as Lost? It'll drop off the pipeline.`)) setStatus(job, "lost"); }}
-        style={{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer", padding:0}}>
+        style={{fontSize:10, color:C.textMuted, background:"none", border:"none", cursor:"pointer", padding:0, textAlign:"left"}}>
         Mark Lost
       </button>
     </div>
@@ -5639,13 +5634,12 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
               outlineOffset:-2,
             }}>
             <div style={{
-              display:"flex", alignItems:"center", gap:6, padding:"8px 10px",
+              display:"flex", alignItems:"center", justifyContent:"center", padding:"8px 10px",
               background: pipelineStatusBg(c.status), borderBottom:`1px solid ${C.border}`,
             }}>
-              <div style={{width:7, height:7, borderRadius:"50%", background:pipelineStatusColor(c.status), flexShrink:0}}/>
               <span style={{fontSize:13, fontWeight:700, color:pipelineStatusColor(c.status), overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{pipelineStatusLabel(c.status)}</span>
             </div>
-            <div style={{fontSize:11, color:C.textMuted, padding:"6px 10px", borderBottom:`1px solid ${C.border}`}}>{c.jobs.length} · {formatCurrency(c.total)}</div>
+            <div style={{fontSize:11, color:C.textMuted, padding:"6px 10px", textAlign:"center", borderBottom:`1px solid ${C.border}`}}>{c.jobs.length} · {formatCurrency(c.total)}</div>
             <div style={{minHeight:40}}>
               {c.jobs.map(j => <PipelineCard key={j.id} job={j} draggable/>)}
             </div>
