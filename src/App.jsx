@@ -691,7 +691,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       const zoneIndex = await ensureJobZoneId(currentJob, zones, homeBase, updateJob);
       if (cancelled) return;
       if (!currentJob.assignedTo) {
-        const estimators = (teamUsers||[]).filter(u => u.role === "estimator");
+        const estimators = (teamUsers||[]).filter(u => hasRole(Array.isArray(u.roles)&&u.roles.length ? u.roles : [u.role], "estimator"));
         setEstimatorRec(recommendEstimator(estimators, jobs||[], zoneIndex));
       }
       if (currentJob.status === "signed" && !currentJob.crewId) {
@@ -1001,6 +1001,13 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 </span>
                 <button style={S.btnSmall} onClick={() => updateJob(j => ({...j, crewId: crewRec.crew.id, status: j.scheduledDate||j.scheduleDays?.length ? "scheduled" : j.status}))}>Assign</button>
               </div>
+            )}
+            {!currentJob.crewId && !crewRec && currentJob.status === "signed" && (
+              <p style={{fontSize:11, color:C.textDim, marginBottom:8}}>
+                {!zones?.list?.length
+                  ? "No area-based recommendation yet — calculate Zones at least once first."
+                  : "No crew recommendation yet — no other jobs scheduled in this area."}
+              </p>
             )}
             <select value={currentJob.crewId || ""}
               onChange={e => updateJob(j => ({...j, crewId: e.target.value ? Number(e.target.value) : null, status: (e.target.value && (j.scheduledDate||j.scheduleDays?.length)) ? "scheduled" : j.status}))}
@@ -6994,6 +7001,42 @@ export default function App() {
     load();
   }, []);
 
+  // Jobs commonly get updated from a different login entirely — an admin
+  // assigning an estimate, a crew lead marking something completed — and
+  // this app has no live/realtime sync between sessions, only a one-time
+  // fetch on load. Two complementary fixes for that, short of building full
+  // realtime: refetch whenever the tab regains focus (covers "switched away
+  // and back"), and poll every 30s while the tab is actually visible (covers
+  // two people watching at the same time on separate screens).
+  useEffect(() => {
+    let inFlight = false;
+    const refetchJobs = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const jr = await sbFetch("jobs?select=id,data&order=id.desc");
+        const jd = await jr.json();
+        if (Array.isArray(jd)) {
+          // Don't clobber an edit that hasn't finished syncing yet (the
+          // 800ms debounce in updateJob/updateJobById) — keep the local
+          // pending version for any job still waiting to write.
+          const pending = pendingSyncRef.current || {};
+          setJobs(jd.map(row => pending[row.id] || {...row.data, id: row.id}));
+        }
+      } catch(e) { console.error("Refetch jobs error:", e); }
+      inFlight = false;
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") refetchJobs(); };
+    window.addEventListener("focus", refetchJobs);
+    document.addEventListener("visibilitychange", onVisible);
+    const pollId = setInterval(() => { if (document.visibilityState === "visible") refetchJobs(); }, 30000);
+    return () => {
+      window.removeEventListener("focus", refetchJobs);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(pollId);
+    };
+  }, []);
+
   const syncZones = async (zonesData) => {
     try {
       await sbFetch("zones", {
@@ -7294,6 +7337,7 @@ export default function App() {
         syncTimerRef.current[updated.id] = setTimeout(() => {
           const toSync = pendingSyncRef.current[updated.id];
           if (toSync) syncJob(toSync);
+          delete pendingSyncRef.current[updated.id];
         }, 800);
       }
       return next;
@@ -7311,6 +7355,7 @@ export default function App() {
         syncTimerRef.current[updated.id] = setTimeout(() => {
           const toSync = pendingSyncRef.current[updated.id];
           if (toSync) syncJob(toSync);
+          delete pendingSyncRef.current[updated.id];
         }, 800);
       }
       return next;
