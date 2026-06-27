@@ -839,6 +839,40 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
         </a>
       )}
 
+      {/* ── SCHEDULE ── */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Schedule</h2>
+        {(() => {
+          // Supports multi-day jobs (scheduleDays) while staying compatible
+          // with the older single scheduledDate field — editing here always
+          // writes back to scheduleDays, keeping scheduledDate in sync as
+          // the earliest date for anything that still reads the old field.
+          const days = (currentJob.scheduleDays && currentJob.scheduleDays.length)
+            ? currentJob.scheduleDays
+            : (currentJob.scheduledDate ? [{date: currentJob.scheduledDate, label: ""}] : []);
+          const setDays = (newDays) => updateJob(j => ({
+            ...j, scheduleDays: newDays,
+            scheduledDate: [...newDays].filter(d=>d.date).map(d=>d.date).sort()[0] || "",
+          }));
+          const updateDay = (i, field, value) => setDays(days.map((d, di) => di===i ? {...d, [field]: value} : d));
+          const removeDay = (i) => setDays(days.filter((_, di) => di !== i));
+          const addDay = () => setDays([...days, {date:"", label:""}]);
+          return (
+            <>
+              {days.length === 0 && <p style={{fontSize:12, color:C.textMuted, marginBottom:10}}>No dates scheduled yet.</p>}
+              {days.map((d, i) => (
+                <div key={i} style={{display:"flex", gap:8, marginBottom:8, alignItems:"center"}}>
+                  <input type="date" value={d.date||""} onChange={e => updateDay(i, "date", e.target.value)} style={{...S.input, flex:1}}/>
+                  <input type="text" placeholder="Label (optional)" value={d.label||""} onChange={e => updateDay(i, "label", e.target.value)} style={{...S.input, flex:1}}/>
+                  <button onClick={() => removeDay(i)} style={S.btnSmallDanger}>🗑</button>
+                </div>
+              ))}
+              <button style={S.btnSecondary} onClick={addDay}>+ Add Date</button>
+            </>
+          );
+        })()}
+      </section>
+
       {/* ── CLIENT INFO ── */}
       <section style={S.section}>
         <h2 style={S.h2}>Client Info</h2>
