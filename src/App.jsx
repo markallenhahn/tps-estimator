@@ -5249,6 +5249,38 @@ function TeamView({ accessToken, userRole }) {
   const [role,      setRole]      = useState("crew");
   const [message,   setMessage]   = useState("");
   const [error,     setError]     = useState("");
+  const [editingRolesId, setEditingRolesId] = useState(null);
+  const [editingRolesDraft, setEditingRolesDraft] = useState([]);
+  const [savingRoles, setSavingRoles] = useState(false);
+
+  const isAdmin = userRole === "admin";
+  const ALL_ROLE_OPTIONS = ["estimator","crew","crewlead","manager","admin"];
+
+  const startEditingRoles = (u) => {
+    setEditingRolesId(u.id);
+    setEditingRolesDraft(Array.isArray(u.roles) && u.roles.length ? [...u.roles] : (u.role ? [u.role] : ["crew"]));
+  };
+  const toggleDraftRole = (role) => {
+    setEditingRolesDraft(prev => prev.includes(role) ? prev.filter(r => r!==role) : [...prev, role]);
+  };
+  const saveRoles = async (userId) => {
+    if (editingRolesDraft.length === 0) { alert("Select at least one role."); return; }
+    setSavingRoles(true);
+    try {
+      const res = await fetch("/api/update-user-roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
+        body: JSON.stringify({ userId, roles: editingRolesDraft }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update roles.");
+      setUsers(prev => prev.map(u => u.id===userId ? {...u, roles: editingRolesDraft, role: editingRolesDraft[0]} : u));
+      setEditingRolesId(null);
+    } catch(e) {
+      alert("Error: " + e.message);
+    }
+    setSavingRoles(false);
+  };
 
   const loadUsers = async () => {
     setLoading(true);
@@ -5348,6 +5380,7 @@ function TeamView({ accessToken, userRole }) {
         ) : (
           users.map(u => {
             const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+            const roleList = Array.isArray(u.roles) && u.roles.length ? u.roles : (u.role ? [u.role] : []);
             return (
             <div key={u.id} style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start",
               padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:8}}>
@@ -5355,7 +5388,7 @@ function TeamView({ accessToken, userRole }) {
                 <div style={{fontWeight:600, fontSize:14}}>{fullName || u.email}</div>
                 {fullName && <div style={{fontSize:12, color:C.textMuted}}>{u.email}</div>}
                 <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>
-                  {ROLE_LABELS[u.role] || u.role} · Added {new Date(u.created_at).toLocaleDateString()}
+                  {roleList.map(r => ROLE_LABELS[r]||r).join(", ") || "No role set"} · Added {new Date(u.created_at).toLocaleDateString()}
                 </div>
                 {(u.phone || u.date_of_birth) && (
                   <div style={{fontSize:11, color:C.textDim, marginTop:2}}>
@@ -5364,10 +5397,31 @@ function TeamView({ accessToken, userRole }) {
                     {u.date_of_birth && <span>🎂 {new Date(u.date_of_birth+"T12:00:00").toLocaleDateString()}</span>}
                   </div>
                 )}
+                {isAdmin && editingRolesId === u.id && (
+                  <div style={{marginTop:8, padding:10, background:C.surface, borderRadius:8, border:`1px solid ${C.border}`}}>
+                    <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:8}}>
+                      {ALL_ROLE_OPTIONS.map(r => (
+                        <label key={r} style={{display:"flex", alignItems:"center", gap:4, fontSize:12, cursor:"pointer"}}>
+                          <input type="checkbox" checked={editingRolesDraft.includes(r)} onChange={() => toggleDraftRole(r)}/>
+                          {ROLE_LABELS[r]||r}
+                        </label>
+                      ))}
+                    </div>
+                    <button style={{...S.btnPrimary, opacity:savingRoles?0.6:1}} disabled={savingRoles} onClick={() => saveRoles(u.id)}>
+                      {savingRoles ? "Saving..." : "Save Roles"}
+                    </button>
+                    <button style={{...S.btnSecondary, marginLeft:6}} onClick={() => setEditingRolesId(null)}>Cancel</button>
+                  </div>
+                )}
               </div>
-              {!isManager && (
-                <button style={{...S.btnSmallDanger, flexShrink:0, marginLeft:8}} onClick={() => removeUser(u.id, u.email)}>Remove</button>
-              )}
+              <div style={{display:"flex", flexDirection:"column", gap:6, flexShrink:0, marginLeft:8}}>
+                {isAdmin && editingRolesId !== u.id && (
+                  <button style={S.btnSmall} onClick={() => startEditingRoles(u)}>Edit Roles</button>
+                )}
+                {!isManager && (
+                  <button style={S.btnSmallDanger} onClick={() => removeUser(u.id, u.email)}>Remove</button>
+                )}
+              </div>
             </div>
             );
           })

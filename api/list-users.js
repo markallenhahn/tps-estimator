@@ -1,5 +1,5 @@
 // api/list-users.js
-// Returns all profiles (email + role) so the admin Team screen can display them.
+// Returns all profiles (email + role + roles) so the admin Team screen can display them.
 
 const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
 
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const profilesRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?select=id,email,role,created_at,first_name,last_name,phone,date_of_birth&order=created_at.asc", {
+    const profilesRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?select=id,email,role,roles,created_at,first_name,last_name,phone,date_of_birth&order=created_at.asc", {
       headers: {
         "apikey": serviceKey,
         "Authorization": "Bearer " + serviceKey,
