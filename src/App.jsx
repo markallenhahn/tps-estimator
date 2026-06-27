@@ -683,6 +683,15 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   const isEstimator = hasRole(roles, "estimator");
   const canSeeAllJobs = hasRole(roles, "admin") || hasRole(roles, "manager");
   const isCrewLead = hasRole(roles, "crewlead");
+  // An estimator who ISN'T also an admin/manager gets the restricted view —
+  // someone with both roles keeps full access (blended = most permissive
+  // role wins, same philosophy as everywhere else this app checks roles).
+  const estimatorLocked = isEstimator && !canSeeAllJobs;
+  // Even an estimator who can otherwise edit this job can't touch
+  // measurements anymore once it's submitted for review or has moved past
+  // Estimate/Draft — editing after the fact would invalidate whatever's
+  // already been reviewed, sent, or signed off on.
+  const measurementsLocked = estimatorLocked && (currentJob.readyForReview || !["estimate","draft"].includes(currentJob.status));
   const myCrew = (crews||[]).find(c => c.leadId === userId);
 
   // Compute (and cache) this job's zone, then derive estimator/crew
@@ -855,7 +864,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       </div>
       <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
         <p style={{...S.subhead, margin:0}}>{currentJob.address||"No address"}</p>
-        {deleteJob && (
+        {deleteJob && !estimatorLocked && (
           <button onClick={() => { if (confirm(`Delete this job for ${currentJob.clientName||"this client"}? This can't be undone.`)) { deleteJob(currentJob.id); setView("jobs"); } }}
             style={{fontSize:12, color:C.danger, background:"none", border:"none", cursor:"pointer", padding:0}}>
             🗑 Delete Job
@@ -970,6 +979,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       )}
 
       {/* ── SCHEDULE ── */}
+      {!estimatorLocked && (
       <section style={S.section}>
         <h2 style={S.h2}>Schedule</h2>
         {(() => {
@@ -1029,39 +1039,43 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           </div>
         )}
       </section>
+      )}
 
       {/* ── CLIENT INFO ── */}
       <section style={S.section}>
         <h2 style={S.h2}>Client Info</h2>
+        {estimatorLocked && (
+          <p style={{fontSize:11, color:C.textDim, margin:"0 0 10px"}}>Client details are locked once a job is assigned to you — let an admin or manager know if anything here needs correcting.</p>
+        )}
         <div style={S.formGrid}>
           {[["clientName","Client Name","text"],["clientPhone","Phone","tel"],["clientEmail","Email","email"]].map(([f,l,t]) => (
             <label key={f} style={S.formLabel}>{l}
-              <input type={t} value={currentJob[f]||""}
-                onChange={e => updateJob(j => ({...j,[f]:e.target.value}))} style={S.input}/>
+              <input type={t} value={currentJob[f]||""} disabled={estimatorLocked}
+                onChange={e => updateJob(j => ({...j,[f]:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
             </label>
           ))}
           <label style={S.formLabel}>Estimate #
-            <input value={currentJob.estimateNum||""}
-              onChange={e => updateJob(j => ({...j, estimateNum:e.target.value}))} style={S.input}/>
+            <input value={currentJob.estimateNum||""} disabled={estimatorLocked}
+              onChange={e => updateJob(j => ({...j, estimateNum:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
           </label>
         </div>
         <label style={S.formLabel}>Street Address
-          <input value={currentJob.address||""}
+          <input value={currentJob.address||""} disabled={estimatorLocked}
             onChange={e => updateJob(j => ({...j, address:e.target.value}))}
-            style={S.input} placeholder="123 Main St"/>
+            style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}} placeholder="123 Main St"/>
         </label>
         <div style={{...S.formGrid, marginTop:10, gridTemplateColumns:"2fr 1fr 1fr"}}>
           <label style={S.formLabel}>City
-            <input value={currentJob.city||""}
-              onChange={e => updateJob(j => ({...j, city:e.target.value}))} style={S.input}/>
+            <input value={currentJob.city||""} disabled={estimatorLocked}
+              onChange={e => updateJob(j => ({...j, city:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
           </label>
           <label style={S.formLabel}>State
-            <input value={currentJob.state||"PA"}
-              onChange={e => updateJob(j => ({...j, state:e.target.value}))} style={S.input}/>
+            <input value={currentJob.state||"PA"} disabled={estimatorLocked}
+              onChange={e => updateJob(j => ({...j, state:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
           </label>
           <label style={S.formLabel}>ZIP
-            <input value={currentJob.zip||""}
-              onChange={e => updateJob(j => ({...j, zip:e.target.value}))} style={S.input}/>
+            <input value={currentJob.zip||""} disabled={estimatorLocked}
+              onChange={e => updateJob(j => ({...j, zip:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
           </label>
         </div>
         <label style={{...S.formLabel, marginTop:10}}>Site Notes
@@ -1114,6 +1128,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       </section>
 
       {/* ── MEASUREMENTS ── */}
+      {!measurementsLocked && (
       <section style={S.section}>
         <h2 style={S.h2}>Add Area / Line Item</h2>
         <div style={S.formGrid}>
@@ -1213,6 +1228,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
         </label>
         <button style={{...S.btnPrimary, marginTop:12}} onClick={addArea}>+ Add to Job</button>
       </section>
+      )}
 
       {Object.keys(totalBySvc).length > 0 && (
         <section style={S.section}>
@@ -1238,6 +1254,11 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {currentJob.areas.length > 0 ? (
         <section style={S.section}>
           <h2 style={S.h2}>Line Items ({currentJob.areas.length})</h2>
+          {measurementsLocked && (
+            <p style={{fontSize:11, color:C.textDim, margin:"0 0 10px"}}>
+              Measurements are locked while this estimate is under review or once it's moved past Draft — ask an admin or manager if something needs to change.
+            </p>
+          )}
           <div style={S.areaList}>
             {currentJob.areas.map(a => {
               const amt = calcLineAmt(a, rates);
@@ -1309,8 +1330,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                   <div style={S.areaRowRight}>
                     {!isOther(a.serviceType) && <span style={{...S.condBadge,...S[`cond_${a.condition}`]}}>{a.condition}</span>}
                     <div style={{...S.areaAmt, ...(hasLineOverride ? {color:C.accent} : {})}}>{formatCurrency(amt)}</div>
-                    <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(a)}>✎</button>
-                    <button style={S.btnSmallDanger} onClick={() => removeArea(a.id)}>✕</button>
+                    {!measurementsLocked && <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(a)}>✎</button>}
+                    {!measurementsLocked && <button style={S.btnSmallDanger} onClick={() => removeArea(a.id)}>✕</button>}
                   </div>
                 </div>
               );
@@ -6043,7 +6064,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 }
 
 // ─── Estimate View ────────────────────────────────────────────────────────────
-function EstimateView({ currentJob, updateJob, rates, syncJob }) {
+function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly }) {
   const [sent,       setSent]       = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const clientSigRef  = useRef(null);
@@ -6052,7 +6073,11 @@ function EstimateView({ currentJob, updateJob, rates, syncJob }) {
   if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const isSigned = !!currentJob.clientSignature;
-  const isLocked = isSigned;
+  // readOnly was previously accepted by the caller but never actually used
+  // here — view-only permissions and the estimator-lock weren't being
+  // enforced on this page at all. Folding it into the existing isLocked gate
+  // means margin/discount editing and the signature pad respect it for free.
+  const isLocked = isSigned || readOnly;
 
   const margin   = Number(currentJob.margin   || 0);
   const discount = Number(currentJob.discount || 0);
@@ -6067,7 +6092,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob }) {
   // Price override — when set, replaces calculated total everywhere
   const hasOverride  = currentJob.priceOverride !== undefined && currentJob.priceOverride !== null && currentJob.priceOverride !== "";
   const finalTotal   = hasOverride ? Number(currentJob.priceOverride) : calcTotal;
-  const setPriceOverride = val => updateJob(j => ({...j, priceOverride: val === "" ? null : val}));
+  const setPriceOverride = val => { if (isLocked) return; updateJob(j => ({...j, priceOverride: val === "" ? null : val})); };
 
   const cityLine = [currentJob.city, currentJob.state].filter(Boolean).join(", ") + (currentJob.zip ? " " + currentJob.zip : "");
 
@@ -6482,12 +6507,12 @@ function EstimateView({ currentJob, updateJob, rates, syncJob }) {
 
             <div style={S.adjustRow}>
               <label style={S.adjustLabel}>Markup %
-                <input type="number" value={margin} min="0" max="100"
-                  onChange={e => setMargin(Number(e.target.value))} style={S.adjustInput}/>
+                <input type="number" value={margin} min="0" max="100" disabled={isLocked}
+                  onChange={e => setMargin(Number(e.target.value))} style={{...S.adjustInput, ...(isLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
               </label>
               <label style={S.adjustLabel}>Discount %
-                <input type="number" value={discount} min="0" max="100"
-                  onChange={e => setDiscount(Number(e.target.value))} style={S.adjustInput}/>
+                <input type="number" value={discount} min="0" max="100" disabled={isLocked}
+                  onChange={e => setDiscount(Number(e.target.value))} style={{...S.adjustInput, ...(isLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
               </label>
             </div>
 
@@ -6503,11 +6528,11 @@ function EstimateView({ currentJob, updateJob, rates, syncJob }) {
                 <div style={{display:"flex", gap:8, alignItems:"center"}}>
                   <span style={{color:C.textMuted, fontSize:14}}>$</span>
                   <input
-                    type="number" min="0" step="0.01"
+                    type="number" min="0" step="0.01" disabled={isLocked}
                     value={hasOverride ? currentJob.priceOverride : ""}
                     onChange={e => setPriceOverride(e.target.value)}
                     placeholder={calcTotal.toFixed(2)}
-                    style={{...S.input, flex:1}}
+                    style={{...S.input, flex:1, ...(isLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}
                   />
                   {hasOverride && (
                     <button style={{...S.btnSecondary, fontSize:12, padding:"6px 10px"}}
@@ -7575,7 +7600,15 @@ export default function App() {
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/></div>}
         {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs}/>}
-        {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRoles)==="view"}/>}
+        {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={
+          getAccessLevel(permissions,"estimate",userRoles)==="view" ||
+          // An estimator-only viewer (no admin/manager) can't touch measurements
+          // once it's submitted for review or has moved past Estimate/Draft —
+          // editing after the fact would invalidate whatever the manager/admin
+          // already reviewed, sent, or the client already signed off on.
+          (hasRole(userRoles||[userRole], "estimator") && !(hasRole(userRoles||[userRole], "admin") || hasRole(userRoles||[userRole], "manager")) &&
+            (currentJob?.readyForReview || !["estimate","draft"].includes(currentJob?.status)))
+        }/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
