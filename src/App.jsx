@@ -901,6 +901,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {(() => {
         const needsReview = isEstimator && currentJob.assignedTo === userId
           && ["estimate","draft"].includes(currentJob.status) && !currentJob.readyForReview;
+        const hasMeasurements = (currentJob.areas||[]).some(a => Number(a.measurement) > 0);
         const waitingOnReview = isEstimator && currentJob.assignedTo === userId && currentJob.readyForReview;
         const managerCanReview = canSeeAllJobs && currentJob.readyForReview;
         const canMarkCompleted = isCrewLead && currentJob.status === "scheduled" && myCrew && currentJob.crewId === myCrew.id;
@@ -917,9 +918,15 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               </div>
             )}
             {needsReview && (
-              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, readyForReview:true, revisionNote:""}))}>
-                ✓ Mark Estimate Complete
-              </button>
+              hasMeasurements ? (
+                <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, readyForReview:true, revisionNote:""}))}>
+                  ✓ Mark Estimate Complete
+                </button>
+              ) : (
+                <p style={{fontSize:12, color:C.textMuted, margin:0}}>
+                  Add at least one measurement on the Estimate tab before marking this complete.
+                </p>
+              )
             )}
             {waitingOnReview && (
               <p style={{fontSize:12, color:C.textMuted, margin:0}}>✓ Submitted — waiting on manager/admin review.</p>
