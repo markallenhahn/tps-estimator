@@ -630,7 +630,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
 }
 
 // ─── Media View ───────────────────────────────────────────────────────────────
-function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews }) {
+function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userId, jobs }) {
   const isDesktop = useIsDesktop();
   // ── Photo capture ──
   const [capturing, setCapturing] = useState(null);
@@ -648,6 +648,37 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   const [calcRows,   setCalcRows]   = useState([{id:1, l:"", w:""}]);
   const [editingId,  setEditingId]  = useState(null);
   const [editArea,   setEditArea]   = useState(null);
+
+  // ── Jobs workflow: recommendations + kick-back note ──
+  const [estimatorRec, setEstimatorRec] = useState(null);
+  const [crewRec, setCrewRec] = useState(null);
+  const [showKickBack, setShowKickBack] = useState(false);
+  const [kickBackNote, setKickBackNote] = useState("");
+
+  const isEstimator = userRole === "estimator";
+  const canSeeAllJobs = userRole === "admin" || userRole === "manager";
+  const myCrew = (crews||[]).find(c => c.leadId === userId);
+
+  // Compute (and cache) this job's zone, then derive estimator/crew
+  // recommendations from it. Runs once per job; re-runs if zones get
+  // recalculated (zones?.lastCalculated changing) since that's the only
+  // thing that should change the recommendation after the fact.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const zoneIndex = await ensureJobZoneId(currentJob, zones, homeBase, updateJob);
+      if (cancelled) return;
+      if (!currentJob.assignedTo) {
+        const estimators = (teamUsers||[]).filter(u => u.role === "estimator");
+        setEstimatorRec(recommendEstimator(estimators, jobs||[], zoneIndex));
+      }
+      if (currentJob.status === "signed" && !currentJob.crewId) {
+        setCrewRec(recommendCrew(crews||[], jobs||[], zoneIndex));
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentJob.id, zones?.lastCalculated]);
 
   const stopStream = useCallback(() => {
     if (stream) stream.getTracks().forEach(t => t.stop());
@@ -810,6 +841,15 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {teamUsers && teamUsers.length > 0 && (
         <section style={S.section}>
           <h2 style={S.h2}>Assigned To</h2>
+          {!currentJob.assignedTo && estimatorRec && (
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:8,
+              background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", marginBottom:8}}>
+              <span style={{fontSize:12, color:C.textMuted}}>
+                💡 Recommended: <strong style={{color:C.text}}>{[estimatorRec.user.first_name, estimatorRec.user.last_name].filter(Boolean).join(" ") || estimatorRec.user.email}</strong> — {estimatorRec.reason}
+              </span>
+              <button style={S.btnSmall} onClick={() => updateJob(j => ({...j, assignedTo: estimatorRec.user.id}))}>Assign</button>
+            </div>
+          )}
           <select
             value={currentJob.assignedTo || ""}
             onChange={e => updateJob(j => ({...j, assignedTo: e.target.value || null}))}
@@ -830,6 +870,63 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           )}
         </section>
       )}
+
+      {/* ── WORKFLOW ACTIONS — only shows whatever's actually relevant to the current viewer ── */}
+      {(() => {
+        const needsReview = isEstimator && currentJob.assignedTo === userId
+          && ["estimate","draft"].includes(currentJob.status) && !currentJob.readyForReview;
+        const waitingOnReview = isEstimator && currentJob.assignedTo === userId && currentJob.readyForReview;
+        const managerCanReview = canSeeAllJobs && currentJob.readyForReview;
+        const canMarkCompleted = userRole === "crewlead" && currentJob.status === "scheduled" && myCrew && currentJob.crewId === myCrew.id;
+        const canMarkPaid = canSeeAllJobs && currentJob.status === "completed";
+        const showSection = needsReview || waitingOnReview || managerCanReview || canMarkCompleted || canMarkPaid || currentJob.revisionNote;
+        if (!showSection) return null;
+        return (
+          <section style={S.section}>
+            <h2 style={S.h2}>Workflow</h2>
+            {currentJob.revisionNote && (
+              <div style={{background:"#fef3c7", border:"1px solid #fde68a", borderRadius:8, padding:"10px 12px", marginBottom:10}}>
+                <div style={{fontSize:12, fontWeight:700, color:"#92400e", marginBottom:4}}>⚠ Revision requested</div>
+                <div style={{fontSize:12, color:"#92400e"}}>{currentJob.revisionNote}</div>
+              </div>
+            )}
+            {needsReview && (
+              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, readyForReview:true, revisionNote:""}))}>
+                ✓ Mark Estimate Complete
+              </button>
+            )}
+            {waitingOnReview && (
+              <p style={{fontSize:12, color:C.textMuted, margin:0}}>✓ Submitted — waiting on manager/admin review.</p>
+            )}
+            {managerCanReview && !showKickBack && (
+              <div style={{display:"flex", gap:8}}>
+                <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"sent", readyForReview:false}))}>📤 Send Estimate</button>
+                <button style={S.btnSecondary} onClick={() => setShowKickBack(true)}>↩ Kick Back</button>
+              </div>
+            )}
+            {managerCanReview && showKickBack && (
+              <div>
+                <textarea value={kickBackNote} onChange={e => setKickBackNote(e.target.value)}
+                  placeholder="What needs to change? (visible to the estimator)"
+                  style={{...S.input, minHeight:70, marginBottom:8}}/>
+                <div style={{display:"flex", gap:8}}>
+                  <button style={S.btnPrimary} onClick={() => {
+                    updateJob(j => ({...j, status:"estimate", readyForReview:false, revisionNote:kickBackNote.trim(), revisionRequestedAt:new Date().toISOString()}));
+                    setShowKickBack(false); setKickBackNote("");
+                  }}>Send Back to Estimator</button>
+                  <button style={S.btnSecondary} onClick={() => { setShowKickBack(false); setKickBackNote(""); }}>Cancel</button>
+                </div>
+              </div>
+            )}
+            {canMarkCompleted && (
+              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"completed"}))}>✓ Mark Completed</button>
+            )}
+            {canMarkPaid && (
+              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"paid"}))}>💲 Mark Paid</button>
+            )}
+          </section>
+        );
+      })()}
 
       {currentJob.address && (
         <a href={`https://maps.google.com/maps?daddr=${encodeURIComponent([currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", "))}`}
@@ -871,6 +968,26 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             </>
           );
         })()}
+        {(crews||[]).length > 0 && (
+          <div style={{marginTop:14, paddingTop:14, borderTop:`1px solid ${C.border}`}}>
+            <label style={S.formLabel}>Crew</label>
+            {!currentJob.crewId && crewRec && (
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:8,
+                background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", marginBottom:8}}>
+                <span style={{fontSize:12, color:C.textMuted}}>
+                  💡 Recommended: <strong style={{color:C.text}}>{crewRec.crew.name}</strong> — {crewRec.reason}
+                </span>
+                <button style={S.btnSmall} onClick={() => updateJob(j => ({...j, crewId: crewRec.crew.id, status: j.scheduledDate||j.scheduleDays?.length ? "scheduled" : j.status}))}>Assign</button>
+              </div>
+            )}
+            <select value={currentJob.crewId || ""}
+              onChange={e => updateJob(j => ({...j, crewId: e.target.value ? Number(e.target.value) : null, status: (e.target.value && (j.scheduledDate||j.scheduleDays?.length)) ? "scheduled" : j.status}))}
+              style={S.input}>
+              <option value="">— Unassigned —</option>
+              {crews.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
       </section>
 
       {/* ── CLIENT INFO ── */}
@@ -3781,6 +3898,72 @@ function mergeCloseClusters(clusters, thresholdMiles) {
     }
   }
   return merged;
+}
+
+// ─── Jobs workflow: estimator/crew recommendations ─────────────────────────────
+// Jobs are only zoned in bulk during a Zones recalculation, but a brand new job
+// needs a zone guess immediately (to recommend an estimator before that next
+// recalculation happens). This finds the nearest existing zone *centroid* —
+// an approximation, not real membership, but good enough for a suggestion the
+// person can always override.
+function nearestZoneIndex(lat, lng, zones) {
+  const list = zones?.list || [];
+  if (!list.length) return null;
+  let best = null, bestDist = Infinity;
+  list.forEach((z, i) => {
+    if (!z.centroid) return;
+    const d = haversine({lat, lng}, z.centroid);
+    if (d < bestDist) { bestDist = d; best = i; }
+  });
+  return best;
+}
+
+// Geocodes the job if needed and caches the resulting zoneId on it (via
+// updateJob) so this only has to happen once per job, not on every render.
+async function ensureJobZoneId(job, zones, homeBase, updateJob) {
+  if (job.zoneId != null) return job.zoneId;
+  if (!zones?.list?.length || !hasSufficientAddress(job)) return null;
+  let lat = job.geoLat, lng = job.geoLng;
+  if (!lat || !lng) {
+    const geo = await geocodeAddress(geocodeQueryOf(job), homeBase);
+    if (!geo) return null;
+    lat = geo.lat; lng = geo.lng;
+  }
+  const idx = nearestZoneIndex(lat, lng, zones);
+  if (idx !== null) updateJob(j => ({...j, zoneId: idx, geoLat: lat, geoLng: lng}));
+  return idx;
+}
+
+const ACTIVE_ESTIMATE_STATUSES = ["estimate","draft","sent","signed"];
+
+// Priority: someone already working a job in the same area, else whoever has
+// the fewest active estimates right now. Always returns a suggestion + the
+// reason for it, so the person reviewing can judge whether to accept it.
+function recommendEstimator(estimators, jobs, zoneIndex) {
+  if (!estimators || !estimators.length) return null;
+  if (zoneIndex !== null) {
+    const inZone = estimators.find(u => jobs.some(j =>
+      j.assignedTo === u.id && ACTIVE_ESTIMATE_STATUSES.includes(j.status) && j.zoneId === zoneIndex
+    ));
+    if (inZone) return { user: inZone, reason: "Already working a job in this area" };
+  }
+  const counts = estimators.map(u => ({
+    user: u,
+    count: jobs.filter(j => j.assignedTo === u.id && ACTIVE_ESTIMATE_STATUSES.includes(j.status)).length,
+  })).sort((a,b) => a.count - b.count);
+  return { user: counts[0].user, reason: counts[0].count===0 ? "No active estimates right now" : `Fewest active estimates (${counts[0].count})` };
+}
+
+// Recommends whichever crew already has the most jobs Scheduled in this same
+// zone — no data for that zone yet means no recommendation, just a plain pick.
+function recommendCrew(crewsList, jobs, zoneIndex) {
+  if (!crewsList || !crewsList.length || zoneIndex === null) return null;
+  const counts = crewsList.map(c => ({
+    crew: c,
+    count: jobs.filter(j => j.status==="scheduled" && j.crewId===c.id && j.zoneId===zoneIndex).length,
+  })).filter(c => c.count > 0).sort((a,b) => b.count - a.count);
+  if (!counts.length) return null;
+  return { crew: counts[0].crew, reason: `Already has ${counts[0].count} job${counts[0].count!==1?"s":""} scheduled in this area` };
 }
 
 // Detect outliers relative to all 4 zone centroids — used to populate "Overflow"
@@ -7128,7 +7311,7 @@ export default function App() {
         {view==="myjobs"   && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userId={session?.user?.id} scope="mine" showBackButton/>}
         {view==="schedule" && getAccessLevel(permissions,"schedule",userRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
-        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews}/>}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userId={session?.user?.id} jobs={jobs}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRole)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRole)==="view"}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
