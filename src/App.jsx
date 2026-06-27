@@ -29,6 +29,7 @@ const initialJob = (rates) => ({
   estimateNum: `EST-${Date.now().toString().slice(-5)}`,
   notes:"", areas:[], photos:[],
   status:"estimate",
+  statusChangedAt: new Date().toISOString(),
   rates: rates ? {...rates} : null,
 });
 
@@ -310,6 +311,7 @@ function useIsDesktop() {
 // global setting stored in Supabase (iconStyle: "emoji" | "lucide") so it's
 // the same for every user, changed only from the Admin hub.
 const TAB_ICONS = {
+  home:        { emoji: "🏠", lucide: "Home" },
   jobs:        { emoji: "📋", lucide: "ClipboardList" },
   schedule:    { emoji: "📅", lucide: "Calendar" },
   zones:       { emoji: "🗺",  lucide: "Map" },
@@ -342,6 +344,7 @@ function TabIcon({ tabKey, iconStyle, size = 18 }) {
 // Stored in Supabase (table: permissions) so admins can change it live.
 const ALL_ROLES = ["estimator","crew","crewlead","manager","admin"];
 const ALL_TABS  = [
+  {key:"home",     label:"Home"},
   {key:"jobs",     label:"Jobs"},
   {key:"schedule", label:"Schedule"},
   {key:"zones",    label:"Zones"},
@@ -358,6 +361,7 @@ const ALL_TABS  = [
 const ROLE_LABELS = { estimator:"Estimator", crew:"Crew", crewlead:"Crew Lead", manager:"Manager", admin:"Admin" };
 
 const DEFAULT_PERMISSIONS = {
+  home:     { estimator:"edit", crew:"edit",   crewlead:"edit", manager:"edit", admin:"edit" },
   jobs:     { estimator:"edit", crew:"edit",   crewlead:"edit", manager:"edit", admin:"edit" },
   schedule: { estimator:"view", crew:"view",   crewlead:"edit", manager:"edit", admin:"edit" },
   zones:    { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", admin:"edit" },
@@ -922,7 +926,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             )}
             {managerCanReview && !showKickBack && (
               <div style={{display:"flex", gap:8}}>
-                <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"sent", readyForReview:false}))}>📤 Send Estimate</button>
+                <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"sent", readyForReview:false, statusChangedAt: new Date().toISOString()}))}>📤 Send Estimate</button>
                 <button style={S.btnSecondary} onClick={() => setShowKickBack(true)}>↩ Kick Back</button>
               </div>
             )}
@@ -933,7 +937,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                   style={{...S.input, minHeight:70, marginBottom:8}}/>
                 <div style={{display:"flex", gap:8}}>
                   <button style={S.btnPrimary} onClick={() => {
-                    updateJob(j => ({...j, status:"estimate", readyForReview:false, revisionNote:kickBackNote.trim(), revisionRequestedAt:new Date().toISOString()}));
+                    updateJob(j => ({...j, status:"estimate", readyForReview:false, revisionNote:kickBackNote.trim(), revisionRequestedAt:new Date().toISOString(), statusChangedAt: new Date().toISOString()}));
                     setShowKickBack(false); setKickBackNote("");
                   }}>Send Back to Estimator</button>
                   <button style={S.btnSecondary} onClick={() => { setShowKickBack(false); setKickBackNote(""); }}>Cancel</button>
@@ -941,10 +945,10 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               </div>
             )}
             {canMarkCompleted && (
-              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"completed"}))}>✓ Mark Completed</button>
+              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"completed", statusChangedAt: new Date().toISOString()}))}>✓ Mark Completed</button>
             )}
             {canMarkPaid && (
-              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"paid"}))}>💲 Mark Paid</button>
+              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"paid", statusChangedAt: new Date().toISOString()}))}>💲 Mark Paid</button>
             )}
           </section>
         );
@@ -999,7 +1003,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 <span style={{fontSize:12, color:C.textMuted}}>
                   💡 Recommended: <strong style={{color:C.text}}>{crewRec.crew.name}</strong> — {crewRec.reason}
                 </span>
-                <button style={S.btnSmall} onClick={() => updateJob(j => ({...j, crewId: crewRec.crew.id, status: j.scheduledDate||j.scheduleDays?.length ? "scheduled" : j.status}))}>Assign</button>
+                <button style={S.btnSmall} onClick={() => updateJob(j => { const next = j.scheduledDate||j.scheduleDays?.length ? "scheduled" : j.status; return {...j, crewId: crewRec.crew.id, status: next, statusChangedAt: next!==j.status ? new Date().toISOString() : j.statusChangedAt}; })}>Assign</button>
               </div>
             )}
             {!currentJob.crewId && !crewRec && currentJob.status === "signed" && (
@@ -1010,7 +1014,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               </p>
             )}
             <select value={currentJob.crewId || ""}
-              onChange={e => updateJob(j => ({...j, crewId: e.target.value ? Number(e.target.value) : null, status: (e.target.value && (j.scheduledDate||j.scheduleDays?.length)) ? "scheduled" : j.status}))}
+              onChange={e => updateJob(j => { const next = (e.target.value && (j.scheduledDate||j.scheduleDays?.length)) ? "scheduled" : j.status; return {...j, crewId: e.target.value ? Number(e.target.value) : null, status: next, statusChangedAt: next!==j.status ? new Date().toISOString() : j.statusChangedAt}; })}
               style={S.input}>
               <option value="">— Unassigned —</option>
               {crews.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -5751,6 +5755,120 @@ const pipelineStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toU
 const pipelineStatusColor = (s) => (S[`status_${s}`] || S.status_estimate).color;
 const pipelineStatusBg = (s) => (S[`status_${s}`] || S.status_estimate).background;
 
+// ─── Home (Dashboard / Highlights: Action Needed + Aging) ──────────────────────
+function daysSince(isoOrDateStr) {
+  if (!isoOrDateStr) return null;
+  const then = new Date(isoOrDateStr.length === 10 ? isoOrDateStr+"T00:00:00" : isoOrDateStr).getTime();
+  if (isNaN(then)) return null;
+  return Math.floor((Date.now() - then) / (1000*60*60*24));
+}
+
+// Default aging thresholds — adjustable later, not exposed as settings yet.
+const AGING = { estimateStuckDays: 7, sentNoResponseDays: 7, unpaidInvoiceDays: 14 };
+
+function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView }) {
+  const roles = userRoles || [userRole];
+  const isEstimator = hasRole(roles, "estimator");
+  const canSeeAllJobs = hasRole(roles, "admin") || hasRole(roles, "manager");
+  const isCrewLead = hasRole(roles, "crewlead");
+  const myCrew = (crews||[]).find(c => c.leadId === userId);
+
+  // Same visibility scoping as the rest of the jobs workflow — nobody sees
+  // more here than they'd see anywhere else in the app.
+  const visibleJobs = canSeeAllJobs ? jobs : jobs.filter(j =>
+    j.assignedTo === userId || (myCrew && j.crewId === myCrew.id)
+  );
+
+  const open = (job) => { setCurrentJob(job); setView("jobdetail"); };
+  const todayStr = new Date().toISOString().slice(0,10);
+
+  // ── Action Needed ──
+  const actionItems = [];
+  visibleJobs.forEach(j => {
+    if (isEstimator && j.assignedTo === userId && ["estimate","draft"].includes(j.status) && !j.readyForReview) {
+      actionItems.push({ job:j, label: j.revisionNote ? "Revision requested — finish & resubmit" : "Finish this estimate", urgent: !!j.revisionNote });
+    }
+    if (canSeeAllJobs && j.readyForReview) {
+      actionItems.push({ job:j, label: "Review & send estimate" });
+    }
+    if (canSeeAllJobs && !j.assignedTo && ["estimate","draft"].includes(j.status)) {
+      actionItems.push({ job:j, label: "Needs an estimator assigned" });
+    }
+    if (isCrewLead && myCrew && j.crewId === myCrew.id && j.status === "scheduled" && j.scheduledDate && j.scheduledDate <= todayStr) {
+      actionItems.push({ job:j, label: "Mark completed once finished", urgent:true });
+    }
+    if (canSeeAllJobs && j.status === "completed") {
+      actionItems.push({ job:j, label: "Mark paid once invoice is collected" });
+    }
+  });
+
+  // ── Aging ──
+  const agingItems = [];
+  visibleJobs.forEach(j => {
+    if (["estimate","draft"].includes(j.status) && !j.readyForReview) {
+      const d = daysSince(j.statusChangedAt || j.date);
+      if (d !== null && d >= AGING.estimateStuckDays) agingItems.push({ job:j, label:`Stuck in ${pipelineStatusLabel(j.status)} for ${d} days`, days:d });
+    }
+    if (j.status === "sent") {
+      const d = daysSince(j.statusChangedAt);
+      if (d !== null && d >= AGING.sentNoResponseDays) agingItems.push({ job:j, label:`Sent ${d} days ago, no response yet`, days:d });
+    }
+    if (j.status === "scheduled" && j.scheduledDate) {
+      const d = daysSince(j.scheduledDate);
+      if (d !== null && d >= 1) agingItems.push({ job:j, label:`Scheduled date passed ${d} day${d!==1?"s":""} ago, not marked completed`, days:d });
+    }
+    if (j.status === "completed") {
+      const d = daysSince(j.statusChangedAt);
+      if (d !== null && d >= AGING.unpaidInvoiceDays) agingItems.push({ job:j, label:`Invoice unpaid for ${d} days`, days:d });
+    }
+  });
+  agingItems.sort((a,b) => b.days - a.days);
+
+  const severityColor = (days) => days >= 21 ? C.danger : days >= 10 ? "#d97706" : C.textMuted;
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.h1}>Home</h1>
+      <p style={S.subhead}>What needs your attention right now.</p>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Action Needed ({actionItems.length})</h2>
+        {actionItems.length === 0 ? (
+          <p style={{fontSize:13, color:C.textMuted}}>Nothing needs your attention right now.</p>
+        ) : actionItems.map((item, i) => (
+          <div key={item.job.id+"-"+i} onClick={() => open(item.job)}
+            style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
+              padding:"10px 12px", background: item.urgent ? "#fef3c7" : C.surface2, borderRadius:8, marginBottom:8,
+              border: item.urgent ? "1px solid #fde68a" : `1px solid ${C.border}`}}>
+            <div>
+              <div style={{fontWeight:600, fontSize:13}}>{item.job.clientName||"Unnamed Client"}</div>
+              <div style={{fontSize:12, color:item.urgent ? "#92400e" : C.textMuted}}>{item.label}</div>
+            </div>
+            <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
+          </div>
+        ))}
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Aging ({agingItems.length})</h2>
+        {agingItems.length === 0 ? (
+          <p style={{fontSize:13, color:C.textMuted}}>Nothing's sitting longer than it should.</p>
+        ) : agingItems.map((item, i) => (
+          <div key={item.job.id+"-"+i} onClick={() => open(item.job)}
+            style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
+              padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:8, border:`1px solid ${C.border}`}}>
+            <div>
+              <div style={{fontWeight:600, fontSize:13}}>{item.job.clientName||"Unnamed Client"}</div>
+              <div style={{fontSize:12, color:severityColor(item.days)}}>{item.label}</div>
+            </div>
+            <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+}
+
 function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, updateJobById, userRole, userRoles, userId, scope, showBackButton }) {
   const isDesktopLayout = useIsDesktop();
   const [dragOverStatus, setDragOverStatus] = useState(null);
@@ -5775,7 +5893,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
     setView("jobdetail");
   };
   const open = (job) => { setCurrentJob(job); setView("jobdetail"); };
-  const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status}));
+  const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status, statusChangedAt: new Date().toISOString()}));
 
   const columns = PIPELINE_STATUSES.map(status => {
     const jobsInStatus = visibleJobs.filter(j => j.status === status);
@@ -5998,7 +6116,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob }) {
     const signedAt  = new Date().toLocaleString();
     const printName = currentJob.clientPrintName || currentJob.clientName || "";
     // Build the updated job with signature
-    const updatedJob = {...currentJob, clientSignature:sigData, clientSignedAt:signedAt, clientPrintName:printName, status:"signed"};
+    const updatedJob = {...currentJob, clientSignature:sigData, clientSignedAt:signedAt, clientPrintName:printName, status:"signed", statusChangedAt:new Date().toISOString()};
     // Update local state
     updateJob(() => updatedJob);
     // Immediately force sync to Supabase — don't wait for debounce
@@ -6041,7 +6159,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob }) {
     const body    = encodeURIComponent(buildEmailBody());
     const to      = currentJob.clientEmail ? encodeURIComponent(currentJob.clientEmail) : "";
     window.location.href = "mailto:" + to + "?subject=" + subject + "&body=" + body;
-    updateJob(j => ({...j, status:"sent"})); setSent(true);
+    updateJob(j => ({...j, status:"sent", statusChangedAt:new Date().toISOString()})); setSent(true);
   };
 
   const copyEstimate = () => { navigator.clipboard.writeText(buildEmailBody()); alert("Copied to clipboard."); };
@@ -6813,7 +6931,7 @@ function LoginView({ onSuccess }) {
 }
 
 export default function App() {
-  const [view,          setView]         = useState("jobs");
+  const [view,          setView]         = useState("home");
   const [jobs,          setJobs]         = useState([]);
   const [rates,         setRates]        = useState({...DEFAULT_RATES});
   const [currentJobId,  setCurrentJobId] = useState(null);
@@ -7323,11 +7441,23 @@ export default function App() {
   const pendingSyncRef = useRef({});
   const syncTimerRef   = useRef({});
 
+  // Stamps statusChangedAt whenever fn() actually changes a job's status —
+  // this is the only place that needs to know, since every status change in
+  // the app (drag-and-drop, dropdowns, workflow buttons) goes through one of
+  // these two functions. Powers the aging report: without this, there'd be
+  // no way to know how long a job has actually been sitting at its current
+  // stage, only when it was originally created.
+  const withStatusStamp = (job, fn) => {
+    const result = fn(job);
+    if (result.status !== job.status) result.statusChangedAt = new Date().toISOString();
+    return result;
+  };
+
   const updateJob = fn => {
     setJobs(prev => {
       const next = prev.map(j => {
         if (j.id !== currentJobId) return j;
-        return fn(j);
+        return withStatusStamp(j, fn);
       });
       // Find updated job and schedule debounced sync
       const updated = next.find(j => j.id === currentJobId);
@@ -7347,7 +7477,7 @@ export default function App() {
   // Update any job by ID (used for scheduling, status changes, etc.)
   const updateJobById = (id, fn) => {
     setJobs(prev => {
-      const next = prev.map(j => j.id===id ? fn(j) : j);
+      const next = prev.map(j => j.id===id ? withStatusStamp(j, fn) : j);
       const updated = next.find(j => j.id===id);
       if (updated) {
         pendingSyncRef.current[updated.id] = updated;
@@ -7432,6 +7562,7 @@ export default function App() {
           }}>{syncStatus}</div>
         )}
         <div style={S.content}>
+        {view==="home"     && getAccessLevel(permissions,"home",userRoles)!=="hidden" && <HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={setView}/>}
         {view==="jobs"     && getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/>}
         {view==="myjobs"   && getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/>}
         {view==="schedule" && getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
