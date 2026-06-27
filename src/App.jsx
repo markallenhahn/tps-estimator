@@ -824,7 +824,9 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
 
   const addArea = () => {
     if (!newArea.name || !newArea.measurement) { alert("Name and measurement are required."); return; }
-    updateJob(j => ({...j, areas:[...j.areas, {...newArea, id:Date.now()}]}));
+    const toAdd = {...newArea, id:Date.now()};
+    if (!canSeeAllJobs) delete toAdd.priceOverride; // estimators can't set this, even if it somehow ended up in state
+    updateJob(j => ({...j, areas:[...j.areas, toAdd]}));
     setNewArea(initialArea());
     setCalcRows([{id:1, l:"", w:""}]);
     setUseCalc(false);
@@ -836,7 +838,9 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   const cancelEdit = () => { setEditingId(null); setEditArea(null); };
   const saveEdit = () => {
     if (!editArea.name || !editArea.measurement) { alert("Name and amount are required."); return; }
-    updateJob(j => ({...j, areas: j.areas.map(a => a.id===editingId ? {...editArea} : a)}));
+    const toSave = {...editArea};
+    if (!canSeeAllJobs) delete toSave.priceOverride;
+    updateJob(j => ({...j, areas: j.areas.map(a => a.id===editingId ? toSave : a)}));
     setEditingId(null); setEditArea(null);
   };
 
@@ -1216,6 +1220,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           <input value={newArea.notes} onChange={e => setNewArea(p => ({...p, notes:e.target.value}))}
             style={S.input} placeholder="Additional notes..."/>
         </label>
+        {canSeeAllJobs && (
         <label style={{...S.formLabel, marginTop:10}}>
           Price Override <span style={{color:C.textMuted, fontWeight:400}}>(optional — overrides calculated price)</span>
           <div style={{display:"flex", gap:6, alignItems:"center"}}>
@@ -1226,6 +1231,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               style={{...S.input, flex:1}} placeholder="Leave blank to use calculated price"/>
           </div>
         </label>
+        )}
         <button style={{...S.btnPrimary, marginTop:12}} onClick={addArea}>+ Add to Job</button>
       </section>
       )}
@@ -1293,6 +1299,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                       <label style={{...S.formLabel, gridColumn:"1 / -1"}}>Notes
                         <input value={editArea.notes||""} onChange={e => setEditArea(p => ({...p, notes:e.target.value}))} style={S.input}/>
                       </label>
+                      {canSeeAllJobs && (
                       <label style={{...S.formLabel, gridColumn:"1 / -1"}}>
                         Price Override <span style={{color:C.textMuted, fontWeight:400}}>(leave blank to use calculated)</span>
                         <div style={{display:"flex", gap:6, alignItems:"center"}}>
@@ -1303,6 +1310,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                             style={{...S.input, flex:1}} placeholder="Leave blank to use calculated"/>
                         </div>
                       </label>
+                      )}
                     </div>
                     <div style={{display:"flex", gap:8}}>
                       <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}>💾 Save</button>
@@ -6064,7 +6072,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 }
 
 // ─── Estimate View ────────────────────────────────────────────────────────────
-function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly }) {
+function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOverridePrice }) {
   const [sent,       setSent]       = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const clientSigRef  = useRef(null);
@@ -6092,7 +6100,12 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly }) {
   // Price override — when set, replaces calculated total everywhere
   const hasOverride  = currentJob.priceOverride !== undefined && currentJob.priceOverride !== null && currentJob.priceOverride !== "";
   const finalTotal   = hasOverride ? Number(currentJob.priceOverride) : calcTotal;
-  const setPriceOverride = val => { if (isLocked) return; updateJob(j => ({...j, priceOverride: val === "" ? null : val})); };
+  // Price override is admin/manager only, full stop — not just locked after
+  // submission like measurements/margin/discount. An estimator shouldn't be
+  // able to touch the final price at any point, including before they've
+  // even submitted the estimate for review.
+  const priceOverrideAllowed = canOverridePrice && !isLocked;
+  const setPriceOverride = val => { if (!priceOverrideAllowed) return; updateJob(j => ({...j, priceOverride: val === "" ? null : val})); };
 
   const cityLine = [currentJob.city, currentJob.state].filter(Boolean).join(", ") + (currentJob.zip ? " " + currentJob.zip : "");
 
@@ -6520,7 +6533,8 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly }) {
               <div style={S.totalLine}><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
               {discount>0 && <div style={{...S.totalLine, color:C.danger, fontWeight:700}}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
               <div style={S.totalLineBold}><span>TOTAL</span><span>{formatCurrency(finalTotal)}</span></div>
-              {/* Price override */}
+              {/* Price override — admin/manager only */}
+              {canOverridePrice && (
               <div style={{marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}`}}>
                 <div style={{fontSize:12, color:C.textMuted, marginBottom:6}}>
                   Override Total {hasOverride && <span style={{color:C.accent, fontWeight:700}}>· Active</span>}
@@ -6528,11 +6542,11 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly }) {
                 <div style={{display:"flex", gap:8, alignItems:"center"}}>
                   <span style={{color:C.textMuted, fontSize:14}}>$</span>
                   <input
-                    type="number" min="0" step="0.01" disabled={isLocked}
+                    type="number" min="0" step="0.01" disabled={!priceOverrideAllowed}
                     value={hasOverride ? currentJob.priceOverride : ""}
                     onChange={e => setPriceOverride(e.target.value)}
                     placeholder={calcTotal.toFixed(2)}
-                    style={{...S.input, flex:1, ...(isLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}
+                    style={{...S.input, flex:1, ...(!priceOverrideAllowed?{opacity:0.6, cursor:"not-allowed"}:{})}}
                   />
                   {hasOverride && (
                     <button style={{...S.btnSecondary, fontSize:12, padding:"6px 10px"}}
@@ -6547,6 +6561,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly }) {
                   </div>
                 )}
               </div>
+              )}
             </div>
           </>
         )}
@@ -7600,7 +7615,9 @@ export default function App() {
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/></div>}
         {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs}/>}
-        {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={
+        {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}
+          canOverridePrice={hasRole(userRoles||[userRole], "admin") || hasRole(userRoles||[userRole], "manager")}
+          readOnly={
           getAccessLevel(permissions,"estimate",userRoles)==="view" ||
           // An estimator-only viewer (no admin/manager) can't touch measurements
           // once it's submitted for review or has moved past Estimate/Draft —
