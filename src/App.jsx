@@ -5874,17 +5874,24 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
 
   const severityColor = (days) => days >= 21 ? C.danger : days >= 10 ? "#d97706" : C.textMuted;
 
-  // ── Weekly Schedule (Sun–Sat containing today, shiftable by weekOffset) ──
+  // ── Weekly Schedule ──
   // Crews, not individual employees, are what jobs actually get assigned to
   // in this app — there's no per-person scheduling/availability data to draw
   // on, so "which employees are working" is shown at the crew level: a crew
   // with a job that day is busy, a crew with nothing scheduled is available.
-  const [weekOffset, setWeekOffset] = useState(0);
+  //
+  // 7 narrow columns on a phone screen truncates every label — mobile gets a
+  // 3-day window instead, paging 3 days at a time and starting right at
+  // today (not anchored to Sunday, since a 3-day window has no "week" to
+  // anchor to). Desktop keeps the original full Sun–Sat week.
+  const windowSize = isDesktopLayout ? 7 : 3;
+  const [periodOffset, setPeriodOffset] = useState(0);
   const weekDays = (() => {
     const start = new Date();
-    start.setDate(start.getDate() - start.getDay() + weekOffset*7);
+    if (isDesktopLayout) start.setDate(start.getDate() - start.getDay() + periodOffset*7);
+    else start.setDate(start.getDate() + periodOffset*3);
     start.setHours(0,0,0,0);
-    return Array.from({length:7}, (_,i) => {
+    return Array.from({length:windowSize}, (_,i) => {
       const d = new Date(start);
       d.setDate(d.getDate()+i);
       return d;
@@ -5943,13 +5950,17 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
         <h2 style={S.h2}>Weekly Schedule</h2>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8}}>
           <p style={{fontSize:11, color:C.textDim, margin:0}}>
-            {weekDays[0].toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {weekDays[6].toLocaleDateString("en-US",{month:"short",day:"numeric"})}
-            {weekOffset !== 0 && <span style={{color:C.accent}}> · {weekOffset > 0 ? `${weekOffset} week${weekOffset!==1?"s":""} ahead` : `${-weekOffset} week${weekOffset!==-1?"s":""} ago`}</span>}
+            {weekDays[0].toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {weekDays[weekDays.length-1].toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+            {periodOffset !== 0 && (
+              <span style={{color:C.accent}}>
+                {" "}· {Math.abs(periodOffset)*windowSize} day{Math.abs(periodOffset)*windowSize!==1?"s":""} {periodOffset > 0 ? "ahead" : "ago"}
+              </span>
+            )}
           </p>
           <div style={{display:"flex", gap:6}}>
-            <button style={S.btnSmall} onClick={() => setWeekOffset(w => w-1)}>← Prev</button>
-            {weekOffset !== 0 && <button style={S.btnSmall} onClick={() => setWeekOffset(0)}>Today</button>}
-            <button style={S.btnSmall} onClick={() => setWeekOffset(w => w+1)}>Next →</button>
+            <button style={S.btnSmall} onClick={() => setPeriodOffset(p => p-1)}>← Prev</button>
+            {periodOffset !== 0 && <button style={S.btnSmall} onClick={() => setPeriodOffset(0)}>Today</button>}
+            <button style={S.btnSmall} onClick={() => setPeriodOffset(p => p+1)}>Next →</button>
           </div>
         </div>
         <div style={{display:"flex", gap:10, overflowX:"auto", paddingBottom:8, marginBottom:16}}>
