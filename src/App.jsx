@@ -2028,7 +2028,6 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
 
   return (
     <div style={S.page}>
-      <h1 style={S.h1}>Labor Log</h1>
       <p style={S.subhead}>Track contractor hours by day</p>
 
       {/* Clock In / Out with GPS — mobile/tablet only; desktop uses manual entry below */}
@@ -2580,7 +2579,6 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
 
   return (
     <div style={S.page}>
-      <h1 style={S.h1}>Materials</h1>
       <p style={S.subhead}>Log every material purchase and compare it against what the job estimates say should have been used.</p>
 
       {canEdit && (
@@ -3180,9 +3178,6 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
 
   return (
     <div style={S.page}>
-      <div style={S.pageHeader}>
-        <h1 style={S.h1}>Zones &amp; Routing</h1>
-      </div>
       <p style={S.subhead}>4 zones calculated from job density (filtered by category below), plus overflow</p>
 
       {/* Tab switcher */}
@@ -3557,8 +3552,6 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
 
   return (
     <div style={S.page}>
-      <h1 style={S.h1}>Schedule</h1>
-
       <div style={S.calNav}>
         <button style={S.calNavBtn} onClick={prevMonth}>‹</button>
         <span style={S.calMonthLabel}>{MONTHS[month]} {year}</span>
@@ -4260,7 +4253,6 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
 
   return (
     <div style={S.page}>
-      <h1 style={S.h1}>CRM</h1>
       <p style={S.subhead}>Every customer, aggregated from their jobs — search, review history, and log notes or calls.</p>
 
       <section style={S.section}>
@@ -4629,7 +4621,6 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
 
   return (
     <div style={S.page}>
-      <h1 style={S.h1}>Reports</h1>
       <p style={S.subhead}>{mode==="profitability" ? "Profitability across all jobs" : "Invoices sent but not yet paid"}</p>
 
       {/* Mode toggle */}
@@ -5909,7 +5900,6 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
 
   return (
     <div style={S.page}>
-      <h1 style={S.h1}>Home</h1>
       <p style={S.subhead}>What needs your attention right now.</p>
 
       <div style={{display: isDesktopLayout ? "grid" : "block", gridTemplateColumns: isDesktopLayout ? "1fr 1fr" : undefined, gap: isDesktopLayout ? 20 : 0}}>
@@ -6087,7 +6077,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
   const title = mineOnly ? "My Jobs" : "Jobs Pipeline";
   const headerRow = isDesktopLayout ? (
     <div style={S.pageHeader}>
-      <h1 style={S.h1}>{title}</h1>
+      {showBackButton ? <h1 style={S.h1}>{title}</h1> : <div/>}
       <div style={{display:"flex", gap:8}}>
         {showBackButton && <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Pipeline</button>}
         {canSeeAllJobs && !showBackButton && <button style={S.btnSecondary} onClick={() => setView("myjobs")}>⭐ My Jobs ({myJobsCount})</button>}
@@ -6096,7 +6086,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
     </div>
   ) : (
     <div style={{marginBottom:16}}>
-      <h1 style={{...S.h1, marginBottom:10}}>{title}</h1>
+      {showBackButton && <h1 style={{...S.h1, marginBottom:10}}>{title}</h1>}
       <div style={{display:"flex", gap:8}}>
         {showBackButton && <button style={{...S.btnSecondary, flex:1}} onClick={() => setView("jobs")}>← Pipeline</button>}
         {canSeeAllJobs && !showBackButton && <button style={{...S.btnSecondary, flex:1}} onClick={() => setView("myjobs")}>⭐ My Jobs ({myJobsCount})</button>}
