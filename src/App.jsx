@@ -5863,14 +5863,15 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
 
   const severityColor = (days) => days >= 21 ? C.danger : days >= 10 ? "#d97706" : C.textMuted;
 
-  // ── Weekly Schedule (Sun–Sat containing today) ──
+  // ── Weekly Schedule (Sun–Sat containing today, shiftable by weekOffset) ──
   // Crews, not individual employees, are what jobs actually get assigned to
   // in this app — there's no per-person scheduling/availability data to draw
   // on, so "which employees are working" is shown at the crew level: a crew
   // with a job that day is busy, a crew with nothing scheduled is available.
+  const [weekOffset, setWeekOffset] = useState(0);
   const weekDays = (() => {
     const start = new Date();
-    start.setDate(start.getDate() - start.getDay());
+    start.setDate(start.getDate() - start.getDay() + weekOffset*7);
     start.setHours(0,0,0,0);
     return Array.from({length:7}, (_,i) => {
       const d = new Date(start);
@@ -5930,17 +5931,25 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
 
       <section style={S.section}>
         <h2 style={S.h2}>Weekly Schedule</h2>
-        <p style={{fontSize:11, color:C.textDim, margin:"0 0 12px"}}>
-          {weekDays[0].toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {weekDays[6].toLocaleDateString("en-US",{month:"short",day:"numeric"})}
-        </p>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8}}>
+          <p style={{fontSize:11, color:C.textDim, margin:0}}>
+            {weekDays[0].toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {weekDays[6].toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+            {weekOffset !== 0 && <span style={{color:C.accent}}> · {weekOffset > 0 ? `${weekOffset} week${weekOffset!==1?"s":""} ahead` : `${-weekOffset} week${weekOffset!==-1?"s":""} ago`}</span>}
+          </p>
+          <div style={{display:"flex", gap:6}}>
+            <button style={S.btnSmall} onClick={() => setWeekOffset(w => w-1)}>← Prev</button>
+            {weekOffset !== 0 && <button style={S.btnSmall} onClick={() => setWeekOffset(0)}>Today</button>}
+            <button style={S.btnSmall} onClick={() => setWeekOffset(w => w+1)}>Next →</button>
+          </div>
+        </div>
         <div style={{display:"flex", gap:10, overflowX:"auto", paddingBottom:8, marginBottom:16}}>
           {weekDays.map(d => {
             const ds = dateKey(d);
             const dayJobs = jobsForDate(ds);
             const isToday = ds === todayStr;
             return (
-              <div key={ds} style={{flex:"0 0 150px", border:`1px solid ${isToday?C.accent:C.border}`, borderRadius:8, padding:8}}>
-                <div style={{fontSize:11, fontWeight:700, color: isToday ? C.accent : C.textMuted, marginBottom:6}}>
+              <div key={ds} style={{flex:"1 1 0", minWidth:0, border:`1px solid ${isToday?C.accent:C.border}`, borderRadius:8, padding:8}}>
+                <div style={{fontSize:11, fontWeight:700, color: isToday ? C.accent : C.textMuted, marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
                   {d.toLocaleDateString("en-US",{weekday:"short"})} {d.getDate()}
                 </div>
                 {dayJobs.length === 0 ? (
