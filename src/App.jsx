@@ -2318,6 +2318,15 @@ function earliestScheduledDate(job) {
   return days[0] || job.scheduledDate || "";
 }
 
+// For aging purposes specifically — a job with several scheduled days isn't
+// overdue until the LAST one has passed, not the first. earliestScheduledDate
+// is still correct for "when does this job start" elsewhere in the app; this
+// is only for "is this job stuck."
+function latestScheduledDate(job) {
+  const days = (job.scheduleDays || []).filter(d => d.date).map(d => d.date).sort();
+  return days.length ? days[days.length-1] : (job.scheduledDate || "");
+}
+
 // Raw job measurement (sq ft or lin ft), undivided by any coverage rate —
 // used to back-calculate the *actual* coverage ratio from real stock-check
 // consumption data, as opposed to estimateJobMaterials() which applies the
@@ -5800,7 +5809,7 @@ function daysSince(isoOrDateStr) {
 }
 
 // Default aging thresholds — adjustable later, not exposed as settings yet.
-const AGING = { estimateStuckDays: 7, sentNoResponseDays: 7, unpaidInvoiceDays: 14 };
+const AGING = { estimateStuckDays: 7, sentNoResponseDays: 3, unpaidInvoiceDays: 14 };
 
 function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView }) {
   const isDesktopLayout = useIsDesktop();
@@ -5831,7 +5840,7 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
     if (canSeeAllJobs && !j.assignedTo && ["estimate","draft"].includes(j.status)) {
       actionItems.push({ job:j, label: "Needs an estimator assigned" });
     }
-    if (isCrewLead && myCrew && j.crewId === myCrew.id && j.status === "scheduled" && j.scheduledDate && j.scheduledDate <= todayStr) {
+    if (isCrewLead && myCrew && j.crewId === myCrew.id && j.status === "scheduled" && latestScheduledDate(j) && latestScheduledDate(j) <= todayStr) {
       actionItems.push({ job:j, label: "Mark completed once finished", urgent:true });
     }
     if (canSeeAllJobs && j.status === "completed") {
@@ -5850,9 +5859,20 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
       const d = daysSince(j.statusChangedAt);
       if (d !== null && d >= AGING.sentNoResponseDays) agingItems.push({ job:j, label:`Sent ${d} days ago, no response yet`, days:d });
     }
-    if (j.status === "scheduled" && j.scheduledDate) {
-      const d = daysSince(j.scheduledDate);
-      if (d !== null && d >= 1) agingItems.push({ job:j, label:`Scheduled date passed ${d} day${d!==1?"s":""} ago, not marked completed`, days:d });
+    if (j.status === "scheduled") {
+      const lastDate = latestScheduledDate(j);
+      if (!lastDate) {
+        // Scheduled with no date at all is a data gap, not a time-based
+        // thing — flag it regardless of how long it's been, using time since
+        // it became Scheduled just to rank/color it consistently with everything else.
+        const d = daysSince(j.statusChangedAt) ?? 0;
+        agingItems.push({ job:j, label:`Scheduled with no date set — add one`, days:d });
+      } else {
+        // Use the LAST scheduled day, not the first — a multi-day job isn't
+        // overdue until its final day has passed.
+        const d = daysSince(lastDate);
+        if (d !== null && d >= 1) agingItems.push({ job:j, label:`Scheduled date passed ${d} day${d!==1?"s":""} ago, not marked completed`, days:d });
+      }
     }
     if (j.status === "completed") {
       const d = daysSince(j.statusChangedAt);
@@ -5902,11 +5922,11 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
               style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
                 padding:"10px 12px", background: item.urgent ? "#fef3c7" : C.surface2, borderRadius:8, marginBottom:8,
                 border: item.urgent ? "1px solid #fde68a" : `1px solid ${C.border}`}}>
-              <div>
-                <div style={{fontWeight:600, fontSize:13}}>{item.job.clientName||"Unnamed Client"}</div>
-                <div style={{fontSize:12, color:item.urgent ? "#92400e" : C.textMuted}}>{item.label}</div>
+              <div style={{flex:1, minWidth:0, marginRight:10}}>
+                <div style={{fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.job.clientName||"Unnamed Client"}</div>
+                <div style={{fontSize:12, color:item.urgent ? "#92400e" : C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.label}</div>
               </div>
-              <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
+              <span style={{fontSize:12, color:C.accent, fontWeight:600, flexShrink:0}}>Open →</span>
             </div>
           ))}
         </section>
@@ -5919,11 +5939,11 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
             <div key={item.job.id+"-"+i} onClick={() => open(item.job)}
               style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
                 padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:8, border:`1px solid ${C.border}`}}>
-              <div>
-                <div style={{fontWeight:600, fontSize:13}}>{item.job.clientName||"Unnamed Client"}</div>
-                <div style={{fontSize:12, color:severityColor(item.days)}}>{item.label}</div>
+              <div style={{flex:1, minWidth:0, marginRight:10}}>
+                <div style={{fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.job.clientName||"Unnamed Client"}</div>
+                <div style={{fontSize:12, color:severityColor(item.days), overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.label}</div>
               </div>
-              <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
+              <span style={{fontSize:12, color:C.accent, fontWeight:600, flexShrink:0}}>Open →</span>
             </div>
           ))}
         </section>
