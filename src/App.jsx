@@ -64,8 +64,8 @@ const C = {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const S = {
-  app:{ minHeight:"100vh", width:"100%", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"column" },
-  appDesktop:{ minHeight:"100vh", width:"100%", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"row" },
+  app:{ minHeight:"100vh", width:"100%", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"column", textAlign:"left" },
+  appDesktop:{ minHeight:"100vh", width:"100%", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"row", textAlign:"left" },
   contentColDesktop:{ flex:1, minWidth:0, display:"flex", flexDirection:"column", minHeight:"100vh" },
   nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"stretch", position:"sticky", top:0, zIndex:100, minHeight:56 },
   navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0, cursor:"pointer", userSelect:"none" },
@@ -83,7 +83,7 @@ const S = {
   sidebarTabActive:{ background:C.surface2, color:C.accent, fontWeight:700 },
   sidebarDivider:{ height:1, margin:"10px 14px", background:C.border },
   content:{ flex:1 },
-  page:{ maxWidth:1600, width:"100%", margin:"0 auto", padding:"24px 24px 80px", boxSizing:"border-box" },
+  page:{ maxWidth:1600, width:"100%", margin:"0 auto", padding:"24px 24px 80px", boxSizing:"border-box", textAlign:"left" },
   pageHeader:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 },
   h1:{ fontSize:22, fontWeight:800, margin:"0 0 4px", lineHeight:1.2, letterSpacing:"-0.01em" },
   h2:{ fontSize:13, fontWeight:600, margin:"0 0 12px", color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.08em" },
