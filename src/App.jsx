@@ -4646,7 +4646,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
       </div>
 
       {mode === "outstanding" ? (
-        <OutstandingInvoicesSection jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>
+        <OutstandingInvoicesSection jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/>
       ) : (
       <>
       {/* Filters + print */}
@@ -7093,7 +7093,23 @@ function LoginView({ onSuccess }) {
 }
 
 export default function App() {
-  const [view,          setView]         = useState("home");
+  const [view,          setViewRaw]      = useState("home");
+  const [viewHistory,   setViewHistory]  = useState([]); // stack of previous views, for global Back button
+  // navigateTo: use this for all "go to a new screen" navigation — pushes the
+  // current view onto the history stack so the Back button can return to it.
+  const navigateTo = (next) => {
+    setViewHistory(h => [...h, view]);
+    setViewRaw(next);
+  };
+  // goBack: pop the last view off the stack and go there directly (no push).
+  const goBack = () => {
+    setViewHistory(h => {
+      if (h.length === 0) return h;
+      const prev = h[h.length - 1];
+      setViewRaw(prev);
+      return h.slice(0, -1);
+    });
+  };
   const [jobs,          setJobs]         = useState([]);
   const [rates,         setRates]        = useState({...DEFAULT_RATES});
   const [currentJobId,  setCurrentJobId] = useState(null);
@@ -7196,11 +7212,11 @@ export default function App() {
   // "export", "permissions", "team" stay admin-only regardless of the configurable matrix.
   useEffect(() => {
     const alwaysAdminOnly = ["export","permissions","admin","homebase"];
-    if (alwaysAdminOnly.includes(view) && userRole !== "admin") { setView("jobs"); return; }
-    if (view === "team" && userRole !== "admin" && userRole !== "manager") { setView("jobs"); return; }
+    if (alwaysAdminOnly.includes(view) && userRole !== "admin") { setViewRaw("jobs"); return; }
+    if (view === "team" && userRole !== "admin" && userRole !== "manager") { setViewRaw("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
       const level = getAccessLevel(permissions, view, userRole);
-      if (level === "hidden" && userRole !== "admin") setView("jobs");
+      if (level === "hidden" && userRole !== "admin") setViewRaw("jobs");
     }
   }, [userRole, view, permissions]);
 
@@ -7209,6 +7225,7 @@ export default function App() {
     setSession(null);
     setUserRole("crew");
     setUserRoles(["crew"]);
+    setViewHistory([]);
   };
 
   // ── Load all data on mount ──
@@ -7714,7 +7731,7 @@ export default function App() {
 
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
-      <TopNav view={view} setView={setView} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle}/>
+      <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle}/>
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {syncStatus && (
           <div style={{
@@ -7724,12 +7741,21 @@ export default function App() {
           }}>{syncStatus}</div>
         )}
         <div style={S.content}>
-        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={setView}/></div>}
-        {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
-        {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
-        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/></div>}
-        {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/></div>}
-        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs}/>}
+        {viewHistory.length > 0 && (
+          <button onClick={goBack} style={{
+            display:"flex", alignItems:"center", gap:6,
+            background:"none", border:"none", padding:"4px 0 10px",
+            color:C.accent, fontWeight:600, fontSize:14, cursor:"pointer",
+          }}>
+            ‹ Back
+          </button>
+        )}
+        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
+        {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
+        {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
+        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
+        {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase}/></div>}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}
           canOverridePrice={hasRole(userRoles||[userRole], "admin") || hasRole(userRoles||[userRole], "manager")}
           readOnly={
@@ -7745,15 +7771,15 @@ export default function App() {
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
-        {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={setView} userRole={userRole}/></div>}
-        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView}/></div>}
+        {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
+        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
-        {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
+        {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
-        {view==="admin"    && userRole==="admin" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
-        {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={setView}/>}
-        {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView} onLogout={handleLogout}/>}
-        {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView}/>}
+        {view==="admin"    && userRole==="admin" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
+        {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo}/>}
+        {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout}/>}
+        {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo}/>}
         </div>
       </div>
     </div>
