@@ -404,7 +404,7 @@ function hasRole(userRoleOrRoles, role) {
   return Array.isArray(userRoleOrRoles) ? userRoleOrRoles.includes(role) : userRoleOrRoles === role;
 }
 
-function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle }) {
+function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant }) {
   const tabsRef = useRef(null);
   const isDesktop = useIsDesktop();
   const tabs = ALL_TABS.filter(t => getAccessLevel(permissions, t.key, userRoles||userRole) !== "hidden");
@@ -424,6 +424,14 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
         <div style={S.sidebarBrand}>
           <img src={"data:image/png;base64," + LOGO_B64} alt="TPS" style={{width:"100%", maxWidth:140, display:"block"}}/>
         </div>
+        {myTenants && myTenants.length > 1 && (
+          <div style={{padding:"0 16px 12px"}}>
+            <select value={currentTenantId||""} onChange={e => switchTenant(e.target.value)}
+              style={{width:"100%", fontSize:12, padding:"6px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.surface, color:C.text}}>
+              {myTenants.map(t => <option key={t.tenantId} value={t.tenantId}>{t.companyName}</option>)}
+            </select>
+          </div>
+        )}
         <div className="tps-sidebar-tabs" style={S.sidebarTabs}>
           {tabs.map(t => (
             <button key={t.key} onClick={() => setView(t.key)}
@@ -458,6 +466,12 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
     <nav style={S.nav}>
       <div style={S.navBrand}>
         <img src={"data:image/png;base64," + LOGO_B64} alt="TPS" style={{height:32, width:"auto", display:"block"}}/>
+        {myTenants && myTenants.length > 1 && (
+          <select value={currentTenantId||""} onChange={e => switchTenant(e.target.value)}
+            style={{fontSize:11, padding:"3px 6px", borderRadius:6, border:`1px solid ${C.border}`, background:C.surface, color:C.text, marginLeft:8}}>
+            {myTenants.map(t => <option key={t.tenantId} value={t.tenantId}>{t.companyName}</option>)}
+          </select>
+        )}
       </div>
       <div ref={tabsRef} className="tps-nav-tabs" style={S.navTabs}>
         {tabs.map(t => (
@@ -7209,6 +7223,18 @@ export default function App() {
     return sbFetch(finalPath, finalOpts, accessToken);
   };
 
+  // Switching companies just changes which one tFetch scopes everything to —
+  // the main data-load effect re-fires automatically since it depends on
+  // currentTenantId. Deliberately NOT touching userRole/userRoles here: that
+  // system is global (profiles.roles) and predates per-tenant membership
+  // roles (tenant_users.role, which is a single value, not an array) — unifying
+  // those is a real decision to make later, not something to collapse
+  // silently while just building the switcher.
+  const switchTenant = (tenantId) => {
+    if (tenantId === currentTenantId) return;
+    setCurrentTenantId(tenantId);
+  };
+
   const fetchProfile = async (userId, accessToken) => {
     try {
       const res = await sbFetch("profiles?id=eq."+userId+"&select=role,roles,first_name,last_name,phone", {}, accessToken);
@@ -7307,8 +7333,13 @@ export default function App() {
     setCurrentTenantId(null);
   };
 
-  // ── Load all data on mount ──
+  // ── Load all data — waits for currentTenantId to resolve (so the very
+  // first load is correctly scoped, not fired before the tenant is known),
+  // and re-fires whenever it changes — i.e. switching companies reloads
+  // everything for the newly-selected one. ──
   useEffect(() => {
+    if (!currentTenantId) return; // still resolving which company this login belongs to
+    setLoading(true);
     const load = async () => {
       try {
         const jr = await tFetch("jobs?select=id,data&order=id.desc");
@@ -7375,7 +7406,7 @@ export default function App() {
       setLoading(false);
     };
     load();
-  }, []);
+  }, [currentTenantId]);
 
   // Jobs commonly get updated from a different login entirely — an admin
   // assigning an estimate, a crew lead marking something completed — and
@@ -7810,7 +7841,7 @@ export default function App() {
 
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
-      <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle}/>
+      <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant}/>
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {syncStatus && (
           <div style={{
