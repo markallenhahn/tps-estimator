@@ -5182,10 +5182,28 @@ function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, access
 
   const copyLink = (token) => {
     const url = window.location.origin + "/?join=" + token;
-    navigator.clipboard?.writeText(url).then(() => {
-      setCopiedToken(token);
-      setTimeout(() => setCopiedToken(null), 2000);
-    });
+    const markCopied = () => { setCopiedToken(token); setTimeout(() => setCopiedToken(null), 2000); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(markCopied).catch(() => fallbackCopy(url, markCopied));
+    } else {
+      fallbackCopy(url, markCopied);
+    }
+  };
+  // Older/restricted browser contexts don't expose navigator.clipboard at
+  // all (e.g. non-HTTPS, some in-app webviews) — this covers that case
+  // instead of the button just silently doing nothing.
+  const fallbackCopy = (text, onDone) => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      onDone();
+    } catch(e) { /* the visible link field below is the real fallback for this */ }
   };
 
 
@@ -5239,19 +5257,29 @@ function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, access
         {inviteError && <p style={{fontSize:12, color:C.danger, marginTop:8}}>{inviteError}</p>}
         {invites.length > 0 && (
           <div style={{marginTop:14}}>
-            {invites.map(inv => (
-              <div key={inv.token} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
-                padding:"8px 10px", background:C.surface2, borderRadius:8, marginBottom:6}}>
-                <div style={{fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, marginRight:10}}>
-                  {inv.used_at ? <span style={{color:C.textDim}}>✓ Used — {inv.token}</span> : inv.token}
-                </div>
-                {!inv.used_at && (
-                  <button style={S.btnSmall} onClick={() => copyLink(inv.token)}>
-                    {copiedToken===inv.token ? "Copied!" : "Copy Link"}
-                  </button>
+            {invites.map(inv => {
+              const fullUrl = window.location.origin + "/?join=" + inv.token;
+              return (
+              <div key={inv.token} style={{padding:"8px 10px", background:C.surface2, borderRadius:8, marginBottom:6}}>
+                {inv.used_at ? (
+                  <div style={{fontSize:12, color:C.textDim}}>✓ Used — {inv.token}</div>
+                ) : (
+                  <>
+                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:10}}>
+                      <input readOnly value={fullUrl} onFocus={e => e.target.select()}
+                        style={{flex:1, fontSize:12, color:C.text, background:C.surface, border:`1px solid ${C.border}`, borderRadius:6, padding:"6px 8px"}}/>
+                      <button style={S.btnSmall} onClick={() => copyLink(inv.token)}>
+                        {copiedToken===inv.token ? "Copied!" : "Copy Link"}
+                      </button>
+                    </div>
+                    <p style={{fontSize:11, color:C.textDim, margin:"6px 0 0"}}>
+                      If "Copy Link" doesn't seem to do anything, tap the link above to select it, then copy manually.
+                    </p>
+                  </>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
