@@ -628,7 +628,6 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>🏠 Home Base</h1>
-        <button style={S.btnSecondary} onClick={() => setView("admin")}>← Admin</button>
       </div>
       <p style={S.subhead}>Route start/end point</p>
       <section style={S.section}>
@@ -864,7 +863,6 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>{currentJob.clientName||"Unnamed Job"}</h1>
-        <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Jobs</button>
       </div>
       <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
         <p style={{...S.subhead, margin:0}}>{currentJob.address||"No address"}</p>
@@ -5066,7 +5064,6 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>User Settings</h1>
-        <button style={S.btnSecondary} onClick={() => setView("jobs")}>✕ Close</button>
       </div>
 
       <section style={S.section}>
@@ -5225,7 +5222,6 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>Permissions</h1>
-        <button style={S.btnSecondary} onClick={() => setView("admin")}>← Admin</button>
       </div>
       <p style={S.subhead}>Tap a cell to cycle Hidden → View → Edit, for each role and tab</p>
 
@@ -5749,7 +5745,6 @@ function ExportView({ jobs, laborEntries, rates, setView }) {
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>Data Export</h1>
-        <button style={S.btnSecondary} onClick={() => setView("admin")}>← Admin</button>
       </div>
       <p style={S.subhead}>Full data dumps including addresses</p>
 
@@ -6090,7 +6085,6 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
     <div style={S.pageHeader}>
       {showBackButton ? <h1 style={S.h1}>{title}</h1> : <div/>}
       <div style={{display:"flex", gap:8}}>
-        {showBackButton && <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Pipeline</button>}
         {canSeeAllJobs && !showBackButton && <button style={S.btnSecondary} onClick={() => setView("myjobs")}>⭐ My Jobs ({myJobsCount})</button>}
         <button onClick={create} style={S.btnPrimary}>+ New Job</button>
       </div>
@@ -6099,7 +6093,6 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
     <div style={{marginBottom:16}}>
       {showBackButton && <h1 style={{...S.h1, marginBottom:10}}>{title}</h1>}
       <div style={{display:"flex", gap:8}}>
-        {showBackButton && <button style={{...S.btnSecondary, flex:1}} onClick={() => setView("jobs")}>← Pipeline</button>}
         {canSeeAllJobs && !showBackButton && <button style={{...S.btnSecondary, flex:1}} onClick={() => setView("myjobs")}>⭐ My Jobs ({myJobsCount})</button>}
         <button onClick={create} style={{...S.btnPrimary, flex:1}}>+ New Job</button>
       </div>
@@ -7742,9 +7735,9 @@ export default function App() {
         )}
         <div style={S.content}>
         {viewHistory.length > 0 && (
-          <button onClick={goBack} style={{...S.btnSecondary, marginBottom:14}}>
-            ← Back
-          </button>
+          <div style={{display:"flex", justifyContent:"flex-end", padding:"16px 24px 0", boxSizing:"border-box"}}>
+            <button onClick={goBack} style={S.btnSecondary}>← Back</button>
+          </div>
         )}
         {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
