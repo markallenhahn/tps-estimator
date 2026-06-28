@@ -5803,6 +5803,7 @@ function daysSince(isoOrDateStr) {
 const AGING = { estimateStuckDays: 7, sentNoResponseDays: 7, unpaidInvoiceDays: 14 };
 
 function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView }) {
+  const isDesktopLayout = useIsDesktop();
   const roles = userRoles || [userRole];
   const isEstimator = hasRole(roles, "estimator");
   const canSeeAllJobs = hasRole(roles, "admin") || hasRole(roles, "manager");
@@ -5862,44 +5863,128 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
 
   const severityColor = (days) => days >= 21 ? C.danger : days >= 10 ? "#d97706" : C.textMuted;
 
+  // ── Weekly Schedule (Sun–Sat containing today) ──
+  // Crews, not individual employees, are what jobs actually get assigned to
+  // in this app — there's no per-person scheduling/availability data to draw
+  // on, so "which employees are working" is shown at the crew level: a crew
+  // with a job that day is busy, a crew with nothing scheduled is available.
+  const weekDays = (() => {
+    const start = new Date();
+    start.setDate(start.getDate() - start.getDay());
+    start.setHours(0,0,0,0);
+    return Array.from({length:7}, (_,i) => {
+      const d = new Date(start);
+      d.setDate(d.getDate()+i);
+      return d;
+    });
+  })();
+  const dateKey = d => d.toISOString().slice(0,10);
+  const jobsForDate = (dateStr) => visibleJobs.filter(j => {
+    if (!["scheduled","completed"].includes(j.status)) return false;
+    const days = (j.scheduleDays||[]).filter(dd=>dd.date).map(dd=>dd.date);
+    return days.length ? days.includes(dateStr) : j.scheduledDate === dateStr;
+  });
+  const crewName = (id) => (crews||[]).find(c => c.id===id)?.name || "Unassigned";
+
   return (
     <div style={S.page}>
       <h1 style={S.h1}>Home</h1>
       <p style={S.subhead}>What needs your attention right now.</p>
 
-      <section style={S.section}>
-        <h2 style={S.h2}>Action Needed ({actionItems.length})</h2>
-        {actionItems.length === 0 ? (
-          <p style={{fontSize:13, color:C.textMuted}}>Nothing needs your attention right now.</p>
-        ) : actionItems.map((item, i) => (
-          <div key={item.job.id+"-"+i} onClick={() => open(item.job)}
-            style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
-              padding:"10px 12px", background: item.urgent ? "#fef3c7" : C.surface2, borderRadius:8, marginBottom:8,
-              border: item.urgent ? "1px solid #fde68a" : `1px solid ${C.border}`}}>
-            <div>
-              <div style={{fontWeight:600, fontSize:13}}>{item.job.clientName||"Unnamed Client"}</div>
-              <div style={{fontSize:12, color:item.urgent ? "#92400e" : C.textMuted}}>{item.label}</div>
+      <div style={{display: isDesktopLayout ? "grid" : "block", gridTemplateColumns: isDesktopLayout ? "1fr 1fr" : undefined, gap: isDesktopLayout ? 20 : 0}}>
+        <section style={S.section}>
+          <h2 style={S.h2}>Action Needed ({actionItems.length})</h2>
+          {actionItems.length === 0 ? (
+            <p style={{fontSize:13, color:C.textMuted}}>Nothing needs your attention right now.</p>
+          ) : actionItems.map((item, i) => (
+            <div key={item.job.id+"-"+i} onClick={() => open(item.job)}
+              style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
+                padding:"10px 12px", background: item.urgent ? "#fef3c7" : C.surface2, borderRadius:8, marginBottom:8,
+                border: item.urgent ? "1px solid #fde68a" : `1px solid ${C.border}`}}>
+              <div>
+                <div style={{fontWeight:600, fontSize:13}}>{item.job.clientName||"Unnamed Client"}</div>
+                <div style={{fontSize:12, color:item.urgent ? "#92400e" : C.textMuted}}>{item.label}</div>
+              </div>
+              <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
             </div>
-            <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+
+        <section style={S.section}>
+          <h2 style={S.h2}>Aging ({agingItems.length})</h2>
+          {agingItems.length === 0 ? (
+            <p style={{fontSize:13, color:C.textMuted}}>Nothing's sitting longer than it should.</p>
+          ) : agingItems.map((item, i) => (
+            <div key={item.job.id+"-"+i} onClick={() => open(item.job)}
+              style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
+                padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:8, border:`1px solid ${C.border}`}}>
+              <div>
+                <div style={{fontWeight:600, fontSize:13}}>{item.job.clientName||"Unnamed Client"}</div>
+                <div style={{fontSize:12, color:severityColor(item.days)}}>{item.label}</div>
+              </div>
+              <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
+            </div>
+          ))}
+        </section>
+      </div>
 
       <section style={S.section}>
-        <h2 style={S.h2}>Aging ({agingItems.length})</h2>
-        {agingItems.length === 0 ? (
-          <p style={{fontSize:13, color:C.textMuted}}>Nothing's sitting longer than it should.</p>
-        ) : agingItems.map((item, i) => (
-          <div key={item.job.id+"-"+i} onClick={() => open(item.job)}
-            style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
-              padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:8, border:`1px solid ${C.border}`}}>
-            <div>
-              <div style={{fontWeight:600, fontSize:13}}>{item.job.clientName||"Unnamed Client"}</div>
-              <div style={{fontSize:12, color:severityColor(item.days)}}>{item.label}</div>
+        <h2 style={S.h2}>Weekly Schedule</h2>
+        <p style={{fontSize:11, color:C.textDim, margin:"0 0 12px"}}>
+          {weekDays[0].toLocaleDateString("en-US",{month:"short",day:"numeric"})} – {weekDays[6].toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+        </p>
+        <div style={{display:"flex", gap:10, overflowX:"auto", paddingBottom:8, marginBottom:16}}>
+          {weekDays.map(d => {
+            const ds = dateKey(d);
+            const dayJobs = jobsForDate(ds);
+            const isToday = ds === todayStr;
+            return (
+              <div key={ds} style={{flex:"0 0 150px", border:`1px solid ${isToday?C.accent:C.border}`, borderRadius:8, padding:8}}>
+                <div style={{fontSize:11, fontWeight:700, color: isToday ? C.accent : C.textMuted, marginBottom:6}}>
+                  {d.toLocaleDateString("en-US",{weekday:"short"})} {d.getDate()}
+                </div>
+                {dayJobs.length === 0 ? (
+                  <div style={{fontSize:11, color:C.textDim}}>—</div>
+                ) : dayJobs.map(j => (
+                  <div key={j.id} onClick={() => open(j)} style={{cursor:"pointer", marginBottom:6}}>
+                    <div style={{fontSize:12, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{j.clientName||"Unnamed"}</div>
+                    <div style={{fontSize:10, color:C.textMuted}}>{crewName(j.crewId)}{j.status==="completed" ? " · Done" : ""}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+
+        {(crews||[]).length > 0 && (
+          <>
+            <h2 style={{...S.h2, fontSize:13}}>Crew Availability</h2>
+            {crews.map(c => (
+              <div key={c.id} style={{display:"flex", alignItems:"center", gap:10, marginBottom:8}}>
+                <div style={{width:90, fontSize:12, fontWeight:600, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.name}</div>
+                <div style={{display:"flex", gap:6}}>
+                  {weekDays.map(d => {
+                    const ds = dateKey(d);
+                    const busy = jobsForDate(ds).some(j => j.crewId === c.id);
+                    return (
+                      <div key={ds} title={`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${busy?"Busy":"Available"}`}
+                        style={{width:26, height:26, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center",
+                          fontSize:9, fontWeight:700,
+                          background: busy ? "#fef3c7" : "#dcfce7",
+                          color: busy ? "#92400e" : "#15803d"}}>
+                        {d.toLocaleDateString("en-US",{weekday:"short"}).slice(0,1)}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div style={{display:"flex", gap:14, marginTop:10, fontSize:11, color:C.textMuted}}>
+              <span><span style={{display:"inline-block", width:10, height:10, borderRadius:3, background:"#dcfce7", marginRight:5}}/>Available</span>
+              <span><span style={{display:"inline-block", width:10, height:10, borderRadius:3, background:"#fef3c7", marginRight:5}}/>Busy</span>
             </div>
-            <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
-          </div>
-        ))}
+          </>
+        )}
       </section>
     </div>
   );
