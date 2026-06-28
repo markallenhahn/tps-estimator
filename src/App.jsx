@@ -4644,7 +4644,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
       </div>
 
       {mode === "outstanding" ? (
-        <OutstandingInvoicesSection jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/>
+        <OutstandingInvoicesSection jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>
       ) : (
       <>
       {/* Filters + print */}
