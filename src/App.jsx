@@ -2894,7 +2894,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
 
 // ─── Schedule View ────────────────────────────────────────────────────────────
 // ─── Zones View (route optimization) ───────────────────────────────────────────
-function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, setView, homeBase }) {
+function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, setView, homeBase, tFetch }) {
   const [tab,           setTab]           = useState("list"); // "list" | "map" | "import"
   const [calculating,   setCalculating]   = useState(false);
   const [calcProgress,  setCalcProgress]  = useState("");
@@ -2933,7 +2933,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await sbFetch("historical_jobs?select=id,data&order=id.desc");
+        const res = await tFetch("historical_jobs?select=id,data&order=id.desc");
         const data = await res.json();
         if (Array.isArray(data)) setHistoricalJobs(data.map(row => ({...row.data, id: row.id})));
       } catch(e) { console.error("load historical_jobs error:", e); }
@@ -2986,7 +2986,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
         const entry = { id: Date.now()+i, ...row, lat: geo.lat, lng: geo.lng };
         imported.push(entry);
         try {
-          await sbFetch("historical_jobs", {
+          await tFetch("historical_jobs", {
             method: "POST",
             headers: { "Prefer": "resolution=merge-duplicates" },
             body: JSON.stringify({ id: entry.id, data: entry }),
@@ -3044,7 +3044,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
           // both in the database AND in memory, so the very next recalculate (no
           // page reload needed) reuses it instead of geocoding it all over again.
           try {
-            await sbFetch("jobs?id=eq."+j.id, {
+            await tFetch("jobs?id=eq."+j.id, {
               method: "PATCH",
               body: JSON.stringify({ data: {...j, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} }),
             });
@@ -5283,7 +5283,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
 }
 
 // ─── Team View (admin only) ────────────────────────────────────────────────────
-function TeamView({ accessToken, userRole }) {
+function TeamView({ accessToken, userRole, tFetch }) {
   const isManager = userRole === "manager";
   const [users,     setUsers]     = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -5471,13 +5471,13 @@ function TeamView({ accessToken, userRole }) {
         )}
       </section>
 
-      <CrewsSection users={users} isManager={isManager}/>
+      <CrewsSection users={users} isManager={isManager} tFetch={tFetch}/>
     </div>
   );
 }
 
 // ─── Crews management (used inside TeamView) ───────────────────────────────────
-function CrewsSection({ users, isManager }) {
+function CrewsSection({ users, isManager, tFetch }) {
   const [crews,       setCrews]       = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [editingId,   setEditingId]   = useState(null);
@@ -5488,7 +5488,7 @@ function CrewsSection({ users, isManager }) {
   const loadCrews = async () => {
     setLoading(true);
     try {
-      const res = await sbFetch("crews?select=id,data&order=id.asc");
+      const res = await tFetch("crews?select=id,data&order=id.asc");
       const data = await res.json();
       if (Array.isArray(data)) setCrews(data.map(row => ({...row.data, id: row.id})));
     } catch(e) { console.error(e); }
@@ -5499,7 +5499,7 @@ function CrewsSection({ users, isManager }) {
 
   const syncCrew = async (crew) => {
     try {
-      await sbFetch("crews", {
+      await tFetch("crews", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: crew.id, data: crew }),
@@ -5510,7 +5510,7 @@ function CrewsSection({ users, isManager }) {
   const deleteCrew = async (id) => {
     if (!confirm("Delete this crew?")) return;
     setCrews(prev => prev.filter(c => c.id !== id));
-    try { await sbFetch("crews?id=eq."+id, { method:"DELETE" }); } catch(e) {}
+    try { await tFetch("crews?id=eq."+id, { method:"DELETE" }); } catch(e) {}
   };
 
   const startNew = () => {
@@ -6770,6 +6770,16 @@ const sbFetch = (path, opts={}, accessToken=null) => fetch(SUPABASE_URL + "/rest
   },
 });
 
+// Every table that belongs to a specific company — i.e. everything except
+// "profiles" (the global user identity, shared across the whole platform)
+// and the multi-tenancy tables themselves (tenants/tenant_users/tenant_invites,
+// which are how a tenant gets resolved in the first place).
+const TENANT_SCOPED_TABLES = [
+  "jobs","labor","materials","materialsettings","materialstock","customers",
+  "crmlogs","zones","permissions","crews","rates","homebase","appsettings",
+  "historical_jobs",
+];
+
 // ── Auth helpers (Supabase GoTrue REST API, no SDK needed) ──
 const AUTH_STORAGE_KEY = "tps_auth_session";
 
@@ -7128,6 +7138,76 @@ export default function App() {
   const [userRole,   setUserRole]   = useState("crew");
   const [userRoles,  setUserRoles]  = useState(["crew"]); // multi-role; userRole stays as the "primary" role for legacy single-role checks
   const [profileNeedsSetup, setProfileNeedsSetup] = useState(false);
+  // ── Multi-tenancy: which companies this login belongs to, and which one
+  // is currently active. A user can belong to several (tenant_users has one
+  // row per membership); we default to the first one found. The actual
+  // per-tenant role (set in tenant_users) takes over from the old single
+  // profiles.role/roles the moment a tenant is resolved — see fetchTenants.
+  const [myTenants,      setMyTenants]      = useState([]); // [{tenantId, role, companyName, data}]
+  const [currentTenantId, setCurrentTenantId] = useState(null);
+
+  const fetchTenants = async (userId, accessToken) => {
+    try {
+      const tuRes = await sbFetch("tenant_users?user_id=eq."+userId+"&status=eq.active&select=tenant_id,role", {}, accessToken);
+      const tuData = await tuRes.json();
+      if (!Array.isArray(tuData) || tuData.length === 0) { setMyTenants([]); return; }
+      const ids = tuData.map(t => t.tenant_id);
+      const tRes = await sbFetch("tenants?id=in.("+ids.join(",")+")&select=id,data", {}, accessToken);
+      const tData = await tRes.json();
+      const merged = tuData.map(tu => {
+        const t = (tData||[]).find(x => x.id === tu.tenant_id);
+        return { tenantId: tu.tenant_id, role: tu.role, companyName: t?.data?.companyName || "Unknown Company", data: t?.data || {} };
+      });
+      setMyTenants(merged);
+      setCurrentTenantId(prev => {
+        // Keep the current pick if it's still valid (e.g. on a profile
+        // refresh); otherwise default to the first membership found.
+        if (prev && merged.some(m => m.tenantId === prev)) return prev;
+        return merged[0]?.tenantId || null;
+      });
+    } catch(e) { console.error("fetchTenants error:", e); }
+  };
+
+  // tFetch: the tenant-aware, auth-aware replacement for sbFetch. Always
+  // sends the logged-in user's own access token (not the shared anon key),
+  // and for every tenant-scoped table automatically:
+  //   - GET:            adds &tenant_id=eq.<current> so reads never see
+  //                      another company's rows
+  //   - POST/PATCH:      stamps tenant_id onto whatever's being written, so
+  //                      new/updated rows always belong to the right company
+  //   - DELETE:          adds &tenant_id=eq.<current> too, as a second guard
+  //                      against deleting a row that isn't actually yours
+  // Tables outside TENANT_SCOPED_TABLES (profiles, tenants, tenant_users,
+  // tenant_invites) pass through untouched — those are either global or are
+  // how a tenant gets resolved in the first place.
+  // NOTE: this scoping is enforced here in application code, NOT yet by RLS
+  // (RLS tightening is the deliberately-last step of the multi-tenancy plan,
+  // only once everything using tFetch is proven correct).
+  const tFetch = (path, opts={}) => {
+    const accessToken = session?.access_token;
+    const tableName = path.split("?")[0];
+    if (!TENANT_SCOPED_TABLES.includes(tableName) || !currentTenantId) {
+      return sbFetch(path, opts, accessToken);
+    }
+    const method = (opts.method || "GET").toUpperCase();
+    let finalPath = path;
+    let finalOpts = opts;
+    if (method === "GET" || method === "DELETE") {
+      const sep = path.includes("?") ? "&" : "?";
+      finalPath = path + sep + "tenant_id=eq." + currentTenantId;
+    } else if (method === "POST" || method === "PATCH") {
+      try {
+        const bodyObj = JSON.parse(opts.body || "{}");
+        if (Array.isArray(bodyObj)) {
+          bodyObj.forEach(o => { o.tenant_id = currentTenantId; });
+        } else {
+          bodyObj.tenant_id = currentTenantId;
+        }
+        finalOpts = {...opts, body: JSON.stringify(bodyObj)};
+      } catch(e) { /* body wasn't JSON — leave it untouched */ }
+    }
+    return sbFetch(finalPath, finalOpts, accessToken);
+  };
 
   const fetchProfile = async (userId, accessToken) => {
     try {
@@ -7177,12 +7257,14 @@ export default function App() {
           saveSession(fresh);
           setSession(fresh);
           await fetchProfile(fresh.user.id, fresh.access_token);
+          await fetchTenants(fresh.user.id, fresh.access_token);
         } catch(e) {
           clearSession();
         }
       } else {
         setSession(saved);
         await fetchProfile(saved.user.id, saved.access_token);
+        await fetchTenants(saved.user.id, saved.access_token);
       }
       setAuthChecked(true);
     };
@@ -7194,11 +7276,13 @@ export default function App() {
     saveSession(newSession);
     setSession(newSession);
     await fetchProfile(newSession.user.id, newSession.access_token);
+    await fetchTenants(newSession.user.id, newSession.access_token);
   };
 
   const handleLoginSuccess = async (newSession) => {
     setSession(newSession);
     await fetchProfile(newSession.user.id, newSession.access_token);
+    await fetchTenants(newSession.user.id, newSession.access_token);
   };
 
   // If the active view isn't allowed for this role, fall back to jobs.
@@ -7219,29 +7303,31 @@ export default function App() {
     setUserRole("crew");
     setUserRoles(["crew"]);
     setViewHistory([]);
+    setMyTenants([]);
+    setCurrentTenantId(null);
   };
 
   // ── Load all data on mount ──
   useEffect(() => {
     const load = async () => {
       try {
-        const jr = await sbFetch("jobs?select=id,data&order=id.desc");
+        const jr = await tFetch("jobs?select=id,data&order=id.desc");
         const jd = await jr.json();
         if (Array.isArray(jd)) setJobs(jd.map(row => ({...row.data, id: row.id})));
 
-        const rr = await sbFetch("rates?select=data&limit=1");
+        const rr = await tFetch("rates?select=data&limit=1");
         const rd = await rr.json();
         if (Array.isArray(rd) && rd.length > 0) setRates(rd[0].data);
 
-        const lr = await sbFetch("labor?select=id,data&order=id.desc");
+        const lr = await tFetch("labor?select=id,data&order=id.desc");
         const ld = await lr.json();
         if (Array.isArray(ld)) setLaborEntries(ld.map(row => ({...row.data, id: row.id})));
 
-        const zr = await sbFetch("zones?select=data&limit=1");
+        const zr = await tFetch("zones?select=data&limit=1");
         const zd = await zr.json();
         if (Array.isArray(zd) && zd.length > 0) setZones(zd[0].data);
 
-        const pr = await sbFetch("permissions?select=data&limit=1");
+        const pr = await tFetch("permissions?select=data&limit=1");
         const pd = await pr.json();
         if (Array.isArray(pd) && pd.length > 0) setPermissions(pd[0].data);
 
@@ -7251,35 +7337,35 @@ export default function App() {
           if (tr.ok && Array.isArray(td.users)) setTeamUsers(td.users);
         } catch(e) { console.error("load team users error:", e); }
 
-        const cr = await sbFetch("crews?select=id,data&order=id.asc");
+        const cr = await tFetch("crews?select=id,data&order=id.asc");
         const cd = await cr.json();
         if (Array.isArray(cd)) setCrews(cd.map(row => ({...row.data, id: row.id})));
 
-        const hr = await sbFetch("homebase?select=data&limit=1");
+        const hr = await tFetch("homebase?select=data&limit=1");
         const hd = await hr.json();
         if (Array.isArray(hd) && hd.length > 0) setHomeBase(hd[0].data);
 
-        const sr = await sbFetch("appsettings?select=data&limit=1");
+        const sr = await tFetch("appsettings?select=data&limit=1");
         const sd = await sr.json();
         if (Array.isArray(sd) && sd.length > 0 && sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
 
-        const mr = await sbFetch("materials?select=id,data&order=id.desc");
+        const mr = await tFetch("materials?select=id,data&order=id.desc");
         const md = await mr.json();
         if (Array.isArray(md)) setMaterials(md.map(row => ({...row.data, id: row.id})));
 
-        const msr = await sbFetch("materialsettings?select=data&limit=1");
+        const msr = await tFetch("materialsettings?select=data&limit=1");
         const msd = await msr.json();
         if (Array.isArray(msd) && msd.length > 0) setMaterialSettings(msd[0].data);
 
-        const scr = await sbFetch("materialstock?select=id,data&order=id.desc");
+        const scr = await tFetch("materialstock?select=id,data&order=id.desc");
         const scd = await scr.json();
         if (Array.isArray(scd)) setStockChecks(scd.map(row => ({...row.data, id: row.id})));
 
-        const clr = await sbFetch("crmlogs?select=id,data&order=id.desc");
+        const clr = await tFetch("crmlogs?select=id,data&order=id.desc");
         const cld = await clr.json();
         if (Array.isArray(cld)) setCrmLogs(cld.map(row => ({...row.data, id: row.id})));
 
-        const cur = await sbFetch("customers?select=id,data&order=id.desc");
+        const cur = await tFetch("customers?select=id,data&order=id.desc");
         const cud = await cur.json();
         if (Array.isArray(cud)) setCustomers(cud.map(row => ({...row.data, id: row.id})));
       } catch(e) {
@@ -7304,7 +7390,7 @@ export default function App() {
       if (inFlight) return;
       inFlight = true;
       try {
-        const jr = await sbFetch("jobs?select=id,data&order=id.desc");
+        const jr = await tFetch("jobs?select=id,data&order=id.desc");
         const jd = await jr.json();
         if (Array.isArray(jd)) {
           // Don't clobber an edit that hasn't finished syncing yet (the
@@ -7329,7 +7415,7 @@ export default function App() {
 
   const syncZones = async (zonesData) => {
     try {
-      await sbFetch("zones", {
+      await tFetch("zones", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: zonesData }),
@@ -7339,7 +7425,7 @@ export default function App() {
 
   const syncPermissions = async (permissionsData) => {
     try {
-      await sbFetch("permissions", {
+      await tFetch("permissions", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: permissionsData }),
@@ -7349,7 +7435,7 @@ export default function App() {
 
   const syncHomeBase = async (homeBaseData) => {
     try {
-      await sbFetch("homebase", {
+      await tFetch("homebase", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: homeBaseData }),
@@ -7360,7 +7446,7 @@ export default function App() {
   const syncIconStyle = async (style) => {
     setIconStyle(style);
     try {
-      await sbFetch("appsettings", {
+      await tFetch("appsettings", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: { iconStyle: style } }),
@@ -7405,7 +7491,7 @@ export default function App() {
     if (!geo) return;
     if (!cached) {
       try {
-        await sbFetch("jobs?id=eq."+job.id, {
+        await tFetch("jobs?id=eq."+job.id, {
           method: "PATCH",
           body: JSON.stringify({ data: {...job, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} }),
         });
@@ -7438,7 +7524,7 @@ export default function App() {
 
   const syncLaborEntry = async (entry) => {
     try {
-      await sbFetch("labor", {
+      await tFetch("labor", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: entry.id, data: entry }),
@@ -7448,7 +7534,7 @@ export default function App() {
 
   const deleteLaborEntry = async (id) => {
     setLaborEntries(prev => prev.filter(e => e.id !== id));
-    try { await sbFetch("labor?id=eq."+id, { method: "DELETE" }); } catch(e) {}
+    try { await tFetch("labor?id=eq."+id, { method: "DELETE" }); } catch(e) {}
   };
 
   const addLaborEntry = (entry) => {
@@ -7459,7 +7545,7 @@ export default function App() {
   // ── Material purchases (Materials tab) ──
   const syncMaterial = async (entry) => {
     try {
-      await sbFetch("materials", {
+      await tFetch("materials", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: entry.id, data: entry }),
@@ -7474,12 +7560,12 @@ export default function App() {
 
   const deleteMaterial = async (id) => {
     setMaterials(prev => prev.filter(m => m.id !== id));
-    try { await sbFetch("materials?id=eq."+id, { method: "DELETE" }); } catch(e) {}
+    try { await tFetch("materials?id=eq."+id, { method: "DELETE" }); } catch(e) {}
   };
 
   const syncMaterialSettings = async (settingsData) => {
     try {
-      await sbFetch("materialsettings", {
+      await tFetch("materialsettings", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: settingsData }),
@@ -7490,7 +7576,7 @@ export default function App() {
   // ── Material stock checks (physical on-hand readings) ──
   const syncStockCheck = async (entry) => {
     try {
-      await sbFetch("materialstock", {
+      await tFetch("materialstock", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: entry.id, data: entry }),
@@ -7505,13 +7591,13 @@ export default function App() {
 
   const deleteStockCheck = async (id) => {
     setStockChecks(prev => prev.filter(c => c.id !== id));
-    try { await sbFetch("materialstock?id=eq."+id, { method: "DELETE" }); } catch(e) {}
+    try { await tFetch("materialstock?id=eq."+id, { method: "DELETE" }); } catch(e) {}
   };
 
   // ── CRM notes / call logs ──
   const syncCrmLog = async (entry) => {
     try {
-      await sbFetch("crmlogs", {
+      await tFetch("crmlogs", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: entry.id, data: entry }),
@@ -7526,13 +7612,13 @@ export default function App() {
 
   const deleteCrmLog = async (id) => {
     setCrmLogs(prev => prev.filter(l => l.id !== id));
-    try { await sbFetch("crmlogs?id=eq."+id, { method: "DELETE" }); } catch(e) {}
+    try { await tFetch("crmlogs?id=eq."+id, { method: "DELETE" }); } catch(e) {}
   };
 
   // ── Customers (CRM) ──
   const syncCustomer = async (entry) => {
     try {
-      await sbFetch("customers", {
+      await tFetch("customers", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: entry.id, data: entry }),
@@ -7560,7 +7646,7 @@ export default function App() {
   const syncJob = async (job) => {
     setSyncStatus("Saving...");
     try {
-      const res = await sbFetch("jobs", {
+      const res = await tFetch("jobs", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: job.id, data: job }),
@@ -7585,7 +7671,7 @@ export default function App() {
   const syncRates = async (r) => {
     setSyncStatus("Saving...");
     try {
-      const res = await sbFetch("rates", {
+      const res = await tFetch("rates", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: r }),
@@ -7603,7 +7689,7 @@ export default function App() {
   const deleteJob = async (id) => {
     setJobs(prev => prev.filter(j => j.id !== id));
     try {
-      await sbFetch("jobs?id=eq." + id, { method: "DELETE" });
+      await tFetch("jobs?id=eq." + id, { method: "DELETE" });
     } catch(e) { console.error("deleteJob error:", e); }
   };
 
@@ -7675,7 +7761,7 @@ export default function App() {
       // Detect new job (added to front)
       if (next.length > prev.length) {
         const newJob = next[0];
-        sbFetch("jobs", {
+        tFetch("jobs", {
           method: "POST",
           headers: { "Prefer": "resolution=merge-duplicates" },
           body: JSON.stringify({ id: newJob.id, data: newJob }),
@@ -7743,7 +7829,7 @@ export default function App() {
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
-        {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase}/></div>}
+        {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
         {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}
           canOverridePrice={hasRole(userRoles||[userRole], "admin") || hasRole(userRoles||[userRole], "manager")}
@@ -7764,7 +7850,7 @@ export default function App() {
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
-        {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
+        {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch}/>}
         {view==="admin"    && userRole==="admin" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
         {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout}/>}
