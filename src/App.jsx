@@ -7742,12 +7742,8 @@ export default function App() {
         )}
         <div style={S.content}>
         {viewHistory.length > 0 && (
-          <button onClick={goBack} style={{
-            display:"flex", alignItems:"center", gap:6,
-            background:"none", border:"none", padding:"4px 0 10px",
-            color:C.accent, fontWeight:600, fontSize:14, cursor:"pointer",
-          }}>
-            ‹ Back
+          <button onClick={goBack} style={{...S.btnSecondary, marginBottom:14}}>
+            ← Back
           </button>
         )}
         {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
