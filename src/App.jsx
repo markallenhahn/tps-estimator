@@ -276,7 +276,7 @@ const S = {
 if (typeof document !== "undefined" && !document.getElementById("tps-nav-css")) {
   const style = document.createElement("style");
   style.id = "tps-nav-css";
-  style.textContent = "html,body,#root{margin:0;padding:0;width:100%;min-height:100%} .tps-nav-tabs::-webkit-scrollbar{display:none} select{color-scheme:dark} select option{color:#000;background:#fff} .tps-nav-tabs button:focus,.tps-sidebar-tabs button:focus{outline:none;box-shadow:none}";
+  style.textContent = "html,body,#root{margin:0;padding:0;width:100%;min-height:100%} .tps-nav-tabs::-webkit-scrollbar{display:none} select{color-scheme:dark} select option{color:#000;background:#fff} .tps-nav-tabs button:focus,.tps-sidebar-tabs button:focus{outline:none;box-shadow:none} @media (max-width:1023px){ .tps-page{padding-top:10px !important;} }";
   document.head.appendChild(style);
 }
 if (typeof document !== "undefined" && !document.getElementById("tps-font-link")) {
@@ -546,7 +546,7 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob }) {
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}><h1 style={S.h1}>Service Rates</h1></div>
       {currentJob ? (
         <div style={{background:"#dcfce7", border:"1px solid #bbf7d0", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:C.green, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap"}}>
@@ -625,7 +625,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>🏠 Home Base</h1>
         <button style={S.btnSecondary} onClick={() => setView("admin")}>← Admin</button>
@@ -804,7 +804,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     img.src = currentJob.signature;
   }, [currentJob?.id]);
 
-  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+  if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const isOther = (svcType) => svcType === "other";
 
@@ -861,7 +861,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>{currentJob.clientName||"Unnamed Job"}</h1>
         <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Jobs</button>
@@ -1421,7 +1421,7 @@ function InvoiceView({ currentJob, updateJob, rates }) {
   const [paymentDate, setPaymentDate] = useState(new Date().toLocaleDateString());
   const [paymentMethod, setPaymentMethod] = useState("Check");
 
-  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+  if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const margin      = Number(currentJob.margin   || 0);
   const discount    = Number(currentJob.discount || 0);
@@ -1670,7 +1670,7 @@ function InvoiceView({ currentJob, updateJob, rates }) {
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <h1 style={S.h1}>Invoice</h1>
       <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
 
@@ -2027,7 +2027,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
   const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <p style={S.subhead}>Track contractor hours by day</p>
 
       {/* Clock In / Out with GPS — mobile/tablet only; desktop uses manual entry below */}
@@ -2578,7 +2578,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const sortedMaterials = [...materials].sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <p style={S.subhead}>Log every material purchase and compare it against what the job estimates say should have been used.</p>
 
       {canEdit && (
@@ -3177,7 +3177,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
   const ZONE_COLORS = ["#f59e0b", "#1d4ed8", "#15803d", "#b91c1c", "#6d28d9"];
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <p style={S.subhead}>4 zones calculated from job density (filtered by category below), plus overflow</p>
 
       {/* Tab switcher */}
@@ -3551,7 +3551,7 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <div style={S.calNav}>
         <button style={S.calNavBtn} onClick={prevMonth}>‹</button>
         <span style={S.calMonthLabel}>{MONTHS[month]} {year}</span>
@@ -4252,7 +4252,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <p style={S.subhead}>Every customer, aggregated from their jobs — search, review history, and log notes or calls.</p>
 
       <section style={S.section}>
@@ -4620,7 +4620,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
   const clearStatusFilter = () => setFilterStatuses([]);
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <p style={S.subhead}>{mode==="profitability" ? "Profitability across all jobs" : "Invoices sent but not yet paid"}</p>
 
       {/* Mode toggle */}
@@ -4764,7 +4764,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView }) {
 
 // ─── Costs View ───────────────────────────────────────────────────────────────
 function CostsView({ currentJob, updateJob, rates }) {
-  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+  if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const SEALCOAT_PRICE_PER_GAL = 4.33;
   const SEALCOAT_SQFT_PER_GAL  = 70;
@@ -4861,7 +4861,7 @@ function CostsView({ currentJob, updateJob, rates }) {
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <h1 style={S.h1}>Job Costs</h1>
       <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
 
@@ -5063,7 +5063,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>User Settings</h1>
         <button style={S.btnSecondary} onClick={() => setView("jobs")}>✕ Close</button>
@@ -5145,7 +5145,7 @@ function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle }) {
   ];
   const openCard = (key) => setView(key);
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <h1 style={S.h1}>Admin</h1>
       <p style={S.subhead}>Company-wide settings and tools</p>
 
@@ -5222,7 +5222,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>Permissions</h1>
         <button style={S.btnSecondary} onClick={() => setView("admin")}>← Admin</button>
@@ -5386,7 +5386,7 @@ function TeamView({ accessToken, userRole }) {
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <h1 style={S.h1}>Team</h1>
       <p style={S.subhead}>{isManager ? "Invite crew members" : "Invite crew members and manage access"}</p>
 
@@ -5746,7 +5746,7 @@ function ExportView({ jobs, laborEntries, rates, setView }) {
   const exportAllCSV = () => { exportJobsCSV(); exportCostsCSV(); exportLaborCSV(); };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>Data Export</h1>
         <button style={S.btnSecondary} onClick={() => setView("admin")}>← Admin</button>
@@ -5899,7 +5899,7 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
   const crewName = (id) => (crews||[]).find(c => c.id===id)?.name || "Unassigned";
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <p style={S.subhead}>What needs your attention right now.</p>
 
       <div style={{display: isDesktopLayout ? "grid" : "block", gridTemplateColumns: isDesktopLayout ? "1fr 1fr" : undefined, gap: isDesktopLayout ? 20 : 0}}>
@@ -6098,7 +6098,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
   if (!isDesktopLayout) {
     const col = columns.find(c => c.status === mobileStatus) || columns[0];
     return (
-      <div style={S.page}>
+      <div className="tps-page" style={S.page}>
         {headerRow}
         <div style={{display:"flex", gap:6, overflowX:"auto", paddingBottom:10, marginBottom:14, borderBottom:`1px solid ${C.border}`}}>
           {columns.map(c => (
@@ -6143,7 +6143,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
   }
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       {headerRow}
       <div style={{display:"grid", gridTemplateColumns:"repeat(7, minmax(0, 1fr))", border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden"}}>
         {columns.map((c, i) => (
@@ -6182,7 +6182,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   const clientSigRef  = useRef(null);
   const clientDrawing = useRef(false);
 
-  if (!currentJob) return <div style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
+  if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const isSigned = !!currentJob.clientSignature;
   // readOnly was previously accepted by the caller but never actually used
@@ -6563,7 +6563,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   };
 
   return (
-    <div style={S.page}>
+    <div className="tps-page" style={S.page}>
       <h1 style={S.h1}>Estimate</h1>
       <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
 
