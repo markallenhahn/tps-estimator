@@ -5148,7 +5148,47 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 // ─── Team View (admin only) ────────────────────────────────────────────────────
 // ─── Permissions View (admin only) ─────────────────────────────────────────────
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
-function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle }) {
+function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, accessToken }) {
+  const [invites,      setInvites]      = useState([]);
+  const [generating,   setGenerating]   = useState(false);
+  const [inviteError,  setInviteError]  = useState("");
+  const [copiedToken,  setCopiedToken]  = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await sbFetch("tenant_invites?select=token,used_at,created_by&order=token.desc", {}, accessToken);
+        const data = await res.json();
+        if (Array.isArray(data)) setInvites(data);
+      } catch(e) { console.error("load tenant_invites error:", e); }
+    })();
+  }, []);
+
+  const generateInvite = async () => {
+    setGenerating(true); setInviteError("");
+    try {
+      const res = await fetch("/api/create-tenant-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create invite.");
+      setInvites(prev => [{ token: data.token, used_at: null }, ...prev]);
+    } catch(e) {
+      setInviteError(e.message);
+    }
+    setGenerating(false);
+  };
+
+  const copyLink = (token) => {
+    const url = window.location.origin + "/?join=" + token;
+    navigator.clipboard?.writeText(url).then(() => {
+      setCopiedToken(token);
+      setTimeout(() => setCopiedToken(null), 2000);
+    });
+  };
+
+
   const cards = [
     { key:"permissions", icon:"🔐", title:"Permissions", desc:"Control what each role can see and edit across every tab." },
     { key:"homebase",    icon:"🏠", title:"Home Base", desc:"The start/end address used for route optimization on the Zones tab." },
@@ -5186,6 +5226,34 @@ function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle }) {
             <LucideIcons.ClipboardList size={16}/> Line Icons
           </button>
         </div>
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>🌐 New Company Invites</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
+          Platform-level — generates a link that creates a brand-new company on BlacktopIQ, not a teammate inside this one. Restricted to the platform owner; everyone else will get an error if they try.
+        </p>
+        <button style={{...S.btnPrimary, opacity:generating?0.6:1}} disabled={generating} onClick={generateInvite}>
+          {generating ? "Generating..." : "+ Generate Invite Link"}
+        </button>
+        {inviteError && <p style={{fontSize:12, color:C.danger, marginTop:8}}>{inviteError}</p>}
+        {invites.length > 0 && (
+          <div style={{marginTop:14}}>
+            {invites.map(inv => (
+              <div key={inv.token} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+                padding:"8px 10px", background:C.surface2, borderRadius:8, marginBottom:6}}>
+                <div style={{fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, marginRight:10}}>
+                  {inv.used_at ? <span style={{color:C.textDim}}>✓ Used — {inv.token}</span> : inv.token}
+                </div>
+                {!inv.used_at && (
+                  <button style={S.btnSmall} onClick={() => copyLink(inv.token)}>
+                    {copiedToken===inv.token ? "Copied!" : "Copy Link"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {cards.map(c => (
@@ -6922,6 +6990,82 @@ function SetPasswordView({ inviteToken, onSuccess }) {
   );
 }
 
+// ─── Join Company View (redeeming a brand-new-company invite link) ────────────
+// Different from SetPasswordView above: that one is for someone Supabase
+// already knows about (invited by email into an existing company). This is
+// for someone who doesn't have an account yet at all, arriving via a custom
+// tenant_invites token, about to create their OWN company from scratch.
+function JoinCompanyView({ token, onSuccess }) {
+  const [companyName, setCompanyName] = useState("");
+  const [phone,        setPhone]        = useState("");
+  const [email,        setEmail]        = useState("");
+  const [password,     setPassword]     = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error,        setError]        = useState("");
+  const [saving,       setSaving]       = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!companyName.trim()) { setError("Company name is required."); return; }
+    if (!email.trim()) { setError("Email is required."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords do not match."); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/redeem-tenant-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, email: email.trim(), password, companyName: companyName.trim(), phone: phone.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not set up your company.");
+
+      // Account + company now exist server-side — sign in for real to get a
+      // proper session, same as any normal login.
+      const freshSession = await authSignIn(email.trim(), password);
+      onSuccess(freshSession);
+    } catch(err) {
+      setError(err.message || "Something went wrong setting up your company.");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+      <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
+        <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
+          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+        <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome to BlacktopIQ</h1>
+        <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
+          Set up your company and create your admin account.
+        </p>
+        <form onSubmit={handleSubmit}>
+          <label style={S.formLabel}>Company Name
+            <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} placeholder="e.g. Smith Paving Co." required/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Phone (optional)
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={S.input}/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Your Email
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={S.input} required/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Password
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={S.input} placeholder="At least 8 characters" required/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Confirm Password
+            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} style={S.input} required/>
+          </label>
+          {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
+          <button type="submit" style={{...S.btnPrimary, width:"100%", marginTop:18, opacity:saving?0.6:1}} disabled={saving}>
+            {saving ? "Setting up your company..." : "🚀 Create My Company"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Profile Setup Wizard (first login, non-admin roles) ──────────────────────
 // Estimator/Crew/Crew Lead/Manager accounts must complete this before they
 // can use the app. Admins get a separate, more involved company setup flow
@@ -7254,9 +7398,22 @@ export default function App() {
 
   // ── Detect Supabase invite/recovery link in the URL hash ──
   const [inviteToken, setInviteToken] = useState(null); // access_token from #...&type=invite|recovery
+  // ── Detect a "create a new company" join link — a different mechanism
+  // entirely from the above: that one is Supabase inviting an existing-style
+  // user by email; this one is a custom token (tenant_invites) for someone
+  // who doesn't have an account yet and is about to create a whole new company. ──
+  const [joinToken, setJoinToken] = useState(null);
 
   // ── Restore session on mount ──
   useEffect(() => {
+    const joinParam = new URLSearchParams(window.location.search).get("join");
+    if (joinParam) {
+      setJoinToken(joinParam);
+      setAuthChecked(true);
+      window.history.replaceState(null, "", window.location.pathname);
+      return;
+    }
+
     // Supabase redirects invite/recovery links as:
     // https://yourapp.com/#access_token=...&refresh_token=...&type=invite
     const hash = window.location.hash || "";
@@ -7306,6 +7463,16 @@ export default function App() {
   };
 
   const handleLoginSuccess = async (newSession) => {
+    setSession(newSession);
+    await fetchProfile(newSession.user.id, newSession.access_token);
+    await fetchTenants(newSession.user.id, newSession.access_token);
+  };
+
+  // After redeem-tenant-invite creates the account + company server-side,
+  // this just signs them in for real and clears the join flow.
+  const handleJoinSuccess = async (newSession) => {
+    setJoinToken(null);
+    saveSession(newSession);
     setSession(newSession);
     await fetchProfile(newSession.user.id, newSession.access_token);
     await fetchTenants(newSession.user.id, newSession.access_token);
@@ -7815,6 +7982,7 @@ export default function App() {
   );
 
   if (inviteToken) return <SetPasswordView inviteToken={inviteToken} onSuccess={handleInvitePasswordSet}/>;
+  if (joinToken) return <JoinCompanyView token={joinToken} onSuccess={handleJoinSuccess}/>;
 
   if (!session) return <LoginView onSuccess={handleLoginSuccess}/>;
 
@@ -7882,7 +8050,7 @@ export default function App() {
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch}/>}
-        {view==="admin"    && userRole==="admin" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
+        {view==="admin"    && userRole==="admin" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle} accessToken={session?.access_token}/>}
         {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo}/>}
