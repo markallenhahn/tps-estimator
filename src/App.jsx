@@ -5847,7 +5847,7 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
       if (d !== null && d >= AGING.estimateStuckDays) agingItems.push({ job:j, label:`Stuck in ${pipelineStatusLabel(j.status)} for ${d} days`, days:d });
     }
     if (j.status === "sent") {
-      const d = daysSince(j.statusChangedAt);
+      const d = daysSince(j.statusChangedAt || j.date);
       if (d !== null && d >= AGING.sentNoResponseDays) agingItems.push({ job:j, label:`Sent ${d} days ago, no response yet`, days:d });
     }
     if (j.status === "scheduled") {
