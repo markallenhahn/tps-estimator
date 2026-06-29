@@ -7256,7 +7256,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
       // 2. Home base — geocode once now, same as the dedicated Home Base page does.
       if (address.trim()) {
         const geo = await geocodeAddress(address.trim());
-        await tFetch("homebase", {
+        await tFetch("homebase?on_conflict=tenant_id", {
           method: "POST",
           headers: { "Prefer": "resolution=merge-duplicates" },
           body: JSON.stringify({ id: 1, data: { address: address.trim(), lat: geo?.lat || null, lng: geo?.lng || null } }),
@@ -7268,7 +7268,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
       services.forEach(key => {
         ratesData[key] = { ...DEFAULT_RATES[key], rate: Number(rates[key]) || 0 };
       });
-      await tFetch("rates", {
+      await tFetch("rates?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: ratesData }),
@@ -7845,7 +7845,7 @@ export default function App() {
 
   const syncZones = async (zonesData) => {
     try {
-      await tFetch("zones", {
+      await tFetch("zones?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: zonesData }),
@@ -7855,7 +7855,7 @@ export default function App() {
 
   const syncPermissions = async (permissionsData) => {
     try {
-      await tFetch("permissions", {
+      await tFetch("permissions?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: permissionsData }),
@@ -7865,7 +7865,7 @@ export default function App() {
 
   const syncHomeBase = async (homeBaseData) => {
     try {
-      await tFetch("homebase", {
+      await tFetch("homebase?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: homeBaseData }),
@@ -7876,7 +7876,7 @@ export default function App() {
   const syncIconStyle = async (style) => {
     setIconStyle(style);
     try {
-      await tFetch("appsettings", {
+      await tFetch("appsettings?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: { iconStyle: style } }),
@@ -7995,7 +7995,7 @@ export default function App() {
 
   const syncMaterialSettings = async (settingsData) => {
     try {
-      await tFetch("materialsettings", {
+      await tFetch("materialsettings?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: settingsData }),
@@ -8101,7 +8101,7 @@ export default function App() {
   const syncRates = async (r) => {
     setSyncStatus("Saving...");
     try {
-      const res = await tFetch("rates", {
+      const res = await tFetch("rates?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
         body: JSON.stringify({ id: 1, data: r }),
