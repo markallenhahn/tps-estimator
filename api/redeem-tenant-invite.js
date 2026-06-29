@@ -79,6 +79,7 @@ export default async function handler(req, res) {
           phone: (phone || "").trim(),
           subscriptionTier: null,
           subscriptionStatus: "trial",
+          setupComplete: false,
         },
       }),
     });

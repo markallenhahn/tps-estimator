@@ -3,10 +3,11 @@
 // and signs up its first admin. This is a PLATFORM-level action — different
 // from invite.js, which adds someone into a company that already exists.
 //
-// Gated to a hardcoded allowlist of platform-admin emails (env var), not just
-// "any admin role" — an admin at one company should never be able to spin up
-// arbitrary new companies on the platform. Add your own email to the
-// PLATFORM_ADMIN_EMAILS env var in Vercel (comma-separated if more than one).
+// Gated by the platform_admins table, NOT a per-company "admin" role — a
+// company's own admin should never be able to spin up arbitrary new
+// companies on the platform. Manage who's on this list via SQL
+// (insert/delete rows in platform_admins) rather than an env var, so adding
+// an AsphaltIQ teammate doesn't require a redeploy.
 
 const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
 
@@ -20,29 +21,34 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Server is not configured (missing SUPABASE_SERVICE_KEY)." });
   }
 
-  const allowlist = (process.env.PLATFORM_ADMIN_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-  if (allowlist.length === 0) {
-    return res.status(500).json({ error: "Server is not configured (missing PLATFORM_ADMIN_EMAILS)." });
-  }
-
-  // ── Verify the caller is on the platform-admin allowlist, server-side ──
+  // ── Verify the caller is in platform_admins, server-side ──
   const authHeader = req.headers.authorization || "";
   const callerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!callerToken) {
     return res.status(401).json({ error: "Missing auth token." });
   }
 
-  let caller = null;
+  let callerId = null;
   try {
     const userRes = await fetch(SUPABASE_URL + "/auth/v1/user", {
       headers: { "apikey": serviceKey, "Authorization": "Bearer " + callerToken },
     });
-    if (userRes.ok) caller = await userRes.json();
-  } catch (e) { /* caller stays null -> rejected below */ }
+    if (userRes.ok) {
+      const userData = await userRes.json();
+      callerId = userData?.id || null;
+    }
+  } catch (e) { /* callerId stays null -> rejected below */ }
 
-  const callerEmail = (caller?.email || "").toLowerCase();
-  if (!caller?.id || !allowlist.includes(callerEmail)) {
-    return res.status(403).json({ error: "Only the platform owner can create new company invites." });
+  if (!callerId) {
+    return res.status(401).json({ error: "Could not verify your identity." });
+  }
+
+  const adminCheckRes = await fetch(SUPABASE_URL + "/rest/v1/platform_admins?user_id=eq." + callerId + "&select=user_id", {
+    headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey },
+  });
+  const adminCheckData = await adminCheckRes.json();
+  if (!Array.isArray(adminCheckData) || adminCheckData.length === 0) {
+    return res.status(403).json({ error: "Only AsphaltIQ platform admins can create new company invites." });
   }
 
   try {
@@ -54,7 +60,7 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
         "Prefer": "return=representation",
       },
-      body: JSON.stringify({ created_by: caller.id }),
+      body: JSON.stringify({ created_by: callerId }),
     });
     const insertData = await insertRes.json();
     if (!insertRes.ok) {

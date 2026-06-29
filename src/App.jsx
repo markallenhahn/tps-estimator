@@ -5148,13 +5148,14 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 // ─── Team View (admin only) ────────────────────────────────────────────────────
 // ─── Permissions View (admin only) ─────────────────────────────────────────────
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
-function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, accessToken }) {
+function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, accessToken, isPlatformAdmin }) {
   const [invites,      setInvites]      = useState([]);
   const [generating,   setGenerating]   = useState(false);
   const [inviteError,  setInviteError]  = useState("");
   const [copiedToken,  setCopiedToken]  = useState(null);
 
   useEffect(() => {
+    if (!isPlatformAdmin) return;
     (async () => {
       try {
         const res = await sbFetch("tenant_invites?select=token,used_at,created_by&order=token.desc", {}, accessToken);
@@ -5162,7 +5163,7 @@ function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, access
         if (Array.isArray(data)) setInvites(data);
       } catch(e) { console.error("load tenant_invites error:", e); }
     })();
-  }, []);
+  }, [isPlatformAdmin]);
 
   const generateInvite = async () => {
     setGenerating(true); setInviteError("");
@@ -5246,10 +5247,11 @@ function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, access
         </div>
       </section>
 
+      {isPlatformAdmin && (
       <section style={S.section}>
         <h2 style={S.h2}>🌐 New Company Invites</h2>
         <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
-          Platform-level — generates a link that creates a brand-new company on BlacktopIQ, not a teammate inside this one. Restricted to the platform owner; everyone else will get an error if they try.
+          Platform-level — generates a link that creates a brand-new company on BlacktopIQ, not a teammate inside this one. AsphaltIQ staff only.
         </p>
         <button style={{...S.btnPrimary, opacity:generating?0.6:1}} disabled={generating} onClick={generateInvite}>
           {generating ? "Generating..." : "+ Generate Invite Link"}
@@ -5283,6 +5285,7 @@ function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, access
           </div>
         )}
       </section>
+      )}
 
       {cards.map(c => (
         <button key={c.key} onClick={() => openCard(c.key)}
@@ -7172,6 +7175,190 @@ function ProfileSetupWizard({ accessToken, userId, onComplete }) {
   );
 }
 
+// ─── Company Setup Wizard (first login, brand-new tenant's admin) ─────────────
+// Shown once, right after a new company is created via the invite flow —
+// gated on tenant.data.setupComplete not being true yet. Writes to three
+// places: the tenant's own data blob (branding/contact/services), the
+// homebase table (geocoded once, same as the dedicated Home Base page would),
+// and the rates table — reusing the exact same tables/shape the rest of the
+// app already reads from, so nothing downstream needs special-casing a
+// "wizard-created" company differently from one set up the long way.
+function CompanySetupWizard({ tenant, tFetch, onComplete }) {
+  const [companyName, setCompanyName] = useState(tenant?.data?.companyName || "");
+  const [phone,        setPhone]        = useState(tenant?.data?.phone || "");
+  const [officeEmail,  setOfficeEmail]  = useState(tenant?.data?.officeEmail || "");
+  const [address,      setAddress]      = useState("");
+  const [logoDataUrl,  setLogoDataUrl]  = useState(tenant?.data?.logoUrl || "");
+  const [services,     setServices]     = useState(["sealcoat","crackfill","patch"]);
+  const [rates,        setRatesDraft]   = useState(() => {
+    const r = {};
+    Object.keys(DEFAULT_RATES).forEach(k => { r[k] = DEFAULT_RATES[k].rate; });
+    return r;
+  });
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState("");
+
+  const SERVICE_OPTIONS = [
+    { key:"sealcoat",  label:"Sealcoat" },
+    { key:"crackfill", label:"Crack Fill" },
+    { key:"striping",  label:"Line Striping" },
+    { key:"patch",     label:"Patching" },
+    { key:"other",     label:"Other" },
+  ];
+  const toggleService = (key) => setServices(prev => prev.includes(key) ? prev.filter(s=>s!==key) : [...prev, key]);
+
+  // Downscale the logo client-side before storing it — an unresized phone
+  // photo would bloat the tenant's data blob the same way the original
+  // BlacktopIQ asset would have before it was resized server-side.
+  const handleLogoFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 300;
+        const scale = Math.min(1, maxW / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        setLogoDataUrl(canvas.toDataURL("image/png"));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!companyName.trim()) { setError("Company name is required."); return; }
+    if (services.length === 0) { setError("Select at least one service you offer."); return; }
+    setSaving(true);
+    try {
+      // 1. Tenant's own branding/contact/services
+      const updatedTenantData = {
+        ...tenant.data,
+        companyName: companyName.trim(),
+        phone: phone.trim(),
+        officeEmail: officeEmail.trim(),
+        logoUrl: logoDataUrl || null,
+        servicesOffered: services,
+        setupComplete: true,
+      };
+      const tenantRes = await tFetch("tenants?id=eq." + tenant.tenantId, {
+        method: "PATCH",
+        body: JSON.stringify({ data: updatedTenantData }),
+      });
+      if (!tenantRes.ok) throw new Error("Failed to save company info.");
+
+      // 2. Home base — geocode once now, same as the dedicated Home Base page does.
+      if (address.trim()) {
+        const geo = await geocodeAddress(address.trim());
+        await tFetch("homebase", {
+          method: "POST",
+          headers: { "Prefer": "resolution=merge-duplicates" },
+          body: JSON.stringify({ id: 1, data: { address: address.trim(), lat: geo?.lat || null, lng: geo?.lng || null } }),
+        });
+      }
+
+      // 3. Rates — only for the services they actually offer.
+      const ratesData = {};
+      services.forEach(key => {
+        ratesData[key] = { ...DEFAULT_RATES[key], rate: Number(rates[key]) || 0 };
+      });
+      await tFetch("rates", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: 1, data: ratesData }),
+      });
+
+      onComplete(updatedTenantData);
+    } catch(err) {
+      setError(err.message || "Something went wrong saving your company setup.");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+      <div style={{maxWidth:480, width:"100%", padding:"24px"}}>
+        <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Set Up Your Company</h1>
+        <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
+          A few things to get {companyName || "your company"} ready to go — you can change any of this later.
+        </p>
+        <form onSubmit={handleSubmit}>
+          <section style={S.section}>
+            <h2 style={S.h2}>Branding</h2>
+            <label style={S.formLabel}>Company Logo (optional)
+              <input type="file" accept="image/*" onChange={e => handleLogoFile(e.target.files?.[0])} style={S.input}/>
+            </label>
+            {logoDataUrl && (
+              <img src={logoDataUrl} alt="Logo preview" style={{maxWidth:160, maxHeight:80, display:"block", marginTop:10, borderRadius:6}}/>
+            )}
+          </section>
+
+          <section style={S.section}>
+            <h2 style={S.h2}>Company Info</h2>
+            <label style={S.formLabel}>Company Name
+              <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} required/>
+            </label>
+            <label style={{...S.formLabel, marginTop:10}}>Phone
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={S.input}/>
+            </label>
+            <label style={{...S.formLabel, marginTop:10}}>Office Email
+              <input type="email" value={officeEmail} onChange={e => setOfficeEmail(e.target.value)} style={S.input}/>
+            </label>
+            <label style={{...S.formLabel, marginTop:10}}>Home Base Address
+              <input value={address} onChange={e => setAddress(e.target.value)} style={S.input} placeholder="Used for route optimization on the Zones tab"/>
+            </label>
+          </section>
+
+          <section style={S.section}>
+            <h2 style={S.h2}>Services Offered</h2>
+            <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
+              {SERVICE_OPTIONS.map(s => {
+                const selected = services.includes(s.key);
+                return (
+                  <button key={s.key} type="button" onClick={() => toggleService(s.key)}
+                    style={{
+                      fontSize:13, fontWeight:600, padding:"8px 14px", borderRadius:20, cursor:"pointer",
+                      background: selected ? C.accent : C.surface2,
+                      color: selected ? "#000" : C.textMuted,
+                      border: `1px solid ${selected ? C.accent : C.border}`,
+                    }}>
+                    {selected ? "✓ " : ""}{s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          {services.length > 0 && (
+            <section style={S.section}>
+              <h2 style={S.h2}>Starting Rates</h2>
+              <p style={{fontSize:11, color:C.textDim, margin:"0 0 10px"}}>Defaults shown — adjust to your own pricing, or leave as-is and change later.</p>
+              {services.map(key => (
+                <label key={key} style={{...S.formLabel, marginBottom:10}}>
+                  {DEFAULT_RATES[key].label} ({DEFAULT_RATES[key].rateLabel})
+                  <input type="number" min="0" step="0.01" value={rates[key]}
+                    onChange={e => setRatesDraft(prev => ({...prev, [key]: e.target.value}))} style={S.input}/>
+                </label>
+              ))}
+            </section>
+          )}
+
+          {error && <div style={{color:C.danger, fontSize:13, marginBottom:12}}>{error}</div>}
+          <button type="submit" style={{...S.btnPrimary, width:"100%", opacity:saving?0.6:1}} disabled={saving}>
+            {saving ? "Setting up..." : "✓ Finish Setup"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function LoginView({ onSuccess }) {
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
@@ -7332,6 +7519,17 @@ export default function App() {
   const [myTenants,      setMyTenants]      = useState([]); // [{tenantId, role, companyName, data}]
   const [currentTenantId, setCurrentTenantId] = useState(null);
 
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const fetchIsPlatformAdmin = async (accessToken) => {
+    try {
+      const res = await fetch("/api/check-platform-admin", {
+        headers: { "Authorization": "Bearer " + accessToken },
+      });
+      const data = await res.json();
+      setIsPlatformAdmin(!!data?.isPlatformAdmin);
+    } catch(e) { setIsPlatformAdmin(false); }
+  };
+
   const fetchTenants = async (userId, accessToken) => {
     try {
       const tuRes = await sbFetch("tenant_users?user_id=eq."+userId+"&status=eq.active&select=tenant_id,role", {}, accessToken);
@@ -7469,6 +7667,7 @@ export default function App() {
           setSession(fresh);
           await fetchProfile(fresh.user.id, fresh.access_token);
           await fetchTenants(fresh.user.id, fresh.access_token);
+          await fetchIsPlatformAdmin(fresh.access_token);
         } catch(e) {
           clearSession();
         }
@@ -7476,6 +7675,7 @@ export default function App() {
         setSession(saved);
         await fetchProfile(saved.user.id, saved.access_token);
         await fetchTenants(saved.user.id, saved.access_token);
+        await fetchIsPlatformAdmin(saved.access_token);
       }
       setAuthChecked(true);
     };
@@ -7488,12 +7688,14 @@ export default function App() {
     setSession(newSession);
     await fetchProfile(newSession.user.id, newSession.access_token);
     await fetchTenants(newSession.user.id, newSession.access_token);
+    await fetchIsPlatformAdmin(newSession.access_token);
   };
 
   const handleLoginSuccess = async (newSession) => {
     setSession(newSession);
     await fetchProfile(newSession.user.id, newSession.access_token);
     await fetchTenants(newSession.user.id, newSession.access_token);
+    await fetchIsPlatformAdmin(newSession.access_token);
   };
 
   // After redeem-tenant-invite creates the account + company server-side,
@@ -7504,6 +7706,7 @@ export default function App() {
     setSession(newSession);
     await fetchProfile(newSession.user.id, newSession.access_token);
     await fetchTenants(newSession.user.id, newSession.access_token);
+    await fetchIsPlatformAdmin(newSession.access_token);
   };
 
   // If the active view isn't allowed for this role, fall back to jobs.
@@ -7526,6 +7729,7 @@ export default function App() {
     setViewHistory([]);
     setMyTenants([]);
     setCurrentTenantId(null);
+    setIsPlatformAdmin(false);
   };
 
   // ── Load all data — waits for currentTenantId to resolve (so the very
@@ -8022,6 +8226,24 @@ export default function App() {
     />
   );
 
+  // Only a brand-new tenant (created via the join flow, which explicitly
+  // sets setupComplete:false) triggers this — an absent field (e.g. TPS's
+  // own pre-existing tenant row, migrated without this field at all) does
+  // NOT trigger it. That distinction matters: falsy-but-absent should mean
+  // "this predates the wizard, leave it alone," not "show the wizard."
+  const currentTenant = myTenants.find(t => t.tenantId === currentTenantId);
+  if (userRole === "admin" && currentTenant && currentTenant.data?.setupComplete === false) {
+    return (
+      <CompanySetupWizard
+        tenant={currentTenant}
+        tFetch={tFetch}
+        onComplete={(updatedData) => {
+          setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: updatedData, companyName: updatedData.companyName} : t));
+        }}
+      />
+    );
+  }
+
   if (loading) return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{textAlign:"center", padding:"0 40px"}}>
@@ -8078,7 +8300,7 @@ export default function App() {
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
         {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch}/>}
-        {view==="admin"    && userRole==="admin" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle} accessToken={session?.access_token}/>}
+        {view==="admin"    && userRole==="admin" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle} accessToken={session?.access_token} isPlatformAdmin={isPlatformAdmin}/>}
         {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout}/>}
         {view==="export"   && userRole==="admin" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo}/>}
