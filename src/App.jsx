@@ -5396,7 +5396,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
 }
 
 // ─── Team View (admin only) ────────────────────────────────────────────────────
-function TeamView({ accessToken, userRole, tFetch }) {
+function TeamView({ accessToken, userRole, tFetch, tenantId }) {
   const isManager = userRole === "manager";
   const [users,     setUsers]     = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -5441,7 +5441,7 @@ function TeamView({ accessToken, userRole, tFetch }) {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/list-users");
+      const res = await fetch("/api/list-users?tenantId=" + tenantId);
       const data = await res.json();
       if (res.ok) setUsers(data.users || []);
     } catch(e) { console.error(e); }
@@ -5462,7 +5462,7 @@ function TeamView({ accessToken, userRole, tFetch }) {
           "Content-Type": "application/json",
           "Authorization": "Bearer " + accessToken,
         },
-        body: JSON.stringify({ email: email.trim(), role: safeRole }),
+        body: JSON.stringify({ email: email.trim(), role: safeRole, tenantId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to send invite.");
@@ -7762,7 +7762,7 @@ export default function App() {
         if (Array.isArray(pd) && pd.length > 0) setPermissions(pd[0].data);
 
         try {
-          const tr = await fetch("/api/list-users");
+          const tr = await fetch("/api/list-users?tenantId=" + currentTenantId);
           const td = await tr.json();
           if (tr.ok && Array.isArray(td.users)) setTeamUsers(td.users);
         } catch(e) { console.error("load team users error:", e); }
@@ -8299,7 +8299,7 @@ export default function App() {
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
         {view==="homebase" && userRole==="admin" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
-        {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch}/>}
+        {view==="team"     && (userRole==="admin"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId}/>}
         {view==="admin"    && userRole==="admin" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle} accessToken={session?.access_token} isPlatformAdmin={isPlatformAdmin}/>}
         {view==="permissions" && userRole==="admin" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout}/>}

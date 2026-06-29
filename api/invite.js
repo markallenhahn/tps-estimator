@@ -1,12 +1,18 @@
 // api/invite.js
-// Vercel serverless function — runs privately on the server, never in the browser.
-// Uses the Supabase service_role key (stored as a Vercel environment variable)
-// to invite a new user by email and assign them a role in the profiles table.
+// Invites someone into an EXISTING company (as opposed to create-tenant-invite.js,
+// which creates a brand-new company entirely). Runs privately on the server,
+// using the Supabase service_role key.
 //
-// Security note: this endpoint verifies the CALLER's own role server-side
-// (via their access token) before honoring any requested role. A manager
-// calling this directly cannot grant themselves or anyone else admin/manager
-// access — the server forces "crew" regardless of what the client sends.
+// Two real fixes from the original version:
+//   1. It never created a tenant_users row at all — meaning anyone invited
+//      this way had zero company memberships, and would get stuck on the
+//      loading screen forever after setting their password (fetchTenants
+//      would always come back empty). That's the actual bug causing it.
+//   2. The caller's permission check used their GLOBAL profiles.role, not
+//      their role AT THIS SPECIFIC COMPANY (tenant_users.role) — meaning
+//      someone who's an admin at one company but only crew at another
+//      could incorrectly invite people into the second company as if they
+//      were its admin. Now checks tenant_users for the specific tenantId.
 
 const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
 
@@ -20,12 +26,17 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Server is not configured (missing SUPABASE_SERVICE_KEY)." });
   }
 
-  const { email, role } = req.body || {};
+  const { email, role, tenantId } = req.body || {};
   if (!email || typeof email !== "string") {
     return res.status(400).json({ error: "Email is required." });
   }
+  if (!tenantId) {
+    return res.status(400).json({ error: "tenantId is required." });
+  }
 
-  // ── Verify the caller's identity and role server-side ──
+  const sbHeaders = { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey };
+
+  // ── Verify the caller's identity and THEIR ROLE AT THIS SPECIFIC TENANT ──
   const authHeader = req.headers.authorization || "";
   const callerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   let callerRole = "crew"; // fail closed: assume least privilege if anything is missing/invalid
@@ -39,12 +50,13 @@ export default async function handler(req, res) {
         const userData = await userRes.json();
         const callerId = userData?.id;
         if (callerId) {
-          const profileRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + callerId + "&select=role", {
-            headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey },
-          });
-          const profileData = await profileRes.json();
-          if (Array.isArray(profileData) && profileData[0]?.role) {
-            callerRole = profileData[0].role;
+          const tuRes = await fetch(
+            SUPABASE_URL + "/rest/v1/tenant_users?user_id=eq." + callerId + "&tenant_id=eq." + tenantId + "&select=role",
+            { headers: sbHeaders }
+          );
+          const tuData = await tuRes.json();
+          if (Array.isArray(tuData) && tuData[0]?.role) {
+            callerRole = tuData[0].role;
           }
         }
       }
@@ -52,7 +64,7 @@ export default async function handler(req, res) {
   }
 
   if (callerRole !== "admin" && callerRole !== "manager") {
-    return res.status(403).json({ error: "You do not have permission to invite team members." });
+    return res.status(403).json({ error: "You do not have permission to invite team members into this company." });
   }
 
   // Admins may set any role; managers are locked to "crew" no matter what they send.
@@ -65,21 +77,22 @@ export default async function handler(req, res) {
     //    with a link to set their own password.
     const inviteRes = await fetch(SUPABASE_URL + "/auth/v1/invite", {
       method: "POST",
-      headers: {
-        "apikey": serviceKey,
-        "Authorization": "Bearer " + serviceKey,
-        "Content-Type": "application/json",
-      },
+      headers: { ...sbHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({ email: email.trim() }),
     });
 
     const inviteData = await inviteRes.json();
 
     if (!inviteRes.ok) {
-      // Common case: user already exists
-      return res.status(inviteRes.status).json({
-        error: inviteData.msg || inviteData.error_description || "Failed to send invite.",
-      });
+      // Common case: user already exists (e.g. inviting someone who already
+      // belongs to a different company) — still need to add a tenant_users
+      // row for THIS company below, using their existing user id.
+      const existingId = inviteData?.id;
+      if (!existingId) {
+        return res.status(inviteRes.status).json({
+          error: inviteData.msg || inviteData.error_description || "Failed to send invite.",
+        });
+      }
     }
 
     const userId = inviteData.id || inviteData.user?.id;
@@ -87,21 +100,29 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Invite sent but no user ID returned." });
     }
 
-    // 2. Create their profile row with the chosen role
+    // 2. Create their profile row with the chosen role (global identity —
+    //    if they already have a profile from another company, this just
+    //    keeps it as-is via merge-duplicates rather than overwriting it).
     const profileRes = await fetch(SUPABASE_URL + "/rest/v1/profiles", {
       method: "POST",
-      headers: {
-        "apikey": serviceKey,
-        "Authorization": "Bearer " + serviceKey,
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates",
-      },
-      body: JSON.stringify({ id: userId, email: email.trim(), role: safeRole }),
+      headers: { ...sbHeaders, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" },
+      body: JSON.stringify({ id: userId, email: email.trim(), role: safeRole, roles: [safeRole] }),
     });
 
     if (!profileRes.ok) {
       const profileErr = await profileRes.text();
-      return res.status(500).json({ error: "User invited, but failed to set role: " + profileErr });
+      return res.status(500).json({ error: "User invited, but failed to set up profile: " + profileErr });
+    }
+
+    // 3. THE ACTUAL FIX: link them to this specific company.
+    const tuInsertRes = await fetch(SUPABASE_URL + "/rest/v1/tenant_users", {
+      method: "POST",
+      headers: { ...sbHeaders, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" },
+      body: JSON.stringify({ id: Date.now(), tenant_id: tenantId, user_id: userId, role: safeRole, status: "active" }),
+    });
+    if (!tuInsertRes.ok) {
+      const tuErr = await tuInsertRes.text();
+      return res.status(500).json({ error: "User invited, but failed to add them to this company: " + tuErr });
     }
 
     return res.status(200).json({ success: true, userId, email: email.trim(), role: safeRole });
