@@ -405,6 +405,10 @@ function hasRole(userRoleOrRoles, role) {
 }
 
 function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant }) {
+  const currentTenant = (myTenants||[]).find(t => t.tenantId === currentTenantId);
+  const currentLogo = currentTenant?.data?.logoUrl || ("data:image/png;base64," + LOGO_B64);
+  const currentCompanyAlt = currentTenant?.companyName || "Company logo";
+
   const tabsRef = useRef(null);
   const isDesktop = useIsDesktop();
   const tabs = ALL_TABS.filter(t => getAccessLevel(permissions, t.key, userRoles||userRole) !== "hidden");
@@ -422,7 +426,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
     return (
       <nav style={S.sidebar}>
         <div style={S.sidebarBrand}>
-          <img src={"data:image/png;base64," + LOGO_B64} alt="TPS" style={{width:"100%", maxWidth:140, display:"block"}}/>
+          <img src={currentLogo} alt={currentCompanyAlt} style={{width:"100%", maxWidth:140, display:"block"}}/>
         </div>
         {myTenants && myTenants.length > 1 && (
           <div style={{padding:"0 16px 12px"}}>
@@ -465,7 +469,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
   return (
     <nav style={S.nav}>
       <div style={S.navBrand}>
-        <img src={"data:image/png;base64," + LOGO_B64} alt="TPS" style={{height:32, width:"auto", display:"block"}}/>
+        <img src={currentLogo} alt={currentCompanyAlt} style={{height:32, width:"auto", display:"block"}}/>
         {myTenants && myTenants.length > 1 && (
           <select value={currentTenantId||""} onChange={e => switchTenant(e.target.value)}
             style={{fontSize:11, padding:"3px 6px", borderRadius:6, border:`1px solid ${C.border}`, background:C.surface, color:C.text, marginLeft:8}}>
@@ -7815,6 +7819,7 @@ export default function App() {
   // and back"), and poll every 30s while the tab is actually visible (covers
   // two people watching at the same time on separate screens).
   useEffect(() => {
+    if (!currentTenantId) return; // don't even attach the listener until a tenant is actually known
     let inFlight = false;
     const refetchJobs = async () => {
       if (inFlight) return;
@@ -7841,7 +7846,7 @@ export default function App() {
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(pollId);
     };
-  }, []);
+  }, [currentTenantId]);
 
   const syncZones = async (zonesData) => {
     try {
