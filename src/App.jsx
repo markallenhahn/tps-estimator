@@ -8096,7 +8096,6 @@ export default function App() {
           const csd = await csr.json();
           if (Array.isArray(csd) && csd.length > 0 && csd[0].data && csd[0].data.name) {
             setCompanySettings(prev => ({...prev, ...csd[0].data}));
-            setCompanyWizardNeeded(false);
           }
         } catch(e) { console.error("load company_settings error:", e); }
 
