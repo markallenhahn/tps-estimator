@@ -7467,7 +7467,10 @@ function ProfileSetupWizard({ accessToken, userId, onComplete }) {
 // and the rates table — reusing the exact same tables/shape the rest of the
 // app already reads from, so nothing downstream needs special-casing a
 // "wizard-created" company differently from one set up the long way.
-function CompanySetupWizard({ tenant, tFetch, onComplete }) {
+function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken }) {
+  const [firstName,    setFirstName]    = useState("");
+  const [lastName,     setLastName]     = useState("");
+  const [ownerPhone,   setOwnerPhone]   = useState("");
   const [companyName, setCompanyName] = useState(tenant?.data?.companyName || "");
   const [phone,        setPhone]        = useState(tenant?.data?.phone || "");
   const [officeEmail,  setOfficeEmail]  = useState(tenant?.data?.officeEmail || "");
@@ -7520,10 +7523,38 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    if (!firstName.trim()) { setError("Your first name is required."); return; }
+    if (!lastName.trim()) { setError("Your last name is required."); return; }
+    if (!ownerPhone.trim()) { setError("Your phone number is required."); return; }
     if (!companyName.trim()) { setError("Company name is required."); return; }
+    if (!phone.trim()) { setError("Company phone is required."); return; }
+    if (!officeEmail.trim()) { setError("Office email is required."); return; }
+    if (!logoDataUrl) { setError("A company logo is required."); return; }
+    if (!address.trim()) { setError("Street address is required."); return; }
+    if (!addrCity.trim()) { setError("City is required."); return; }
+    if (!addrState.trim()) { setError("State is required."); return; }
+    if (!addrZip.trim()) { setError("ZIP code is required."); return; }
     if (services.length === 0) { setError("Select at least one service you offer."); return; }
+    for (const key of services) {
+      if (!rates[key] || Number(rates[key]) <= 0) {
+        setError(`Enter a rate for ${DEFAULT_RATES[key].label} before continuing.`);
+        return;
+      }
+    }
     setSaving(true);
     try {
+      // 0. Owner's own personal profile — required just like any new user.
+      const profileRes = await sbFetch("profiles?id=eq." + userId, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          phone: ownerPhone.trim(),
+        }),
+      }, accessToken);
+      if (!profileRes.ok) throw new Error("Failed to save your profile.");
+
       // 1. Tenant's own branding/contact/services
       const updatedTenantData = {
         ...tenant.data,
@@ -7581,7 +7612,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
         body: JSON.stringify({ data: csData }),
       });
 
-      onComplete(updatedTenantData, csData);
+      onComplete(updatedTenantData, csData, ratesData);
     } catch(err) {
       setError(err.message || "Something went wrong saving your company setup.");
     }
@@ -7593,13 +7624,28 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
       <div style={{maxWidth:480, width:"100%", padding:"24px"}}>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Set Up Your Company</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
-          A few things to get {companyName || "your company"} ready to go — you can change any of this later.
+          A few things to get {companyName || "your company"} ready to go.
         </p>
         <form onSubmit={handleSubmit}>
           <section style={S.section}>
+            <h2 style={S.h2}>Your Info</h2>
+            <div style={S.formGrid}>
+              <label style={S.formLabel}>First Name
+                <input value={firstName} onChange={e => setFirstName(e.target.value)} style={S.input} required/>
+              </label>
+              <label style={S.formLabel}>Last Name
+                <input value={lastName} onChange={e => setLastName(e.target.value)} style={S.input} required/>
+              </label>
+            </div>
+            <label style={{...S.formLabel, marginTop:10}}>Your Phone
+              <input type="tel" value={ownerPhone} onChange={e => setOwnerPhone(formatPhone(e.target.value))} style={S.input} required/>
+            </label>
+          </section>
+
+          <section style={S.section}>
             <h2 style={S.h2}>Branding</h2>
-            <label style={S.formLabel}>Company Logo (optional)
-              <input type="file" accept="image/*" onChange={e => handleLogoFile(e.target.files?.[0])} style={S.input}/>
+            <label style={S.formLabel}>Company Logo
+              <input type="file" accept="image/*" onChange={e => handleLogoFile(e.target.files?.[0])} style={S.input} required/>
             </label>
             {logoDataUrl && (
               <img src={logoDataUrl} alt="Logo preview" style={{maxWidth:160, maxHeight:80, display:"block", marginTop:10, borderRadius:6}}/>
@@ -7612,24 +7658,24 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
               <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} required/>
             </label>
             <label style={{...S.formLabel, marginTop:10}}>Phone
-              <input type="tel" value={phone} onChange={e => setPhone(formatPhone(e.target.value))} style={S.input}/>
+              <input type="tel" value={phone} onChange={e => setPhone(formatPhone(e.target.value))} style={S.input} required/>
             </label>
             <label style={{...S.formLabel, marginTop:10}}>Office Email
-              <input type="email" value={officeEmail} onChange={e => setOfficeEmail(e.target.value)} style={S.input}/>
+              <input type="email" value={officeEmail} onChange={e => setOfficeEmail(e.target.value)} style={S.input} required/>
             </label>
             <label style={{...S.formLabel, marginTop:10}}>Street Address
-              <input value={address} onChange={e => setAddress(e.target.value)} style={S.input} placeholder="110 Main St"/>
+              <input value={address} onChange={e => setAddress(e.target.value)} style={S.input} placeholder="110 Main St" required/>
             </label>
             <div style={{...S.formGrid, marginTop:10}}>
               <label style={S.formLabel}>City
-                <input value={addrCity} onChange={e => setAddrCity(e.target.value)} style={S.input} placeholder="Stroudsburg"/>
+                <input value={addrCity} onChange={e => setAddrCity(e.target.value)} style={S.input} placeholder="Stroudsburg" required/>
               </label>
               <label style={S.formLabel}>State
-                <input value={addrState} onChange={e => setAddrState(e.target.value)} style={S.input} placeholder="PA" maxLength={2}/>
+                <input value={addrState} onChange={e => setAddrState(e.target.value)} style={S.input} placeholder="PA" maxLength={2} required/>
               </label>
             </div>
             <label style={{...S.formLabel, marginTop:10}}>ZIP
-              <input value={addrZip} onChange={e => setAddrZip(e.target.value)} style={S.input} placeholder="18360" maxLength={10}/>
+              <input value={addrZip} onChange={e => setAddrZip(e.target.value)} style={S.input} placeholder="18360" maxLength={10} required/>
             </label>
           </section>
 
@@ -7656,7 +7702,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
           {services.length > 0 && (
             <section style={S.section}>
               <h2 style={S.h2}>Starting Rates</h2>
-              <p style={{fontSize:11, color:C.textDim, margin:"0 0 10px"}}>Defaults shown — adjust to your own pricing, or leave as-is and change later.</p>
+              <p style={{fontSize:11, color:C.textDim, margin:"0 0 10px"}}>Defaults shown — adjust to your own pricing before continuing.</p>
               {services.map(key => (
                 <label key={key} style={{...S.formLabel, marginBottom:10}}>
                   {DEFAULT_RATES[key].label} ({DEFAULT_RATES[key].rateLabel})
@@ -8596,9 +8642,12 @@ export default function App() {
       <CompanySetupWizard
         tenant={currentTenant}
         tFetch={tFetch}
-        onComplete={(updatedData, csData) => {
+        userId={session.user?.id}
+        accessToken={session.access_token}
+        onComplete={(updatedData, csData, ratesData) => {
           setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: updatedData, companyName: updatedData.companyName} : t));
           if (csData) setCompanySettings(prev => ({...prev, ...csData}));
+          if (ratesData) setRates(prev => ({...prev, ...ratesData}));
         }}
       />
     );
