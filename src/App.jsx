@@ -7824,7 +7824,7 @@ export default function App() {
         setUserRoles(Array.isArray(profile.roles) && profile.roles.length ? profile.roles : (profile.role ? [profile.role] : ["crew"]));
         // Admins get their own (future) company setup flow — only gate
         // estimator/crew/crewlead/manager on the basic profile wizard.
-        const isOwner = profile.role === "owner";
+        const isOwner = profile.role === "owner" || profile.role === "admin";
         const missingRequired = !profile.first_name?.trim() || !profile.last_name?.trim() || !profile.phone?.trim();
         setProfileNeedsSetup(!isOwner && missingRequired);
       }
@@ -7921,12 +7921,14 @@ export default function App() {
   // If the active view isn't allowed for this role, fall back to jobs.
   // "export", "permissions", "team" stay admin-only regardless of the configurable matrix.
   useEffect(() => {
+    // Normalize legacy "admin" DB value to "owner" for all guard checks
+    const effRole = (userRole === "admin") ? "owner" : userRole;
     const alwaysOwnerOnly = ["export","permissions","owner-hub","homebase","company-settings","referral"];
-    if (alwaysOwnerOnly.includes(view) && userRole !== "owner") { setViewRaw("jobs"); return; }
-    if (view === "team" && userRole !== "owner" && userRole !== "manager") { setViewRaw("jobs"); return; }
+    if (alwaysOwnerOnly.includes(view) && effRole !== "owner") { setViewRaw("jobs"); return; }
+    if (view === "team" && effRole !== "owner" && effRole !== "manager") { setViewRaw("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
-      const level = getAccessLevel(permissions, view, userRole);
-      if (level === "hidden" && userRole !== "owner") setViewRaw("jobs");
+      const level = getAccessLevel(permissions, view, effRole);
+      if (level === "hidden" && effRole !== "owner") setViewRaw("jobs");
     }
   }, [userRole, view, permissions]);
 
@@ -8462,7 +8464,7 @@ export default function App() {
   // NOT trigger it. That distinction matters: falsy-but-absent should mean
   // "this predates the wizard, leave it alone," not "show the wizard."
   const currentTenant = myTenants.find(t => t.tenantId === currentTenantId);
-  if (userRole === "owner" && currentTenant && currentTenant.data?.setupComplete === false) {
+  if ((userRole === "owner" || userRole === "admin") && currentTenant && currentTenant.data?.setupComplete === false) {
     return (
       <CompanySetupWizard
         tenant={currentTenant}
