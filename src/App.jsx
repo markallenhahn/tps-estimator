@@ -5290,6 +5290,9 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   const [generating,   setGenerating]   = useState(false);
   const [inviteError,  setInviteError]  = useState("");
   const [copiedToken,  setCopiedToken]  = useState(null);
+  const [companies,    setCompanies]    = useState([]);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
+  const [companiesError,   setCompaniesError]   = useState("");
 
   useEffect(() => {
     (async () => {
@@ -5300,6 +5303,63 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
       } catch(e) { console.error("load tenant_invites error:", e); }
     })();
   }, []);
+
+  // Build a roster of every company: tenant data, the owner's name/email,
+  // and when they signed up. Three queries joined client-side since
+  // tenant_users links tenants to profiles and there's no single table
+  // with all of it.
+  useEffect(() => {
+    (async () => {
+      setCompaniesLoading(true); setCompaniesError("");
+      try {
+        const tRes = await sbFetch("tenants?select=id,data,created_at&order=created_at.desc", {}, accessToken);
+        const tenantsData = await tRes.json();
+        if (!Array.isArray(tenantsData)) throw new Error("Failed to load companies.");
+
+        const tuRes = await sbFetch("tenant_users?role=eq.owner&status=eq.active&select=tenant_id,user_id", {}, accessToken);
+        const tuData = await tuRes.json();
+        const ownerByTenant = {};
+        if (Array.isArray(tuData)) {
+          tuData.forEach(tu => { if (!ownerByTenant[tu.tenant_id]) ownerByTenant[tu.tenant_id] = tu.user_id; });
+        }
+
+        const ownerIds = Object.values(ownerByTenant).filter(Boolean);
+        let profilesById = {};
+        if (ownerIds.length > 0) {
+          const pRes = await sbFetch("profiles?id=in.(" + ownerIds.join(",") + ")&select=id,email,first_name,last_name", {}, accessToken);
+          const pData = await pRes.json();
+          if (Array.isArray(pData)) {
+            pData.forEach(p => { profilesById[p.id] = p; });
+          }
+        }
+
+        const merged = tenantsData.map(t => {
+          const ownerId = ownerByTenant[t.id];
+          const owner = ownerId ? profilesById[ownerId] : null;
+          return {
+            id: t.id,
+            companyName: t.data?.companyName || "(unnamed)",
+            subscriptionTier: t.data?.subscriptionTier || null,
+            subscriptionStatus: t.data?.subscriptionStatus || null,
+            setupComplete: t.data?.setupComplete,
+            createdAt: t.created_at || null,
+            ownerName: owner ? [owner.first_name, owner.last_name].filter(Boolean).join(" ") || null : null,
+            ownerEmail: owner?.email || null,
+          };
+        });
+        setCompanies(merged);
+      } catch(e) {
+        setCompaniesError(e.message || "Failed to load companies.");
+      }
+      setCompaniesLoading(false);
+    })();
+  }, []);
+
+  const daysSinceSignup = (dateStr) => {
+    if (!dateStr) return null;
+    const d = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+    return d;
+  };
 
   const generateInvite = async () => {
     setGenerating(true); setInviteError("");
@@ -5384,6 +5444,51 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
             })}
           </div>
         )}
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Companies ({companies.length})</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
+          Every company that's signed up, who owns it, and when.
+        </p>
+        {companiesLoading && <p style={{fontSize:13, color:C.textMuted}}>Loading...</p>}
+        {companiesError && <p style={{fontSize:12, color:C.danger}}>{companiesError}</p>}
+        {!companiesLoading && !companiesError && companies.length === 0 && (
+          <p style={{fontSize:13, color:C.textMuted}}>No companies yet.</p>
+        )}
+        {companies.map(c => {
+          const days = daysSinceSignup(c.createdAt);
+          return (
+            <div key={c.id} style={{padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:8, border:`1px solid ${C.border}`}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
+                <div style={{fontWeight:700, fontSize:14}}>{c.companyName}</div>
+                {c.setupComplete === false && (
+                  <span style={{fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10, background:"#fef3c7", color:"#92400e", flexShrink:0}}>
+                    SETUP INCOMPLETE
+                  </span>
+                )}
+              </div>
+              <div style={{fontSize:12, color:C.textMuted, marginTop:4}}>
+                {c.ownerName || c.ownerEmail ? (
+                  <>Owner: {c.ownerName || "(no name set)"} {c.ownerEmail ? `· ${c.ownerEmail}` : ""}</>
+                ) : (
+                  <>No owner found</>
+                )}
+              </div>
+              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
+                {c.createdAt ? (
+                  <>Signed up {new Date(c.createdAt).toLocaleDateString()} · {days===0 ? "today" : `${days} day${days!==1?"s":""} ago`}</>
+                ) : (
+                  <>Sign-up date unknown</>
+                )}
+              </div>
+              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
+                Plan: {c.subscriptionTier ? c.subscriptionTier : "No plan selected"}
+                {c.subscriptionStatus ? ` · ${c.subscriptionStatus}` : ""}
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       <section style={S.section}>
