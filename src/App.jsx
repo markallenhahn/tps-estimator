@@ -717,7 +717,8 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
 }
 
 // ─── Media View ───────────────────────────────────────────────────────────────
-function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userRoles, userId, jobs }) {
+function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userRoles, userId, jobs, companySettings={} }) {
+  const CS_NAME = companySettings?.name || "";
   const isDesktop = useIsDesktop();
   // ── Photo capture ──
   const [capturing, setCapturing] = useState(null);
@@ -8638,7 +8639,7 @@ export default function App() {
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
-        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs}/>}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs} companySettings={companySettings}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}
           canOverridePrice={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager")}
           readOnly={
