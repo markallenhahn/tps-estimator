@@ -1458,9 +1458,9 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
 
 // ─── Invoice View ─────────────────────────────────────────────────────────────
 function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
-  const CS_NAME = companySettings?.name || COMPANY;
-  const CS_PHONE = companySettings?.phone || PHONE;
-  const CS_EMAIL = companySettings?.email || EMAIL;
+  const CS_NAME = companySettings?.name || "";
+  const CS_PHONE = companySettings?.phone || "";
+  const CS_EMAIL = companySettings?.email || "";
   const CS_LOGO = companySettings?.logoB64 || LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
@@ -1694,10 +1694,10 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
       y += 8;
       if (!isPaid) {
         const closingLines = [
-          "Please make checks payable to \"TPS Asphalt Maintenance, LLC\" and mailed to PO Box 728, Bartonsville, PA 18321.",
+          "Please make checks payable to \"" + CS_NAME + "\".",
           "",
           "Thank you for your business. We welcome your feedback and would love to hear from you.",
-          "Please email Mark@TPS-Asphalt.com with any comments or concerns.",
+          "Thank you for your business!,"
           "",
           "Also, we would greatly appreciate your review on Google as it helps our business reach other customers!",
         ];
@@ -1781,8 +1781,8 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
       <section style={S.section}>
         <div style={S.invoiceHeader}>
           <div>
-            <div style={S.coName}>{COMPANY}</div>
-            <div style={S.coContact}>{PHONE}</div>
+            <div style={S.coName}>{CS_NAME}</div>
+            <div style={S.coContact}>{CS_PHONE}</div>
           </div>
           <div style={S.estimateDate}>
             <div style={{...S.estimateLabel, color: isPaid ? C.green : C.accent}}>
@@ -1848,7 +1848,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
           </div>
         </div>
 
-        <div style={S.estimateFooter}>Thank you for your business! · {COMPANY} · {PHONE}</div>
+        <div style={S.estimateFooter}>Thank you for your business! · {CS_NAME} · {CS_PHONE}</div>
       </section>
 
       {/* Actions */}
@@ -4509,9 +4509,9 @@ function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
 function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }) {
-  const CS_NAME = companySettings?.name || COMPANY;
-  const CS_PHONE = companySettings?.phone || PHONE;
-  const CS_EMAIL = companySettings?.email || EMAIL;
+  const CS_NAME = companySettings?.name || "";
+  const CS_PHONE = companySettings?.phone || "";
+  const CS_EMAIL = companySettings?.email || "";
   const CS_LOGO = companySettings?.logoB64 || LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
@@ -5789,9 +5789,9 @@ function CrewsSection({ users, isManager, tFetch }) {
 
 // ─── Export View (secret) ──────────────────────────────────────────────────────
 function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) {
-  const CS_NAME = companySettings?.name || COMPANY;
-  const CS_PHONE = companySettings?.phone || PHONE;
-  const CS_EMAIL = companySettings?.email || EMAIL;
+  const CS_NAME = companySettings?.name || "";
+  const CS_PHONE = companySettings?.phone || "";
+  const CS_EMAIL = companySettings?.email || "";
   const CS_LOGO = companySettings?.logoB64 || LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
@@ -6353,9 +6353,9 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 
 // ─── Estimate View ────────────────────────────────────────────────────────────
 function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOverridePrice, companySettings={} }) {
-  const CS_NAME = companySettings?.name || COMPANY;
-  const CS_PHONE = companySettings?.phone || PHONE;
-  const CS_EMAIL = companySettings?.email || EMAIL;
+  const CS_NAME = companySettings?.name || "";
+  const CS_PHONE = companySettings?.phone || "";
+  const CS_EMAIL = companySettings?.email || "";
   const CS_LOGO = companySettings?.logoB64 || LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
@@ -6757,8 +6757,8 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
       <section style={S.section}>
         <div style={S.estimateHeader}>
           <div>
-            <div style={S.coName}>{COMPANY}</div>
-            <div style={S.coContact}>{PHONE}</div>
+            <div style={S.coName}>{CS_NAME}</div>
+            <div style={S.coContact}>{CS_PHONE}</div>
           </div>
           <div style={S.estimateDate}>
             <div style={S.estimateLabel}>ESTIMATE</div>
@@ -6960,7 +6960,7 @@ const sbFetch = (path, opts={}, accessToken=null) => fetch(SUPABASE_URL + "/rest
 const TENANT_SCOPED_TABLES = [
   "jobs","labor","materials","materialsettings","materialstock","customers",
   "crmlogs","zones","permissions","crews","rates","homebase","appsettings",
-  "historical_jobs",
+  "historical_jobs","company_settings",
 ];
 
 // ── Auth helpers (Supabase GoTrue REST API, no SDK needed) ──
@@ -7990,7 +7990,7 @@ export default function App() {
         try {
           const csr = await tFetch("company_settings?select=data&limit=1");
           const csd = await csr.json();
-          if (Array.isArray(csd) && csd.length > 0 && csd[0].data) {
+          if (Array.isArray(csd) && csd.length > 0 && csd[0].data && csd[0].data.name) {
             setCompanySettings(prev => ({...prev, ...csd[0].data}));
             setCompanyWizardNeeded(false);
           }
