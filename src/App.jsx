@@ -7165,115 +7165,6 @@ function JoinCompanyView({ token, onSuccess }) {
 }
 
 
-// ─── Company Setup Wizard (owner first login) ──────────────────────────────
-function CompanySetupWizard({ accessToken, userId, onComplete, syncCompanySettings }) {
-  const [step, setStep] = useState(1);
-  const TOTAL_STEPS = 4;
-  const [firstName, setFirstName] = useState("");
-  const [lastName,  setLastName]  = useState("");
-  const [phone,     setPhone]     = useState("");
-  const [dob,       setDob]       = useState("");
-  const [companyName,  setCompanyName]  = useState("");
-  const [companyPhone, setCompanyPhone] = useState("");
-  const [companyEmail, setCompanyEmail] = useState("");
-  const [website,      setWebsite]      = useState("");
-  const [street, setStreet] = useState("");
-  const [city,   setCity]   = useState("");
-  const [stateF, setStateF] = useState("PA");
-  const [zip,    setZip]    = useState("");
-  const [logoB64,  setLogoB64]  = useState("");
-  const [logoName, setLogoName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState("");
-
-  const handleLogoUpload = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    if (file.size > 500*1024) { setError("Logo must be under 500 KB."); return; }
-    const reader = new FileReader();
-    reader.onload = ev => { setLogoB64(ev.target.result.split(",")[1]); setLogoName(file.name); setError(""); };
-    reader.readAsDataURL(file);
-  };
-
-  const saveAndFinish = async () => {
-    setSaving(true); setError("");
-    try {
-      const pRes = await sbFetch("profiles?id=eq."+userId, {
-        method: "PATCH",
-        headers: { "Prefer": "return=minimal" },
-        body: JSON.stringify({ first_name: firstName.trim(), last_name: lastName.trim(), phone: phone.trim(), date_of_birth: dob || null }),
-      }, accessToken);
-      if (!pRes.ok) throw new Error(await pRes.text());
-      const csData = {
-        name: companyName.trim(), phone: companyPhone.trim(), email: companyEmail.trim(),
-        website: website.trim(), street: street.trim(), city: city.trim(), state: stateF.trim(), zip: zip.trim(),
-        ...(logoB64 ? { logoB64 } : {}),
-        legalTerms: "", depositTerms: "A 25% deposit is required to schedule work. Balance due upon completion.",
-      };
-      if (syncCompanySettings) await syncCompanySettings(csData);
-      onComplete();
-    } catch(err) { setError("Could not save. Please try again."); }
-    setSaving(false);
-  };
-
-  const next = async () => {
-    setError("");
-    if (step === 1 && (!firstName.trim() || !lastName.trim() || !phone.trim())) { setError("First name, last name, and phone are required."); return; }
-    if (step === 2 && !companyName.trim()) { setError("Company name is required."); return; }
-    if (step < TOTAL_STEPS) { setStep(s => s+1); return; }
-    await saveAndFinish();
-  };
-
-  const stepTitles = ["Your Profile","Company Info","Company Address","Logo"];
-  return (
-    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
-      <div style={{maxWidth:400, width:"100%", padding:"0 24px"}}>
-        <img src={"data:image/png;base64," + LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:220, display:"block", margin:"0 auto 20px"}}/>
-        <div style={{display:"flex", gap:4, marginBottom:20}}>
-          {[1,2,3,4].map(s => <div key={s} style={{flex:1, height:4, borderRadius:2, background:s<=step?C.accent:C.surface2}}/>)}
-        </div>
-        <h1 style={{...S.h1, textAlign:"center", marginBottom:4}}>Set Up Your Account</h1>
-        <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>Step {step} of {TOTAL_STEPS}: {stepTitles[step-1]}</p>
-        {step === 1 && (<>
-          <div style={S.formGrid}>
-            <label style={S.formLabel}>First Name *<input type="text" value={firstName} onChange={e=>setFirstName(e.target.value)} style={S.input} placeholder="First name"/></label>
-            <label style={S.formLabel}>Last Name *<input type="text" value={lastName} onChange={e=>setLastName(e.target.value)} style={S.input} placeholder="Last name"/></label>
-          </div>
-          <label style={{...S.formLabel,marginTop:10}}>Phone *<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} style={S.input} placeholder="(555) 555-5555"/></label>
-          <label style={{...S.formLabel,marginTop:10}}>Date of Birth<span style={{fontSize:11,color:C.textDim,fontWeight:400}}> (optional)</span><input type="date" value={dob} onChange={e=>setDob(e.target.value)} style={S.input}/></label>
-        </>)}
-        {step === 2 && (<>
-          <label style={S.formLabel}>Company Name *<input type="text" value={companyName} onChange={e=>setCompanyName(e.target.value)} style={S.input} placeholder="Acme Asphalt Maintenance, LLC"/></label>
-          <label style={{...S.formLabel,marginTop:10}}>Company Phone<input type="tel" value={companyPhone} onChange={e=>setCompanyPhone(e.target.value)} style={S.input} placeholder="(555) 555-5555"/></label>
-          <label style={{...S.formLabel,marginTop:10}}>Estimate Email<input type="email" value={companyEmail} onChange={e=>setCompanyEmail(e.target.value)} style={S.input} placeholder="estimates@yourcompany.com" autoCapitalize="none"/></label>
-          <label style={{...S.formLabel,marginTop:10}}>Website<span style={{fontSize:11,color:C.textDim,fontWeight:400}}> (optional)</span><input type="url" value={website} onChange={e=>setWebsite(e.target.value)} style={S.input} placeholder="https://yourcompany.com"/></label>
-        </>)}
-        {step === 3 && (<>
-          <label style={S.formLabel}>Street Address<input type="text" value={street} onChange={e=>setStreet(e.target.value)} style={S.input} placeholder="123 Main St"/></label>
-          <div style={{...S.formGrid,marginTop:10}}>
-            <label style={S.formLabel}>City<input type="text" value={city} onChange={e=>setCity(e.target.value)} style={S.input} placeholder="Stroudsburg"/></label>
-            <label style={S.formLabel}>State<input type="text" value={stateF} onChange={e=>setStateF(e.target.value)} style={S.input} placeholder="PA" maxLength={2}/></label>
-          </div>
-          <label style={{...S.formLabel,marginTop:10}}>ZIP<input type="text" value={zip} onChange={e=>setZip(e.target.value)} style={S.input} placeholder="18360" maxLength={10}/></label>
-        </>)}
-        {step === 4 && (<>
-          <p style={{fontSize:12,color:C.textMuted,marginBottom:12}}>Upload your company logo. It will appear on estimates and invoices. PNG recommended, under 500 KB.</p>
-          <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={handleLogoUpload} style={{display:"block",fontSize:13,marginBottom:12}}/>
-          {logoName && <p style={{fontSize:12,color:C.green}}>✅ {logoName} ready</p>}
-          {!logoName && <p style={{fontSize:12,color:C.textDim}}>No logo? Add one later in Owner Hub → Company Settings.</p>}
-        </>)}
-        {error && <div style={{color:C.danger,fontSize:13,marginTop:10}}>{error}</div>}
-        <div style={{display:"flex",gap:8,marginTop:18}}>
-          {step > 1 && <button style={{...S.btnSecondary,flex:1}} onClick={()=>setStep(s=>s-1)}>← Back</button>}
-          <button style={{...S.btnPrimary,flex:2,opacity:saving?0.6:1}} onClick={next} disabled={saving}>
-            {saving?"Saving...":step<TOTAL_STEPS?"Next →":"🎉 Finish Setup"}
-          </button>
-        </div>
-        {step===4 && <button style={{...S.btnSecondary,width:"100%",marginTop:8,fontSize:12}} onClick={saveAndFinish}>Skip logo for now</button>}
-      </div>
-    </div>
-  );
-}
 
 // ─── Company Settings View (owner only) ────────────────────────────────────
 function CompanySettingsView({ setView, companySettings, syncCompanySettings }) {
@@ -7803,7 +7694,6 @@ export default function App() {
     street: "", city: "", state: "", zip: "",
     website: "",
   });
-  const [companyWizardNeeded, setCompanyWizardNeeded] = useState(false);
   const [iconStyle,     setIconStyle]    = useState("emoji"); // "emoji" | "lucide" — global, admin-set
   const [teamUsers,     setTeamUsers]    = useState([]);
   const [crews,         setCrews]        = useState([]);
@@ -7927,7 +7817,6 @@ export default function App() {
         const isOwner = profile.role === "owner";
         const missingRequired = !profile.first_name?.trim() || !profile.last_name?.trim() || !profile.phone?.trim();
         setProfileNeedsSetup(!isOwner && missingRequired);
-        if (isOwner && missingRequired) setCompanyWizardNeeded(true);
       }
     } catch(e) { console.error("fetchProfile error:", e); }
   };
@@ -8548,15 +8437,6 @@ export default function App() {
   if (joinToken) return <JoinCompanyView token={joinToken} onSuccess={handleJoinSuccess}/>;
 
   if (!session) return <LoginView onSuccess={handleLoginSuccess}/>;
-
-  if (companyWizardNeeded) return (
-    <CompanySetupWizard
-      accessToken={session.access_token}
-      userId={session.user?.id}
-      syncCompanySettings={syncCompanySettings}
-      onComplete={() => { setCompanyWizardNeeded(false); setProfileNeedsSetup(false); }}
-    />
-  );
 
   if (profileNeedsSetup) return (
     <ProfileSetupWizard
