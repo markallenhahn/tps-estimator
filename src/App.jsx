@@ -5255,7 +5255,7 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle }) {
 }
 
 // ─── Platform Admin — BlacktopIQ operator only, fully separate from any company's UI ───
-function PlatformAdminView({ setView, accessToken }) {
+function PlatformAdminView({ setView, accessToken, permissions, setPermissions, syncPermissions }) {
   const [invites,      setInvites]      = useState([]);
   const [generating,   setGenerating]   = useState(false);
   const [inviteError,  setInviteError]  = useState("");
@@ -5355,6 +5355,16 @@ function PlatformAdminView({ setView, accessToken }) {
           </div>
         )}
       </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Global Permissions</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
+          Applies to every company on BlacktopIQ. Owners can view this but only Platform Admin can edit it.
+        </p>
+        <button style={S.btnPrimary} onClick={() => setView("global-permissions")}>
+          🔐 Edit Global Permissions
+        </button>
+      </section>
     </div>
   );
 }
@@ -5393,7 +5403,10 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
   return (
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
-        <h1 style={S.h1}>Permissions</h1>
+        <h1 style={S.h1}>{readOnly ? "Permissions" : "Global Permissions"}</h1>
+        <button style={S.btnSecondary} onClick={() => setView(readOnly ? "owner-hub" : "platform-admin")}>
+          ← {readOnly ? "Owner Hub" : "Platform Admin"}
+        </button>
       </div>
       <p style={S.subhead}>{readOnly ? "Read-only — permissions are managed by the platform admin." : "Tap a cell to cycle Hidden → View → Edit, for each role and tab"}</p>
       {readOnly && <div style={{background:"#fef3c7", border:"1px solid #fbbf24", borderRadius:8, padding:"8px 12px", fontSize:12, marginBottom:12, color:"#92400e"}}>
@@ -6969,9 +6982,11 @@ const sbFetch = (path, opts={}, accessToken=null) => fetch(SUPABASE_URL + "/rest
 // which are how a tenant gets resolved in the first place).
 const TENANT_SCOPED_TABLES = [
   "jobs","labor","materials","materialsettings","materialstock","customers",
-  "crmlogs","zones","permissions","crews","rates","homebase","appsettings",
+  "crmlogs","zones","crews","rates","homebase","appsettings",
   "historical_jobs","company_settings",
 ];
+// "permissions" is intentionally NOT tenant-scoped — it's a single global
+// table (id=1) shared by every company, editable only from Platform Admin.
 
 // ── Auth helpers (Supabase GoTrue REST API, no SDK needed) ──
 const AUTH_STORAGE_KEY = "tps_auth_session";
@@ -7981,7 +7996,7 @@ export default function App() {
         const zd = await zr.json();
         if (Array.isArray(zd) && zd.length > 0) setZones(zd[0].data);
 
-        const pr = await tFetch("permissions?select=data&limit=1");
+        const pr = await sbFetch("permissions?select=data&limit=1", {}, session?.access_token);
         const pd = await pr.json();
         if (Array.isArray(pd) && pd.length > 0) setPermissions(pd[0].data);
 
@@ -8089,11 +8104,12 @@ export default function App() {
 
   const syncPermissions = async (permissionsData) => {
     try {
-      await tFetch("permissions?on_conflict=tenant_id", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: 1, data: permissionsData }),
-      });
+      await sbFetch("permissions?id=eq.1", {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({ data: permissionsData }),
+      }, session?.access_token);
+      setPermissions(permissionsData);
     } catch(e) { console.error("syncPermissions error:", e); }
   };
 
@@ -8548,7 +8564,8 @@ export default function App() {
         {view==="referral" && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
         {view==="team"     && (userRole==="owner"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId}/>}
         {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
-        {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token}/>}
+        {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token} permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions}/>}
+        {view==="global-permissions" && isPlatformAdmin && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={false}/>}
         {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout}/>}
         {view==="export"   && userRole==="owner" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo} companySettings={companySettings}/>}
