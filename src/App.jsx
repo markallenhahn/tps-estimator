@@ -452,7 +452,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
               <span>{t.label}</span>
             </button>
           ))}
-          {(userRole === "owner" || userRole === "admin") && (
+          {(userRole === "owner" || userRole === "admin" || (userRoles||[]).some(r => r==="owner"||r==="admin")) && (
             <>
               <div style={S.sidebarDivider}/>
               <button onClick={() => setView("owner-hub")}
@@ -494,7 +494,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
             <span style={S.navTabLabel}>{t.label}</span>
           </button>
         ))}
-        {(userRole === "owner" || userRole === "admin") && (
+        {(userRole === "owner" || userRole === "admin" || (userRoles||[]).some(r => r==="owner"||r==="admin")) && (
           <>
             <div style={S.navDivider}/>
             <button onClick={() => setView("owner-hub")}
