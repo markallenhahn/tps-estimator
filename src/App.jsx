@@ -379,24 +379,27 @@ const DEFAULT_PERMISSIONS = {
 const ACCESS_RANK = { hidden: 0, view: 1, edit: 2 };
 
 function getAccessLevel(permissions, tabKey, role) {
-  // Normalize legacy "admin" to "owner"
-  role = (role === "admin") ? "owner" : role;
-  // Fall back to the built-in default for this specific tab if it's missing
-  // from the saved permissions object (e.g. an older saved permissions blob
-  // that predates a newly added tab) — not just when the whole object is null.
+  // Normalize legacy "admin" → "owner" for both strings and arrays
+  const normalizeR = r => (r === "admin") ? "owner" : r;
+  if (Array.isArray(role)) {
+    role = role.map(normalizeR);
+  } else {
+    role = normalizeR(role);
+  }
+  // Fall back to DEFAULT_PERMISSIONS for tabs missing from the saved blob
   const tabPerms = permissions?.[tabKey] || DEFAULT_PERMISSIONS[tabKey];
-  // Multi-role users get the most permissive level across all their roles —
-  // "blended" access, e.g. someone who's both Crew and Estimator gets
-  // whichever of those two grants more on a given tab.
+  // Lookup helper: try the role key, then legacy "admin" key, then default
+  const levelFor = (r) => tabPerms?.[r] || tabPerms?.["admin"] || DEFAULT_PERMISSIONS[tabKey]?.[r] || "hidden";
+  // Multi-role: blended (most permissive)
   if (Array.isArray(role)) {
     let best = "hidden";
     role.forEach(r => {
-      const level = tabPerms?.[r] || "hidden";
+      const level = levelFor(r);
       if (ACCESS_RANK[level] > ACCESS_RANK[best]) best = level;
     });
     return best;
   }
-  return tabPerms?.[role] || "hidden";
+  return levelFor(role);
 }
 
 // Does this user (single role string OR multi-role array) have a given role?
@@ -7377,6 +7380,9 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
   const [phone,        setPhone]        = useState(tenant?.data?.phone || "");
   const [officeEmail,  setOfficeEmail]  = useState(tenant?.data?.officeEmail || "");
   const [address,      setAddress]      = useState("");
+  const [addrCity,     setAddrCity]     = useState("");
+  const [addrState,    setAddrState]    = useState("PA");
+  const [addrZip,      setAddrZip]      = useState("");
   const [logoDataUrl,  setLogoDataUrl]  = useState(tenant?.data?.logoUrl || "");
   const [services,     setServices]     = useState(["sealcoat","crackfill","patch"]);
   const [rates,        setRatesDraft]   = useState(() => {
@@ -7442,13 +7448,14 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
       });
       if (!tenantRes.ok) throw new Error("Failed to save company info.");
 
-      // 2. Home base — geocode once now, same as the dedicated Home Base page does.
-      if (address.trim()) {
-        const geo = await geocodeAddress(address.trim());
+      // 2. Home base — geocode once now from 4-field address.
+      if (address.trim() || addrCity.trim()) {
+        const fullAddr = [address.trim(), addrCity.trim(), addrState.trim(), addrZip.trim()].filter(Boolean).join(", ");
+        const geo = await geocodeAddress(fullAddr);
         await tFetch("homebase?on_conflict=tenant_id", {
           method: "POST",
           headers: { "Prefer": "resolution=merge-duplicates" },
-          body: JSON.stringify({ id: 1, data: { address: address.trim(), lat: geo?.lat || null, lng: geo?.lng || null } }),
+          body: JSON.stringify({ id: 1, data: { address: fullAddr, street: address.trim(), city: addrCity.trim(), state: addrState.trim(), zip: addrZip.trim(), lat: geo?.lat || null, lng: geo?.lng || null } }),
         });
       }
 
@@ -7499,8 +7506,19 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
             <label style={{...S.formLabel, marginTop:10}}>Office Email
               <input type="email" value={officeEmail} onChange={e => setOfficeEmail(e.target.value)} style={S.input}/>
             </label>
-            <label style={{...S.formLabel, marginTop:10}}>Home Base Address
-              <input value={address} onChange={e => setAddress(e.target.value)} style={S.input} placeholder="Used for route optimization on the Zones tab"/>
+            <label style={{...S.formLabel, marginTop:10}}>Street Address
+              <input value={address} onChange={e => setAddress(e.target.value)} style={S.input} placeholder="110 Main St"/>
+            </label>
+            <div style={{...S.formGrid, marginTop:10}}>
+              <label style={S.formLabel}>City
+                <input value={addrCity} onChange={e => setAddrCity(e.target.value)} style={S.input} placeholder="Stroudsburg"/>
+              </label>
+              <label style={S.formLabel}>State
+                <input value={addrState} onChange={e => setAddrState(e.target.value)} style={S.input} placeholder="PA" maxLength={2}/>
+              </label>
+            </div>
+            <label style={{...S.formLabel, marginTop:10}}>ZIP
+              <input value={addrZip} onChange={e => setAddrZip(e.target.value)} style={S.input} placeholder="18360" maxLength={10}/>
             </label>
           </section>
 
@@ -7685,14 +7703,9 @@ export default function App() {
   const [permissions,   setPermissions]  = useState(null);
   const [homeBase,      setHomeBase]     = useState(null); // { address, lat, lng }
   const [companySettings, setCompanySettings] = useState({
-    name: "TPS Asphalt Maintenance",
-    phone: "(570) 656-3311",
-    email: "estimates@tpsasphalt.com",
-    logoB64: LOGO_B64,
-    legalTerms: "",
-    depositTerms: "A 25% deposit is required to schedule work. Balance due upon completion. Company is not responsible for underground utilities not marked prior to work.",
-    street: "", city: "", state: "", zip: "",
-    website: "",
+    name: "", phone: "", email: "", logoB64: "",
+    legalTerms: "", depositTerms: "A 25% deposit is required to schedule work. Balance due upon completion.",
+    street: "", city: "", state: "", zip: "", website: "",
   });
   const [iconStyle,     setIconStyle]    = useState("emoji"); // "emoji" | "lucide" — global, admin-set
   const [teamUsers,     setTeamUsers]    = useState([]);
