@@ -7495,7 +7495,26 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
         body: JSON.stringify({ id: 1, data: ratesData }),
       });
 
-      onComplete(updatedTenantData);
+      // 4. Company Settings — this is what EstimateView/InvoiceView/PDFs
+      // actually read from (CS_NAME/CS_PHONE/etc), so the wizard needs to
+      // write here too, not just into tenants.data.
+      const csData = {
+        name: companyName.trim(),
+        phone: phone.trim(),
+        email: officeEmail.trim(),
+        logoB64: logoDataUrl ? logoDataUrl.split(",")[1] : "",
+        legalTerms: "",
+        depositTerms: "A 25% deposit is required to schedule work. Balance due upon completion.",
+        street: address.trim(), city: addrCity.trim(), state: addrState.trim(), zip: addrZip.trim(),
+        website: "",
+      };
+      await tFetch("company_settings?on_conflict=tenant_id", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: 1, data: csData }),
+      });
+
+      onComplete(updatedTenantData, csData);
     } catch(err) {
       setError(err.message || "Something went wrong saving your company setup.");
     }
@@ -8498,8 +8517,9 @@ export default function App() {
       <CompanySetupWizard
         tenant={currentTenant}
         tFetch={tFetch}
-        onComplete={(updatedData) => {
+        onComplete={(updatedData, csData) => {
           setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: updatedData, companyName: updatedData.companyName} : t));
+          if (csData) setCompanySettings(prev => ({...prev, ...csData}));
         }}
       />
     );
