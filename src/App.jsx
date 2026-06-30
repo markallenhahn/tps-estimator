@@ -449,10 +449,10 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
               <span>{t.label}</span>
             </button>
           ))}
-          {userRole === "owner" && (
+          {(userRole === "owner" || userRole === "admin") && (
             <>
               <div style={S.sidebarDivider}/>
-              <button onClick={() => setView("owner")}
+              <button onClick={() => setView("owner-hub")}
                 style={{...S.sidebarTab,...(adminActive?S.sidebarTabActive:{})}}>
                 <TabIcon tabKey="owner" iconStyle={iconStyle} size={18}/>
                 <span>Admin</span>
@@ -491,10 +491,10 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
             <span style={S.navTabLabel}>{t.label}</span>
           </button>
         ))}
-        {userRole === "owner" && (
+        {(userRole === "owner" || userRole === "admin") && (
           <>
             <div style={S.navDivider}/>
-            <button onClick={() => setView("owner")}
+            <button onClick={() => setView("owner-hub")}
               data-active={adminActive?"true":"false"}
               style={{...S.navTab, color: adminActive ? C.accent : C.textMuted, borderBottomColor: adminActive ? C.accent : "transparent"}}>
               <span style={S.navTabIcon}><TabIcon tabKey="owner" iconStyle={iconStyle} size={16}/></span>
@@ -8477,6 +8477,8 @@ export default function App() {
     </div>
   );
 
+  const effectiveRole = (userRole === "admin") ? "owner" : userRole;
+
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
       <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant}/>
@@ -8516,16 +8518,16 @@ export default function App() {
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
-        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
+        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
-        {view==="homebase" && userRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
-        {view==="company-settings" && userRole==="owner" && <CompanySettingsView setView={navigateTo} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
-        {view==="referral" && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
-        {view==="team"     && (userRole==="owner"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId}/>}
-        {view==="owner-hub"    && userRole==="owner" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle} accessToken={session?.access_token} isPlatformAdmin={isPlatformAdmin}/>}
-        {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
+        {view==="homebase" && effectiveRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
+        {view==="company-settings" && effectiveRole==="owner" && <CompanySettingsView setView={navigateTo} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
+        {view==="referral" && effectiveRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
+        {view==="team"     && (effectiveRole==="owner"||effectiveRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId}/>}
+        {view==="owner-hub"    && effectiveRole==="owner" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle} accessToken={session?.access_token} isPlatformAdmin={isPlatformAdmin} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
+        {view==="permissions" && effectiveRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout}/>}
-        {view==="export"   && userRole==="owner" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo} companySettings={companySettings}/>}
+        {view==="export"   && effectiveRole==="owner" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo} companySettings={companySettings}/>}
         </div>
       </div>
     </div>
