@@ -5680,14 +5680,14 @@ export default function App() {
       const data = await res.json();
       if (Array.isArray(data) && data[0]) {
         const profile = data[0];
-        if (profile.role) setUserRole(profile.role);
+        if (profile.role) setUserRole(profile.role === "admin" ? "owner" : profile.role);
         // Admins get their own (future) company setup flow — only gate
         // estimator/crew/crewlead/manager on the basic profile wizard.
         const isOwner = profile.role === "owner";
         const missingRequired = !profile.first_name?.trim() || !profile.last_name?.trim() || !profile.phone?.trim();
         // Non-owners need profile wizard; owners get company wizard
         setProfileNeedsSetup(!isOwner && missingRequired);
-        if (isOwner && missingRequired) setCompanyWizardNeeded(true);
+        if ((isOwner || profile.role === "admin") && missingRequired) setCompanyWizardNeeded(true);
       }
     } catch(e) { console.error("fetchProfile error:", e); }
   };
@@ -5750,12 +5750,13 @@ export default function App() {
   // If the active view isn't allowed for this role, fall back to jobs.
   // "export" stays platform-admin-only; "permissions", "admin", "homebase" are owner-only.
   useEffect(() => {
-    const alwaysOwnerOnly = ["export","permissions","owner","homebase"];
-    if (alwaysOwnerOnly.includes(view) && userRole !== "owner") { setView("jobs"); return; }
-    if (view === "team" && userRole !== "owner" && userRole !== "manager") { setView("jobs"); return; }
+    const effectiveRole = userRole === "admin" ? "owner" : userRole;
+    const alwaysOwnerOnly = ["export","permissions","owner-hub","homebase","company-settings","referral"];
+    if (alwaysOwnerOnly.includes(view) && effectiveRole !== "owner") { setView("jobs"); return; }
+    if (view === "team" && effectiveRole !== "owner" && effectiveRole !== "manager") { setView("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
-      const level = getAccessLevel(permissions, view, userRole);
-      if (level === "hidden" && userRole !== "owner") setView("jobs");
+      const level = getAccessLevel(permissions, view, effectiveRole);
+      if (level === "hidden" && effectiveRole !== "owner") setView("jobs");
     }
   }, [userRole, view, permissions]);
 
@@ -6092,9 +6093,11 @@ export default function App() {
     </div>
   );
 
+  const effectiveRole = userRole === "admin" ? "owner" : userRole;
+
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
-      <TopNav view={view} setView={setView} userRole={userRole} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle}/>
+      <TopNav view={view} setView={setView} userRole={effectiveRole} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle}/>
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {syncStatus && (
           <div style={{
@@ -6104,24 +6107,24 @@ export default function App() {
           }}>{syncStatus}</div>
         )}
         <div style={S.content}>
-        {view==="jobs"     && getAccessLevel(permissions,"jobs",userRole)!=="hidden" && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} readOnly={getAccessLevel(permissions,"jobs",userRole)==="view"} userRole={userRole} userId={session?.user?.id} crews={crews}/>}
-        {view==="schedule" && getAccessLevel(permissions,"schedule",userRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
-        {view==="zones"    && getAccessLevel(permissions,"zones",userRole)!=="hidden" && <ZonesView jobs={jobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
+        {view==="jobs"     && getAccessLevel(permissions,"jobs",effectiveRole)!=="hidden" && <JobsView    jobs={jobs} setJobs={handleSetJobs} deleteJob={deleteJob} setCurrentJob={setCurrentJob} setView={setView} rates={rates} updateJobById={updateJobById} readOnly={getAccessLevel(permissions,"jobs",effectiveRole)==="view"} userRole={effectiveRole} userId={session?.user?.id} crews={crews}/>}
+        {view==="schedule" && getAccessLevel(permissions,"schedule",effectiveRole)!=="hidden" && <ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>}
+        {view==="zones"    && getAccessLevel(permissions,"zones",effectiveRole)!=="hidden" && <ZonesView jobs={jobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={setView} homeBase={homeBase}/>}
         {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={setView} teamUsers={teamUsers} crews={crews}/>}
-        {view==="estimate" && getAccessLevel(permissions,"estimate",userRole)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",userRole)==="view"} companySettings={companySettings}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
-        {view==="invoice"  && getAccessLevel(permissions,"invoice",userRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings}/>}
-        {view==="labor"    && getAccessLevel(permissions,"labor",userRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/>}
-        {view==="reports"  && getAccessLevel(permissions,"reports",userRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView} companySettings={companySettings}/>}
-        {view==="rates"    && getAccessLevel(permissions,"rates",userRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
-        {view==="homebase" && userRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
-        {view==="company-settings" && userRole==="owner" && <CompanySettingsView setView={setView} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
-        {view==="referral" && userRole==="owner" && <ReferralView setView={setView} userId={session?.user?.id}/>}
-        {view==="team"     && (userRole==="owner"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole}/>}
-        {view==="owner-hub"    && userRole==="owner" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
-        {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={setView} readOnly={true}/>}
+        {view==="estimate" && getAccessLevel(permissions,"estimate",effectiveRole)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob} readOnly={getAccessLevel(permissions,"estimate",effectiveRole)==="view"} companySettings={companySettings}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",effectiveRole)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="invoice"  && getAccessLevel(permissions,"invoice",effectiveRole)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings}/>}
+        {view==="labor"    && getAccessLevel(permissions,"labor",effectiveRole)!=="hidden" && <LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/>}
+        {view==="reports"  && getAccessLevel(permissions,"reports",effectiveRole)!=="hidden" && <ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={setView} companySettings={companySettings}/>}
+        {view==="rates"    && getAccessLevel(permissions,"rates",effectiveRole)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
+        {view==="homebase" && effectiveRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={setView}/>}
+        {view==="company-settings" && effectiveRole==="owner" && <CompanySettingsView setView={setView} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
+        {view==="referral" && effectiveRole==="owner" && <ReferralView setView={setView} userId={session?.user?.id}/>}
+        {view==="team"     && (effectiveRole==="owner"||effectiveRole==="manager") && <TeamView accessToken={session?.access_token} userRole={effectiveRole}/>}
+        {view==="owner-hub"    && effectiveRole==="owner" && <AdminHubView setView={setView} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
+        {view==="permissions" && effectiveRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={setView} readOnly={true}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={setView} onLogout={handleLogout}/>}
-        {view==="export"   && userRole==="owner" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView} companySettings={companySettings}/>}
+        {view==="export"   && effectiveRole==="owner" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={setView} companySettings={companySettings}/>}
         </div>
       </div>
     </div>
