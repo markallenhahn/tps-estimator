@@ -6718,7 +6718,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
       }
 
       // ── Terms paragraph ──
-      const terms = CS_DEPOSIT + " " + CS_NAME + " is not responsible for underground utilities not marked prior to work.";
+      const terms = CS_DEPOSIT;
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
       const termLines = doc.splitTextToSize(terms, usable);
       termLines.forEach(l => { doc.text(l, PW/2, y, { align:"center" }); y += 11; });
