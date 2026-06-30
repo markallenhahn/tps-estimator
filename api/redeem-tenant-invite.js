@@ -1,25 +1,13 @@
 // api/redeem-tenant-invite.js
-// Takes a valid, unused tenant_invites token plus a new company's basic info
-// and the new admin's chosen email/password, and creates everything needed:
-// the Supabase Auth user, their profiles row, a brand-new tenant, and the
-// tenant_users row that makes them that tenant's first admin.
-//
-// Uses the Admin API (service role key) to create the user directly with a
-// confirmed email and the password they chose — no separate "check your
-// email" step, since this person arrived via a link you already sent them,
-// not a cold signup.
+// Creates a brand-new company and its first owner account from a platform invite token.
 
 const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  if (!serviceKey) {
-    return res.status(500).json({ error: "Server is not configured (missing SUPABASE_SERVICE_KEY)." });
-  }
+  if (!serviceKey) return res.status(500).json({ error: "Server is not configured (missing SUPABASE_SERVICE_KEY)." });
 
   const { token, email, password, companyName, phone } = req.body || {};
   if (!token || !email || !password || !companyName) {
@@ -36,7 +24,7 @@ export default async function handler(req, res) {
   };
 
   try {
-    // 1. Verify the token exists and hasn't been used yet.
+    // 1. Verify the token
     const inviteRes = await fetch(SUPABASE_URL + "/rest/v1/tenant_invites?token=eq." + token + "&select=token,used_at", { headers: sbHeaders });
     const inviteData = await inviteRes.json();
     if (!inviteRes.ok || !Array.isArray(inviteData) || inviteData.length === 0) {
@@ -46,7 +34,7 @@ export default async function handler(req, res) {
       return res.status(409).json({ error: "This invite link has already been used." });
     }
 
-    // 2. Create the Auth user directly — confirmed, with their chosen password.
+    // 2. Create the Auth user
     const createUserRes = await fetch(SUPABASE_URL + "/auth/v1/admin/users", {
       method: "POST",
       headers: sbHeaders,
@@ -58,18 +46,18 @@ export default async function handler(req, res) {
     }
     const userId = userData.id;
 
-    // 3. Create their profile — admin of their own brand-new company.
+    // 3. Create their profile — "owner" is the tenant-level top role
     const profileRes = await fetch(SUPABASE_URL + "/rest/v1/profiles", {
       method: "POST",
       headers: { ...sbHeaders, "Prefer": "resolution=merge-duplicates" },
-      body: JSON.stringify({ id: userId, email: email.trim(), role: "admin", roles: ["admin"] }),
+      body: JSON.stringify({ id: userId, email: email.trim(), role: "owner", roles: ["owner"] }),
     });
     if (!profileRes.ok) {
       const errText = await profileRes.text();
       return res.status(500).json({ error: "Account created, but failed to set up profile: " + errText });
     }
 
-    // 4. Create the new tenant itself.
+    // 4. Create the new tenant
     const tenantRes = await fetch(SUPABASE_URL + "/rest/v1/tenants", {
       method: "POST",
       headers: { ...sbHeaders, "Prefer": "return=representation" },
@@ -89,18 +77,18 @@ export default async function handler(req, res) {
     }
     const tenantId = tenantData[0]?.id;
 
-    // 5. Link them to it as admin.
+    // 5. Link them as owner
     const tuRes = await fetch(SUPABASE_URL + "/rest/v1/tenant_users", {
       method: "POST",
       headers: sbHeaders,
-      body: JSON.stringify({ id: Date.now(), tenant_id: tenantId, user_id: userId, role: "admin", status: "active" }),
+      body: JSON.stringify({ id: Date.now(), tenant_id: tenantId, user_id: userId, role: "owner", status: "active" }),
     });
     if (!tuRes.ok) {
       const errText = await tuRes.text();
       return res.status(500).json({ error: "Account and company created, but failed to link them: " + errText });
     }
 
-    // 6. Mark the invite as used.
+    // 6. Mark invite as used
     await fetch(SUPABASE_URL + "/rest/v1/tenant_invites?token=eq." + token, {
       method: "PATCH",
       headers: sbHeaders,

@@ -1,25 +1,16 @@
 // api/remove-user.js
-// Deletes a user's auth account and profile row, revoking their access entirely.
-// Admin-only — verified server-side via the caller's own access token.
-
 const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  if (!serviceKey) {
-    return res.status(500).json({ error: "Server is not configured (missing SUPABASE_SERVICE_KEY)." });
-  }
+  if (!serviceKey) return res.status(500).json({ error: "Server is not configured (missing SUPABASE_SERVICE_KEY)." });
 
   const { userId } = req.body || {};
-  if (!userId) {
-    return res.status(400).json({ error: "userId is required." });
-  }
+  if (!userId) return res.status(400).json({ error: "userId is required." });
 
-  // ── Verify the caller is an admin ──
+  // Verify caller is owner (or legacy admin)
   const authHeader = req.headers.authorization || "";
   const callerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   let callerRole = "crew";
@@ -42,21 +33,18 @@ export default async function handler(req, res) {
           }
         }
       }
-    } catch (e) { /* fall through with callerRole = "crew" */ }
+    } catch (e) { /* fall through */ }
   }
 
-  if (callerRole !== "admin") {
-    return res.status(403).json({ error: "Only admins can remove team members." });
+  // Accept both "owner" (new) and "admin" (legacy DB value)
+  if (callerRole !== "owner" && callerRole !== "admin") {
+    return res.status(403).json({ error: "Only owners can remove team members." });
   }
 
   try {
-    // Delete the auth user (profile row cascades via FK on delete)
     const delRes = await fetch(SUPABASE_URL + "/auth/v1/admin/users/" + userId, {
       method: "DELETE",
-      headers: {
-        "apikey": serviceKey,
-        "Authorization": "Bearer " + serviceKey,
-      },
+      headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey },
     });
 
     if (!delRes.ok) {
