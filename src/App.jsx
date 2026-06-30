@@ -7236,6 +7236,27 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
   const [saving,  setSaving]  = useState(false);
   const [message, setMessage] = useState("");
 
+  // companySettings can still be the empty default when this view mounts,
+  // if the async load hasn't resolved yet. Re-sync the form once real data
+  // arrives so a Save click can't write blanks over good DB data.
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (hydrated.current) return;
+    if (companySettings && companySettings.name) {
+      setName(companySettings.name || "");
+      setPhone(companySettings.phone || "");
+      setEmail(companySettings.email || "");
+      setWebsite(companySettings.website || "");
+      setStreet(companySettings.street || "");
+      setCity(companySettings.city || "");
+      setState_(companySettings.state || "PA");
+      setZip(companySettings.zip || "");
+      setLegalTerms(companySettings.legalTerms || "");
+      setDepositTerms(companySettings.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.");
+      hydrated.current = true;
+    }
+  }, [companySettings]);
+
   const handleLogo = (e) => {
     const file = e.target.files[0]; if (!file) return;
     if (file.size > 500*1024) { setMessage("⚠️ Logo must be under 500 KB."); return; }
