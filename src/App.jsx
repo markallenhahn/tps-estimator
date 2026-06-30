@@ -38,6 +38,19 @@ const initialArea = () => ({
   measurement:"", condition:"fair", notes:"",
 });
 
+// Formats any phone-number-ish input into "(XXX) XXX-XXXX" as the user
+// types, and also used as a final pass when rendering on PDFs/screens —
+// strips everything but digits then re-applies the mask, so it's safe to
+// call on values that are already formatted, partially formatted, or raw.
+function formatPhone(value) {
+  const digits = (value || "").replace(/\D/g, "").slice(0, 10);
+  const len = digits.length;
+  if (len === 0) return "";
+  if (len < 4) return "(" + digits;
+  if (len < 7) return "(" + digits.slice(0,3) + ") " + digits.slice(3);
+  return "(" + digits.slice(0,3) + ") " + digits.slice(3,6) + "-" + digits.slice(6);
+}
+
 function formatCurrency(n) {
   return "$" + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -1464,7 +1477,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
 // ─── Invoice View ─────────────────────────────────────────────────────────────
 function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
   const CS_NAME = companySettings?.name || "";
-  const CS_PHONE = companySettings?.phone || "";
+  const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
   const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
@@ -4521,7 +4534,7 @@ function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
 // ─── Reports View ─────────────────────────────────────────────────────────────
 function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }) {
   const CS_NAME = companySettings?.name || "";
-  const CS_PHONE = companySettings?.phone || "";
+  const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
   const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
@@ -5163,7 +5176,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
               </label>
             </div>
             <label style={{...S.formLabel, marginTop:10}}>Phone Number
-              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+              <input type="tel" value={phone} onChange={e => setPhone(formatPhone(e.target.value))}
                 style={S.input} placeholder="(555) 555-5555"/>
             </label>
             <label style={{...S.formLabel, marginTop:10}}>Date of Birth
@@ -5828,7 +5841,7 @@ function CrewsSection({ users, isManager, tFetch }) {
 // ─── Export View (secret) ──────────────────────────────────────────────────────
 function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) {
   const CS_NAME = companySettings?.name || "";
-  const CS_PHONE = companySettings?.phone || "";
+  const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
   const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
@@ -6392,7 +6405,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 // ─── Estimate View ────────────────────────────────────────────────────────────
 function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOverridePrice, companySettings={} }) {
   const CS_NAME = companySettings?.name || "";
-  const CS_PHONE = companySettings?.phone || "";
+  const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
   const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
@@ -7195,7 +7208,7 @@ function JoinCompanyView({ token, onSuccess }) {
             <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} placeholder="e.g. Smith Paving Co." required/>
           </label>
           <label style={{...S.formLabel, marginTop:12}}>Phone (optional)
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={S.input}/>
+            <input type="tel" value={phone} onChange={e => setPhone(formatPhone(e.target.value))} style={S.input}/>
           </label>
           <label style={{...S.formLabel, marginTop:12}}>Your Email
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={S.input} required/>
@@ -7222,7 +7235,7 @@ function JoinCompanyView({ token, onSuccess }) {
 function CompanySettingsView({ setView, companySettings, syncCompanySettings }) {
   const cs = companySettings || {};
   const [name,     setName]     = useState(cs.name||"");
-  const [phone,    setPhone]    = useState(cs.phone||"");
+  const [phone,    setPhone]    = useState(formatPhone(cs.phone||""));
   const [email,    setEmail]    = useState(cs.email||"");
   const [website,  setWebsite]  = useState(cs.website||"");
   const [street,   setStreet]   = useState(cs.street||"");
@@ -7244,7 +7257,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
     if (hydrated.current) return;
     if (companySettings && companySettings.name) {
       setName(companySettings.name || "");
-      setPhone(companySettings.phone || "");
+      setPhone(formatPhone(companySettings.phone || ""));
       setEmail(companySettings.email || "");
       setWebsite(companySettings.website || "");
       setStreet(companySettings.street || "");
@@ -7289,7 +7302,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
         <h2 style={S.h2}>Company Info</h2>
         <label style={S.formLabel}>Company Name *<input type="text" value={name} onChange={e=>setName(e.target.value)} style={S.input}/></label>
         <div style={{...S.formGrid,marginTop:10}}>
-          <label style={S.formLabel}>Phone<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} style={S.input}/></label>
+          <label style={S.formLabel}>Phone<input type="tel" value={phone} onChange={e=>setPhone(formatPhone(e.target.value))} style={S.input}/></label>
           <label style={S.formLabel}>Estimate Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} style={S.input} autoCapitalize="none"/></label>
         </div>
         <label style={{...S.formLabel,marginTop:10}}>Website<input type="url" value={website} onChange={e=>setWebsite(e.target.value)} style={S.input}/></label>
@@ -7419,7 +7432,7 @@ function ProfileSetupWizard({ accessToken, userId, onComplete }) {
             </label>
           </div>
           <label style={{...S.formLabel, marginTop:10}}>Phone Number *
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+            <input type="tel" value={phone} onChange={e => setPhone(formatPhone(e.target.value))}
               style={S.input} placeholder="(555) 555-5555" required/>
           </label>
           <label style={{...S.formLabel, marginTop:10}}>Date of Birth
@@ -7590,7 +7603,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
               <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} required/>
             </label>
             <label style={{...S.formLabel, marginTop:10}}>Phone
-              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={S.input}/>
+              <input type="tel" value={phone} onChange={e => setPhone(formatPhone(e.target.value))} style={S.input}/>
             </label>
             <label style={{...S.formLabel, marginTop:10}}>Office Email
               <input type="email" value={officeEmail} onChange={e => setOfficeEmail(e.target.value)} style={S.input}/>
