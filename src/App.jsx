@@ -1466,7 +1466,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = companySettings?.phone || "";
   const CS_EMAIL = companySettings?.email || "";
-  const CS_LOGO = companySettings?.logoB64 || LOGO_B64;
+  const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
 
@@ -1555,8 +1555,17 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
 
       // Logo
       const logoW = 260, logoH = 80;
-      try { doc.addImage("data:image/png;base64," + CS_LOGO, "PNG", (PW-logoW)/2, y, logoW, logoH); } catch(e){}
-      y += logoH + 8;
+      const logoBoxW2 = 260, logoBoxH2 = 80;
+      let logoW2 = logoBoxW2, logoH2 = logoBoxH2;
+      try {
+        const logoDataUrl2 = "data:image/png;base64," + CS_LOGO;
+        const props2 = doc.getImageProperties(logoDataUrl2);
+        const ratio2 = Math.min(logoBoxW2 / props2.width, logoBoxH2 / props2.height);
+        logoW2 = props2.width * ratio2;
+        logoH2 = props2.height * ratio2;
+        doc.addImage(logoDataUrl2, "PNG", (PW-logoW2)/2, y, logoW2, logoH2);
+      } catch(e){}
+      y += logoBoxH2 + 8;
 
       // Company sub-line
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
@@ -4514,7 +4523,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = companySettings?.phone || "";
   const CS_EMAIL = companySettings?.email || "";
-  const CS_LOGO = companySettings?.logoB64 || LOGO_B64;
+  const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
 
@@ -4571,7 +4580,13 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
       const GOLD=[201,162,39], BLACK=[17,17,17], DGRAY=[85,85,85], LGRAY=[244,244,244], MGRAY=[221,221,221], HDRBLK=[26,26,26], GREEN=[34,197,94], RED=[239,68,68];
 
       // Logo
-      try { doc.addImage("data:image/png;base64,"+CS_LOGO,"PNG",(PW-200)/2,y,200,62); } catch(e){}
+      try {
+        const logoDataUrl3 = "data:image/png;base64,"+CS_LOGO;
+        const props3 = doc.getImageProperties(logoDataUrl3);
+        const ratio3 = Math.min(200 / props3.width, 62 / props3.height);
+        const lw3 = props3.width * ratio3, lh3 = props3.height * ratio3;
+        doc.addImage(logoDataUrl3, "PNG", (PW-lw3)/2, y, lw3, lh3);
+      } catch(e){}
       y+=72;
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
       doc.text(CS_NAME+" · "+CS_PHONE, PW/2, y, {align:"center"}); y+=14;
@@ -5815,7 +5830,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = companySettings?.phone || "";
   const CS_EMAIL = companySettings?.email || "";
-  const CS_LOGO = companySettings?.logoB64 || LOGO_B64;
+  const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
 
@@ -6379,7 +6394,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = companySettings?.phone || "";
   const CS_EMAIL = companySettings?.email || "";
-  const CS_LOGO = companySettings?.logoB64 || LOGO_B64;
+  const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
 
@@ -6557,14 +6572,22 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
 
       // ── PAGE 1 ────────────────────────────────────────────────────────────
 
-      // Logo
-      const logoH = 80, logoW = 260;
-      try { doc.addImage("data:image/png;base64," + CS_LOGO, "PNG", (PW-logoW)/2, y, logoW, logoH); } catch(e) {}
-      y += logoH + 8;
+      // Logo — fit within a bounding box, preserving aspect ratio (no stretch)
+      const logoBoxW = 260, logoBoxH = 80;
+      let logoW = logoBoxW, logoH = logoBoxH;
+      try {
+        const logoDataUrl = "data:image/png;base64," + CS_LOGO;
+        const props = doc.getImageProperties(logoDataUrl);
+        const ratio = Math.min(logoBoxW / props.width, logoBoxH / props.height);
+        logoW = props.width * ratio;
+        logoH = props.height * ratio;
+        doc.addImage(logoDataUrl, "PNG", (PW-logoW)/2, y, logoW, logoH);
+      } catch(e) {}
+      y += logoBoxH + 8;
 
       // company sub-line
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
-      doc.text(COMPANY + "  \u00b7  " + PHONE, PW/2, y, { align:"center" });
+      doc.text(CS_NAME + "  \u00b7  " + CS_PHONE, PW/2, y, { align:"center" });
       y += 16;
 
       // gold rule
@@ -7135,6 +7158,7 @@ function JoinCompanyView({ token, onSuccess }) {
     setError("");
     if (!companyName.trim()) { setError("Company name is required."); return; }
     if (!email.trim()) { setError("Email is required."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError("Enter a valid email address (e.g. name@company.com)."); return; }
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     setSaving(true);
