@@ -379,18 +379,8 @@ const DEFAULT_PERMISSIONS = {
 const ACCESS_RANK = { hidden: 0, view: 1, edit: 2 };
 
 function getAccessLevel(permissions, tabKey, role) {
-  // Normalize legacy "admin" → "owner" for both strings and arrays
-  const normalizeR = r => (r === "admin") ? "owner" : r;
-  if (Array.isArray(role)) {
-    role = role.map(normalizeR);
-  } else {
-    role = normalizeR(role);
-  }
-  // Fall back to DEFAULT_PERMISSIONS for tabs missing from the saved blob
   const tabPerms = permissions?.[tabKey] || DEFAULT_PERMISSIONS[tabKey];
-  // Lookup helper: try the role key, then legacy "admin" key, then default
-  const levelFor = (r) => tabPerms?.[r] || tabPerms?.["admin"] || DEFAULT_PERMISSIONS[tabKey]?.[r] || "hidden";
-  // Multi-role: blended (most permissive)
+  const levelFor = (r) => tabPerms?.[r] || DEFAULT_PERMISSIONS[tabKey]?.[r] || "hidden";
   if (Array.isArray(role)) {
     let best = "hidden";
     role.forEach(r => {
@@ -406,13 +396,10 @@ function getAccessLevel(permissions, tabKey, role) {
 // Use this instead of `userRole === "x"` anywhere blended multi-role behavior
 // matters — string equality silently breaks the moment someone has 2 roles.
 function hasRole(userRoleOrRoles, role) {
-  // Normalize legacy "admin" to "owner" for both sides of comparison
-  const normalizeRole = r => r === "admin" ? "owner" : r;
-  role = normalizeRole(role);
   return Array.isArray(userRoleOrRoles) ? userRoleOrRoles.includes(role) : userRoleOrRoles === role;
 }
 
-function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant }) {
+function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant, isPlatformAdmin }) {
   const currentTenant = (myTenants||[]).find(t => t.tenantId === currentTenantId);
   const currentLogo = currentTenant?.data?.logoUrl || ("data:image/png;base64," + LOGO_B64);
   const currentCompanyAlt = currentTenant?.companyName || "Company logo";
@@ -452,7 +439,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
               <span>{t.label}</span>
             </button>
           ))}
-          {(userRole === "owner" || userRole === "admin" || (userRoles||[]).some(r => r==="owner"||r==="admin")) && (
+          {(userRole === "owner" || (userRoles||[]).includes("owner")) && (
             <>
               <div style={S.sidebarDivider}/>
               <button onClick={() => setView("owner-hub")}
@@ -494,14 +481,25 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
             <span style={S.navTabLabel}>{t.label}</span>
           </button>
         ))}
-        {(userRole === "owner" || userRole === "admin" || (userRoles||[]).some(r => r==="owner"||r==="admin")) && (
+        {(userRole === "owner" || (userRoles||[]).includes("owner")) && (
           <>
             <div style={S.navDivider}/>
             <button onClick={() => setView("owner-hub")}
               data-active={adminActive?"true":"false"}
               style={{...S.navTab, color: adminActive ? C.accent : C.textMuted, borderBottomColor: adminActive ? C.accent : "transparent"}}>
               <span style={S.navTabIcon}><TabIcon tabKey="owner" iconStyle={iconStyle} size={16}/></span>
-              <span style={S.navTabLabel}>Admin</span>
+              <span style={S.navTabLabel}>Owner Hub</span>
+            </button>
+          </>
+        )}
+        {isPlatformAdmin && (
+          <>
+            <div style={S.navDivider}/>
+            <button onClick={() => setView("platform-admin")}
+              data-active={view==="platform-admin"?"true":"false"}
+              style={{...S.navTab, color: view==="platform-admin" ? C.accent : C.textMuted, borderBottomColor: view==="platform-admin" ? C.accent : "transparent"}}>
+              <span style={S.navTabIcon}><TabIcon tabKey="owner" iconStyle={iconStyle} size={16}/></span>
+              <span style={S.navTabLabel}>🌐 Platform</span>
             </button>
           </>
         )}
@@ -5191,69 +5189,11 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
 // ─── Team View (owner/manager only) ────────────────────────────────────────────────────
 // ─── Permissions View (read-only for owner) ─────────────────────────────────────────────
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
-function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, accessToken, isPlatformAdmin, companySettings={}, syncCompanySettings }) {
-  const [invites,      setInvites]      = useState([]);
-  const [generating,   setGenerating]   = useState(false);
-  const [inviteError,  setInviteError]  = useState("");
-  const [copiedToken,  setCopiedToken]  = useState(null);
-
-  useEffect(() => {
-    if (!isPlatformAdmin) return;
-    (async () => {
-      try {
-        const res = await sbFetch("tenant_invites?select=token,used_at,created_by&order=token.desc", {}, accessToken);
-        const data = await res.json();
-        if (Array.isArray(data)) setInvites(data);
-      } catch(e) { console.error("load tenant_invites error:", e); }
-    })();
-  }, [isPlatformAdmin]);
-
-  const generateInvite = async () => {
-    setGenerating(true); setInviteError("");
-    try {
-      const res = await fetch("/api/create-tenant-invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create invite.");
-      setInvites(prev => [{ token: data.token, used_at: null }, ...prev]);
-    } catch(e) {
-      setInviteError(e.message);
-    }
-    setGenerating(false);
-  };
-
-  const copyLink = (token) => {
-    const url = window.location.origin + "/?join=" + token;
-    const markCopied = () => { setCopiedToken(token); setTimeout(() => setCopiedToken(null), 2000); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(markCopied).catch(() => fallbackCopy(url, markCopied));
-    } else {
-      fallbackCopy(url, markCopied);
-    }
-  };
-  // Older/restricted browser contexts don't expose navigator.clipboard at
-  // all (e.g. non-HTTPS, some in-app webviews) — this covers that case
-  // instead of the button just silently doing nothing.
-  const fallbackCopy = (text, onDone) => {
-    try {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.focus(); ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      onDone();
-    } catch(e) { /* the visible link field below is the real fallback for this */ }
-  };
-
-
+// ─── Owner Hub — company owner's settings (no platform-level features) ─────
+function OwnerHubView({ setView, iconStyle, syncIconStyle }) {
   const cards = [
     { key:"company-settings", icon:"🏢", title:"Company Settings", desc:"Update your company name, contact info, logo, and legal terms." },
-    { key:"permissions", icon:"🔐", title:"Permissions", desc:"View what each role can see. Contact BlacktopIQ admin to change." },
+    { key:"permissions", icon:"🔐", title:"Permissions", desc:"View what each role can see. Contact BlacktopIQ support to change." },
     { key:"homebase",    icon:"🏠", title:"Home Base", desc:"The start/end address used for route optimization on the Zones tab." },
     { key:"export",      icon:"📦", title:"Data Export", desc:"Download full CSV exports of jobs, costs, and labor." },
     { key:"referral",    icon:"🔗", title:"Referral Link", desc:"Share your unique link and earn rewards when contractors sign up." },
@@ -5292,11 +5232,89 @@ function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, access
         </div>
       </section>
 
-      {isPlatformAdmin && (
+      {cards.map(c => (
+        <button key={c.key} onClick={() => openCard(c.key)}
+          style={{...S.section, display:"flex", alignItems:"center", gap:14, width:"100%", textAlign:"left", cursor:"pointer"}}>
+          <div style={{fontSize:28, flexShrink:0}}>{c.icon}</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700, fontSize:15, marginBottom:3}}>{c.title}</div>
+            <div style={{fontSize:12, color:C.textMuted}}>{c.desc}</div>
+          </div>
+          <div style={{color:C.textMuted, fontSize:18}}>›</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Platform Admin — BlacktopIQ operator only, fully separate from any company's UI ───
+function PlatformAdminView({ setView, accessToken }) {
+  const [invites,      setInvites]      = useState([]);
+  const [generating,   setGenerating]   = useState(false);
+  const [inviteError,  setInviteError]  = useState("");
+  const [copiedToken,  setCopiedToken]  = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await sbFetch("tenant_invites?select=token,used_at,created_by&order=token.desc", {}, accessToken);
+        const data = await res.json();
+        if (Array.isArray(data)) setInvites(data);
+      } catch(e) { console.error("load tenant_invites error:", e); }
+    })();
+  }, []);
+
+  const generateInvite = async () => {
+    setGenerating(true); setInviteError("");
+    try {
+      const res = await fetch("/api/create-tenant-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create invite.");
+      setInvites(prev => [{ token: data.token, used_at: null }, ...prev]);
+    } catch(e) {
+      setInviteError(e.message);
+    }
+    setGenerating(false);
+  };
+
+  const copyLink = (token) => {
+    const url = window.location.origin + "/?join=" + token;
+    const markCopied = () => { setCopiedToken(token); setTimeout(() => setCopiedToken(null), 2000); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(markCopied).catch(() => fallbackCopy(url, markCopied));
+    } else {
+      fallbackCopy(url, markCopied);
+    }
+  };
+  const fallbackCopy = (text, onDone) => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      onDone();
+    } catch(e) { /* the visible link field below is the real fallback for this */ }
+  };
+
+  return (
+    <div className="tps-page" style={S.page}>
+      <div style={S.pageHeader}>
+        <h1 style={S.h1}>🌐 Platform Admin</h1>
+        <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Exit</button>
+      </div>
+      <p style={S.subhead}>BlacktopIQ operator tools — not visible to any company's owner.</p>
+
       <section style={S.section}>
-        <h2 style={S.h2}>🌐 New Company Invites</h2>
+        <h2 style={S.h2}>New Company Invites</h2>
         <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
-          Platform-level — generates a link that creates a brand-new company on BlacktopIQ, not a teammate inside this one. AsphaltIQ staff only.
+          Generates a link that creates a brand-new company on BlacktopIQ and signs up its first owner.
         </p>
         <button style={{...S.btnPrimary, opacity:generating?0.6:1}} disabled={generating} onClick={generateInvite}>
           {generating ? "Generating..." : "+ Generate Invite Link"}
@@ -5330,22 +5348,10 @@ function AdminHubView({ setView, setCurrentJob, iconStyle, syncIconStyle, access
           </div>
         )}
       </section>
-      )}
-
-      {cards.map(c => (
-        <button key={c.key} onClick={() => openCard(c.key)}
-          style={{...S.section, display:"flex", alignItems:"center", gap:14, width:"100%", textAlign:"left", cursor:"pointer"}}>
-          <div style={{fontSize:28, flexShrink:0}}>{c.icon}</div>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700, fontSize:15, marginBottom:3}}>{c.title}</div>
-            <div style={{fontSize:12, color:C.textMuted}}>{c.desc}</div>
-          </div>
-          <div style={{color:C.textMuted, fontSize:18}}>›</div>
-        </button>
-      ))}
     </div>
   );
 }
+
 
 // ─── Permissions View (read-only for owner) ─────────────────────────────────────────────
 function PermissionsView({ permissions, setPermissions, syncPermissions, setView, readOnly=false }) {
@@ -7820,12 +7826,11 @@ export default function App() {
       const data = await res.json();
       if (Array.isArray(data) && data[0]) {
         const profile = data[0];
-        if (profile.role) setUserRole(profile.role === "admin" ? "owner" : profile.role);
-        const rawRoles = Array.isArray(profile.roles) && profile.roles.length ? profile.roles : (profile.role ? [profile.role] : ["crew"]);
-        setUserRoles(rawRoles.map(r => r === "admin" ? "owner" : r));
-        // Admins get their own (future) company setup flow — only gate
+        if (profile.role) setUserRole(profile.role);
+        setUserRoles(Array.isArray(profile.roles) && profile.roles.length ? profile.roles : (profile.role ? [profile.role] : ["crew"]));
+        // Owners get their own company setup flow — only gate
         // estimator/crew/crewlead/manager on the basic profile wizard.
-        const isOwner = profile.role === "owner" || profile.role === "admin";
+        const isOwner = profile.role === "owner";
         const missingRequired = !profile.first_name?.trim() || !profile.last_name?.trim() || !profile.phone?.trim();
         setProfileNeedsSetup(!isOwner && missingRequired);
       }
@@ -7922,17 +7927,14 @@ export default function App() {
   // If the active view isn't allowed for this role, fall back to jobs.
   // "export", "permissions", "team" stay admin-only regardless of the configurable matrix.
   useEffect(() => {
-    // isOwnerLevel: true if userRole OR any entry in userRoles is "owner" or "admin"
-    const ownerOrAdmin = r => r === "owner" || r === "admin";
-    const isOwnerLevel = ownerOrAdmin(userRole) || (userRoles||[]).some(ownerOrAdmin);
-    const isManagerLevel = isOwnerLevel || userRole === "manager" || (userRoles||[]).includes("manager");
+    const isOwner = userRole === "owner" || (userRoles||[]).includes("owner");
+    const isManager = isOwner || userRole === "manager" || (userRoles||[]).includes("manager");
     const alwaysOwnerOnly = ["export","permissions","owner-hub","homebase","company-settings","referral"];
-    if (alwaysOwnerOnly.includes(view) && !isOwnerLevel) { setViewRaw("jobs"); return; }
-    if (view === "team" && !isManagerLevel) { setViewRaw("jobs"); return; }
+    if (alwaysOwnerOnly.includes(view) && !isOwner) { setViewRaw("jobs"); return; }
+    if (view === "team" && !isManager) { setViewRaw("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
-      const effRole = isOwnerLevel ? "owner" : userRole;
-      const level = getAccessLevel(permissions, view, effRole);
-      if (level === "hidden" && !isOwnerLevel) setViewRaw("jobs");
+      const level = getAccessLevel(permissions, view, userRoles||userRole);
+      if (level === "hidden" && !isOwner) setViewRaw("jobs");
     }
   }, [userRole, userRoles, view, permissions]);
 
@@ -8468,7 +8470,7 @@ export default function App() {
   // NOT trigger it. That distinction matters: falsy-but-absent should mean
   // "this predates the wizard, leave it alone," not "show the wizard."
   const currentTenant = myTenants.find(t => t.tenantId === currentTenantId);
-  if ((userRole === "owner" || userRole === "admin") && currentTenant && currentTenant.data?.setupComplete === false) {
+  if (userRole === "owner" && currentTenant && currentTenant.data?.setupComplete === false) {
     return (
       <CompanySetupWizard
         tenant={currentTenant}
@@ -8493,11 +8495,9 @@ export default function App() {
     </div>
   );
 
-  const effectiveRole = (userRole === "admin") ? "owner" : userRole;
-
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
-      <TopNav view={view} setView={navigateTo} userRole={effectiveRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant}/>
+      <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant} isPlatformAdmin={isPlatformAdmin}/>
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {syncStatus && (
           <div style={{
@@ -8536,14 +8536,15 @@ export default function App() {
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
-        {view==="homebase" && effectiveRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
-        {view==="company-settings" && effectiveRole==="owner" && <CompanySettingsView setView={navigateTo} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
-        {view==="referral" && effectiveRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
-        {view==="team"     && (effectiveRole==="owner"||effectiveRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId}/>}
-        {view==="owner-hub"    && effectiveRole==="owner" && <AdminHubView setView={navigateTo} setCurrentJob={setCurrentJob} iconStyle={iconStyle} syncIconStyle={syncIconStyle} accessToken={session?.access_token} isPlatformAdmin={isPlatformAdmin} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
-        {view==="permissions" && effectiveRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
+        {view==="homebase" && userRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
+        {view==="company-settings" && userRole==="owner" && <CompanySettingsView setView={navigateTo} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
+        {view==="referral" && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
+        {view==="team"     && (userRole==="owner"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId}/>}
+        {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
+        {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token}/>}
+        {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout}/>}
-        {view==="export"   && effectiveRole==="owner" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo} companySettings={companySettings}/>}
+        {view==="export"   && userRole==="owner" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo} companySettings={companySettings}/>}
         </div>
       </div>
     </div>
