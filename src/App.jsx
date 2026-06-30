@@ -8551,7 +8551,8 @@ export default function App() {
           // already reviewed, sent, or the client already signed off on.
           (hasRole(userRoles||[userRole], "estimator") && !(hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager")) &&
             (currentJob?.readyForReview || !["estimate","draft"].includes(currentJob?.status)))
-        }/>}
+        }
+          companySettings={companySettings}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
