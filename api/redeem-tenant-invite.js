@@ -88,11 +88,13 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Account and company created, but failed to link them: " + errText });
     }
 
-    // 6. Mark invite as used
+    // 6. Mark invite as used AND record which tenant it created — this is
+    // what lets Platform Admin show "this link created this company"
+    // instead of invites and companies being two disconnected lists.
     await fetch(SUPABASE_URL + "/rest/v1/tenant_invites?token=eq." + token, {
       method: "PATCH",
       headers: sbHeaders,
-      body: JSON.stringify({ used_at: new Date().toISOString() }),
+      body: JSON.stringify({ used_at: new Date().toISOString(), tenant_id: tenantId }),
     });
 
     return res.status(200).json({ success: true, userId, tenantId, email: email.trim() });

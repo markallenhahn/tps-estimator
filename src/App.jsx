@@ -5343,9 +5343,21 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
           }
         }
 
+        // Which invite link (if any) created each tenant — only invites
+        // redeemed after the tenant_id link was added will have this.
+        let inviteByTenant = {};
+        try {
+          const iRes = await sbFetch("tenant_invites?tenant_id=not.is.null&select=token,used_at,tenant_id", {}, accessToken);
+          const iData = await iRes.json();
+          if (Array.isArray(iData)) {
+            iData.forEach(inv => { inviteByTenant[inv.tenant_id] = inv; });
+          }
+        } catch(e) { /* tenant_id column may not exist yet on older deployments — skip silently */ }
+
         const merged = tenantsData.map(t => {
           const ownerId = ownerByTenant[t.id];
           const owner = ownerId ? profilesById[ownerId] : null;
+          const invite = inviteByTenant[t.id];
           return {
             id: t.id,
             companyName: t.data?.companyName || "(unnamed)",
@@ -5355,6 +5367,8 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
             createdAt: t.created_at || null,
             ownerName: owner ? [owner.first_name, owner.last_name].filter(Boolean).join(" ") || null : null,
             ownerEmail: owner?.email || null,
+            inviteToken: invite?.token || null,
+            inviteUsedAt: invite?.used_at || null,
           };
         });
         setCompanies(merged);
@@ -5427,28 +5441,22 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
           {generating ? "Generating..." : "+ Generate Invite Link"}
         </button>
         {inviteError && <p style={{fontSize:12, color:C.danger, marginTop:8}}>{inviteError}</p>}
-        {invites.length > 0 && (
+        {invites.filter(inv => !inv.used_at).length > 0 && (
           <div style={{marginTop:14}}>
-            {invites.map(inv => {
+            {invites.filter(inv => !inv.used_at).map(inv => {
               const fullUrl = window.location.origin + "/?join=" + inv.token;
               return (
               <div key={inv.token} style={{padding:"8px 10px", background:C.surface2, borderRadius:8, marginBottom:6}}>
-                {inv.used_at ? (
-                  <div style={{fontSize:12, color:C.textDim}}>✓ Used — {inv.token}</div>
-                ) : (
-                  <>
-                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:10}}>
-                      <input readOnly value={fullUrl} onFocus={e => e.target.select()}
-                        style={{flex:1, fontSize:12, color:C.text, background:C.surface, border:`1px solid ${C.border}`, borderRadius:6, padding:"6px 8px"}}/>
-                      <button style={S.btnSmall} onClick={() => copyLink(inv.token)}>
-                        {copiedToken===inv.token ? "Copied!" : "Copy Link"}
-                      </button>
-                    </div>
-                    <p style={{fontSize:11, color:C.textDim, margin:"6px 0 0"}}>
-                      If "Copy Link" doesn't seem to do anything, tap the link above to select it, then copy manually.
-                    </p>
-                  </>
-                )}
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:10}}>
+                  <input readOnly value={fullUrl} onFocus={e => e.target.select()}
+                    style={{flex:1, fontSize:12, color:C.text, background:C.surface, border:`1px solid ${C.border}`, borderRadius:6, padding:"6px 8px"}}/>
+                  <button style={S.btnSmall} onClick={() => copyLink(inv.token)}>
+                    {copiedToken===inv.token ? "Copied!" : "Copy Link"}
+                  </button>
+                </div>
+                <p style={{fontSize:11, color:C.textDim, margin:"6px 0 0"}}>
+                  If "Copy Link" doesn't seem to do anything, tap the link above to select it, then copy manually.
+                </p>
               </div>
               );
             })}
@@ -5496,6 +5504,11 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                 Plan: {c.subscriptionTier ? c.subscriptionTier : "No plan selected"}
                 {c.subscriptionStatus ? ` · ${c.subscriptionStatus}` : ""}
               </div>
+              {c.inviteUsedAt && (
+                <div style={{fontSize:11, color:C.textDim, marginTop:2}}>
+                  ✓ Created via invite link · used {new Date(c.inviteUsedAt).toLocaleDateString()}
+                </div>
+              )}
             </div>
           );
         })}
