@@ -1696,10 +1696,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
         const closingLines = [
           "Please make checks payable to \"" + CS_NAME + "\".",
           "",
-          "Thank you for your business. We welcome your feedback and would love to hear from you.",
-          "Thank you for your business!,"
-          "",
-          "Also, we would greatly appreciate your review on Google as it helps our business reach other customers!",
+          "Thank you for your business!",
         ];
         doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
         closingLines.forEach(line => {
