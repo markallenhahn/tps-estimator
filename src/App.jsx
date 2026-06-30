@@ -7821,7 +7821,8 @@ export default function App() {
       if (Array.isArray(data) && data[0]) {
         const profile = data[0];
         if (profile.role) setUserRole(profile.role === "admin" ? "owner" : profile.role);
-        setUserRoles(Array.isArray(profile.roles) && profile.roles.length ? profile.roles : (profile.role ? [profile.role] : ["crew"]));
+        const rawRoles = Array.isArray(profile.roles) && profile.roles.length ? profile.roles : (profile.role ? [profile.role] : ["crew"]);
+        setUserRoles(rawRoles.map(r => r === "admin" ? "owner" : r));
         // Admins get their own (future) company setup flow — only gate
         // estimator/crew/crewlead/manager on the basic profile wizard.
         const isOwner = profile.role === "owner" || profile.role === "admin";
@@ -8493,7 +8494,7 @@ export default function App() {
 
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
-      <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant}/>
+      <TopNav view={view} setView={navigateTo} userRole={effectiveRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant}/>
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {syncStatus && (
           <div style={{
