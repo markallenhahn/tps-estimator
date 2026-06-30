@@ -7922,16 +7922,19 @@ export default function App() {
   // If the active view isn't allowed for this role, fall back to jobs.
   // "export", "permissions", "team" stay admin-only regardless of the configurable matrix.
   useEffect(() => {
-    // Normalize legacy "admin" DB value to "owner" for all guard checks
-    const effRole = (userRole === "admin") ? "owner" : userRole;
+    // isOwnerLevel: true if userRole OR any entry in userRoles is "owner" or "admin"
+    const ownerOrAdmin = r => r === "owner" || r === "admin";
+    const isOwnerLevel = ownerOrAdmin(userRole) || (userRoles||[]).some(ownerOrAdmin);
+    const isManagerLevel = isOwnerLevel || userRole === "manager" || (userRoles||[]).includes("manager");
     const alwaysOwnerOnly = ["export","permissions","owner-hub","homebase","company-settings","referral"];
-    if (alwaysOwnerOnly.includes(view) && effRole !== "owner") { setViewRaw("jobs"); return; }
-    if (view === "team" && effRole !== "owner" && effRole !== "manager") { setViewRaw("jobs"); return; }
+    if (alwaysOwnerOnly.includes(view) && !isOwnerLevel) { setViewRaw("jobs"); return; }
+    if (view === "team" && !isManagerLevel) { setViewRaw("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
+      const effRole = isOwnerLevel ? "owner" : userRole;
       const level = getAccessLevel(permissions, view, effRole);
-      if (level === "hidden" && effRole !== "owner") setViewRaw("jobs");
+      if (level === "hidden" && !isOwnerLevel) setViewRaw("jobs");
     }
-  }, [userRole, view, permissions]);
+  }, [userRole, userRoles, view, permissions]);
 
   const handleLogout = () => {
     clearSession();
