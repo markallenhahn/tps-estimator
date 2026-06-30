@@ -8418,7 +8418,14 @@ export default function App() {
   // ── Upsert a single job ──
   const lastZonedAddressRef = useRef({});
 
-  const syncJob = async (job) => {
+  const syncJob = async (job, isRetry=false) => {
+    // Don't attempt a sync until we actually know which tenant this is —
+    // firing early would either silently write with no tenant_id (if
+    // tFetch falls through to unscoped sbFetch) or just fail outright.
+    if (!currentTenantId) {
+      setTimeout(() => syncJob(job, isRetry), 300);
+      return;
+    }
     setSyncStatus("Saving...");
     try {
       const res = await tFetch("jobs", {
@@ -8438,7 +8445,13 @@ export default function App() {
       }
     } catch(e) {
       console.error("syncJob error:", e);
-      setSyncStatus("⚠️ Save failed");
+      if (!isRetry) {
+        // One automatic retry after a short delay — covers transient
+        // network blips and the tenant-not-yet-resolved race above.
+        setTimeout(() => syncJob(job, true), 1000);
+      } else {
+        setSyncStatus("⚠️ Save failed");
+      }
     }
   };
 
