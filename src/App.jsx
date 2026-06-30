@@ -5312,8 +5312,18 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
     (async () => {
       setCompaniesLoading(true); setCompaniesError("");
       try {
-        const tRes = await sbFetch("tenants?select=id,data,created_at&order=created_at.desc", {}, accessToken);
-        const tenantsData = await tRes.json();
+        let tenantsData;
+        try {
+          const tRes = await sbFetch("tenants?select=id,data,created_at&order=created_at.desc", {}, accessToken);
+          if (!tRes.ok) throw new Error(await tRes.text());
+          tenantsData = await tRes.json();
+        } catch(e) {
+          // created_at may not exist on this table — retry without it rather
+          // than failing the whole roster over a missing column.
+          const tRes2 = await sbFetch("tenants?select=id,data", {}, accessToken);
+          if (!tRes2.ok) throw new Error(await tRes2.text());
+          tenantsData = await tRes2.json();
+        }
         if (!Array.isArray(tenantsData)) throw new Error("Failed to load companies.");
 
         const tuRes = await sbFetch("tenant_users?role=eq.owner&status=eq.active&select=tenant_id,user_id", {}, accessToken);
