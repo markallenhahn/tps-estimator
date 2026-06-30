@@ -7538,7 +7538,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
         await tFetch("homebase?on_conflict=tenant_id", {
           method: "POST",
           headers: { "Prefer": "resolution=merge-duplicates" },
-          body: JSON.stringify({ id: 1, data: { address: fullAddr, street: address.trim(), city: addrCity.trim(), state: addrState.trim(), zip: addrZip.trim(), lat: geo?.lat || null, lng: geo?.lng || null } }),
+          body: JSON.stringify({ data: { address: fullAddr, street: address.trim(), city: addrCity.trim(), state: addrState.trim(), zip: addrZip.trim(), lat: geo?.lat || null, lng: geo?.lng || null } }),
         });
       }
 
@@ -7550,7 +7550,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
       await tFetch("rates?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: 1, data: ratesData }),
+        body: JSON.stringify({ data: ratesData }),
       });
 
       // 4. Company Settings — this is what EstimateView/InvoiceView/PDFs
@@ -7569,7 +7569,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete }) {
       await tFetch("company_settings?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: 1, data: csData }),
+        body: JSON.stringify({ data: csData }),
       });
 
       onComplete(updatedTenantData, csData);
@@ -8061,7 +8061,7 @@ export default function App() {
         const jd = await jr.json();
         if (Array.isArray(jd)) setJobs(jd.map(row => ({...row.data, id: row.id})));
 
-        const rr = await tFetch("rates?select=data&limit=1");
+        const rr = await tFetch("rates?select=data&order=id.desc&limit=1");
         const rd = await rr.json();
         if (Array.isArray(rd) && rd.length > 0) setRates(rd[0].data);
 
@@ -8087,12 +8087,12 @@ export default function App() {
         const cd = await cr.json();
         if (Array.isArray(cd)) setCrews(cd.map(row => ({...row.data, id: row.id})));
 
-        const hr = await tFetch("homebase?select=data&limit=1");
+        const hr = await tFetch("homebase?select=data&order=id.desc&limit=1");
         const hd = await hr.json();
         if (Array.isArray(hd) && hd.length > 0) setHomeBase(hd[0].data);
 
         try {
-          const csr = await tFetch("company_settings?select=data&limit=1");
+          const csr = await tFetch("company_settings?select=data&order=id.desc&limit=1");
           const csd = await csr.json();
           if (Array.isArray(csd) && csd.length > 0 && csd[0].data && csd[0].data.name) {
             setCompanySettings(prev => ({...prev, ...csd[0].data}));
@@ -8100,7 +8100,7 @@ export default function App() {
           }
         } catch(e) { console.error("load company_settings error:", e); }
 
-        const sr = await tFetch("appsettings?select=data&limit=1");
+        const sr = await tFetch("appsettings?select=data&order=id.desc&limit=1");
         const sd = await sr.json();
         if (Array.isArray(sd) && sd.length > 0 && sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
 
@@ -8108,7 +8108,7 @@ export default function App() {
         const md = await mr.json();
         if (Array.isArray(md)) setMaterials(md.map(row => ({...row.data, id: row.id})));
 
-        const msr = await tFetch("materialsettings?select=data&limit=1");
+        const msr = await tFetch("materialsettings?select=data&order=id.desc&limit=1");
         const msd = await msr.json();
         if (Array.isArray(msd) && msd.length > 0) setMaterialSettings(msd[0].data);
 
@@ -8174,7 +8174,7 @@ export default function App() {
       await tFetch("zones?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: 1, data: zonesData }),
+        body: JSON.stringify({ data: zonesData }),
       });
     } catch(e) { console.error("syncZones error:", e); }
   };
@@ -8195,7 +8195,7 @@ export default function App() {
       await tFetch("homebase?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: 1, data: homeBaseData }),
+        body: JSON.stringify({ data: homeBaseData }),
       });
     } catch(e) { console.error("syncHomeBase error:", e); }
   };
@@ -8206,7 +8206,7 @@ export default function App() {
       await tFetch("company_settings?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ id: 1, data: csData }),
+        body: JSON.stringify({ data: csData }),
       });
     } catch(e) { console.error("syncCompanySettings error:", e); }
   };
@@ -8217,7 +8217,7 @@ export default function App() {
       await tFetch("appsettings?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: 1, data: { iconStyle: style } }),
+        body: JSON.stringify({ data: { iconStyle: style } }),
       });
     } catch(e) { console.error("syncIconStyle error:", e); }
   };
@@ -8336,7 +8336,7 @@ export default function App() {
       await tFetch("materialsettings?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: 1, data: settingsData }),
+        body: JSON.stringify({ data: settingsData }),
       });
     } catch(e) { console.error("syncMaterialSettings error:", e); }
   };
@@ -8442,7 +8442,7 @@ export default function App() {
       const res = await tFetch("rates?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: 1, data: r }),
+        body: JSON.stringify({ data: r }),
       });
       if (!res.ok) throw new Error(await res.text());
       setSyncStatus("✓ Saved");
