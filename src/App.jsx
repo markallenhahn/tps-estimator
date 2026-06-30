@@ -445,9 +445,16 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
               <button onClick={() => setView("owner-hub")}
                 style={{...S.sidebarTab,...(adminActive?S.sidebarTabActive:{})}}>
                 <TabIcon tabKey="owner" iconStyle={iconStyle} size={18}/>
-                <span>Admin</span>
+                <span>Owner Hub</span>
               </button>
             </>
+          )}
+          {isPlatformAdmin && (
+            <button onClick={() => setView("platform-admin")}
+              style={{...S.sidebarTab,...(view==="platform-admin"?S.sidebarTabActive:{})}}>
+              <TabIcon tabKey="owner" iconStyle={iconStyle} size={18}/>
+              <span>🌐 Platform Admin</span>
+            </button>
           )}
           <div style={S.sidebarDivider}/>
           <button onClick={() => setView("account")}
