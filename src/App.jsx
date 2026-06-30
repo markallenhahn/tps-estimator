@@ -363,11 +363,11 @@ const DEFAULT_PERMISSIONS = {
 };
 
 function getAccessLevel(permissions, tabKey, role) {
-  // Fall back to the built-in default for this specific tab if it's missing
-  // from the saved permissions object (e.g. an older saved permissions blob
-  // that predates a newly added tab) — not just when the whole object is null.
+  // Normalize: treat "owner" and legacy "admin" as the same role
+  const normalizedRole = role === "admin" ? "owner" : role;
   const tabPerms = permissions?.[tabKey] || DEFAULT_PERMISSIONS[tabKey];
-  return tabPerms?.[role] || "hidden";
+  // If no entry for "owner", try legacy "admin" key (for old saved permissions blobs)
+  return tabPerms?.[normalizedRole] || tabPerms?.["admin"] || DEFAULT_PERMISSIONS[tabKey]?.[normalizedRole] || "hidden";
 }
 
 function TopNav({ view, setView, userRole, permissions, onLogout, iconStyle }) {
