@@ -1152,14 +1152,14 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
         </label>
       </section>
 
-      {/* ── TPS SIGNATURE ── */}
+      {/* ── COMPANY SIGNATURE ── */}
       <section style={S.section}>
-        <h2 style={S.h2}>TPS Representative Signature</h2>
+        <h2 style={S.h2}>{CS_NAME || "Company"} Representative Signature</h2>
         {currentJob.signature ? (
           <div style={S.signedBanner}>
             <div style={S.signedBannerTitle}>✅ Signature Saved</div>
             <div style={S.signedBannerSub}>Appears on estimate PDF</div>
-            <img src={currentJob.signature} alt="TPS Signature"
+            <img src={currentJob.signature} alt="Company Signature"
               style={{display:"block", maxWidth:260, marginTop:10, borderRadius:6, border:`1px solid ${C.border}`}}/>
             <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={clearSig}>
               🗑 Remove Signature
@@ -1482,6 +1482,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
   const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
+  const CS_GOOGLE_REVIEW_URL = companySettings?.googleReviewUrl || "";
 
   const [invoiceType, setInvoiceType] = useState("due");
   const [pdfLoading,  setPdfLoading]  = useState(false);
@@ -1887,14 +1888,14 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
 
-        {/* Google Review — only on paid invoices */}
-        {isPaid && (
+        {/* Google Review — only on paid invoices, and only if a review link is configured */}
+        {isPaid && CS_GOOGLE_REVIEW_URL && (
           <div style={{marginTop:16, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
             <div style={{fontSize:13, fontWeight:600, marginBottom:8}}>⭐ Request Google Review</div>
             <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
               {currentJob.clientPhone && (
                 <a href={`sms:${currentJob.clientPhone.replace(/\D/g,"")}?body=${encodeURIComponent(
-                  `${currentJob.clientName || "Hi"}, Thank you for choosing TPS Asphalt Maintenance. We would love your feedback and would welcome a review on our Google profile. Regards, TPS Asphalt Maintenance. https://g.page/r/CbwYxYTHq4UyEBM/review`
+                  `${currentJob.clientName || "Hi"}, Thank you for choosing ${CS_NAME || "us"}. We would love your feedback and would welcome a review on our Google profile. Regards, ${CS_NAME || "us"}. ${CS_GOOGLE_REVIEW_URL}`
                 )}`}
                   style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}>
                   💬 Text Review Request
@@ -1902,7 +1903,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
               )}
               {currentJob.clientEmail && (
                 <a href={`mailto:${currentJob.clientEmail}?subject=${encodeURIComponent("We'd love your feedback!")}&body=${encodeURIComponent(
-                  `${currentJob.clientName || "Hi"},\n\nThank you for choosing TPS Asphalt Maintenance. We would love your feedback and would welcome a review on our Google profile.\n\nRegards,\nTPS Asphalt Maintenance\n\nhttps://g.page/r/CbwYxYTHq4UyEBM/review`
+                  `${currentJob.clientName || "Hi"},\n\nThank you for choosing ${CS_NAME || "us"}. We would love your feedback and would welcome a review on our Google profile.\n\nRegards,\n${CS_NAME || "us"}\n\n${CS_GOOGLE_REVIEW_URL}`
                 )}`}
                   style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}>
                   ✉️ Email Review Request
@@ -6117,7 +6118,7 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
   })();
   const dateKey = d => d.toISOString().slice(0,10);
   const jobsForDate = (dateStr) => visibleJobs.filter(j => {
-    if (!["scheduled","completed"].includes(j.status)) return false;
+    if (!["scheduled","completed","paid"].includes(j.status)) return false;
     const days = (j.scheduleDays||[]).filter(dd=>dd.date).map(dd=>dd.date);
     return days.length ? days.includes(dateStr) : j.scheduledDate === dateStr;
   });
@@ -6991,7 +6992,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
         <div style={{marginTop:8, fontSize:11, color:C.textMuted}}>
-          PDF includes your TPS logo, all line items, totals, and a client signature/acceptance block.
+          PDF includes your company logo, all line items, totals, and a client signature/acceptance block.
         </div>
       </section>
     </div>
@@ -7246,6 +7247,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
   const [logoName, setLogoName] = useState("");
   const [legalTerms,   setLegalTerms]   = useState(cs.legalTerms||"");
   const [depositTerms, setDepositTerms] = useState(cs.depositTerms||"A 25% deposit is required to schedule work. Balance due upon completion.");
+  const [googleReviewUrl, setGoogleReviewUrl] = useState(cs.googleReviewUrl||"");
   const [saving,  setSaving]  = useState(false);
   const [message, setMessage] = useState("");
 
@@ -7266,6 +7268,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       setZip(companySettings.zip || "");
       setLegalTerms(companySettings.legalTerms || "");
       setDepositTerms(companySettings.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.");
+      setGoogleReviewUrl(companySettings.googleReviewUrl || "");
       hydrated.current = true;
     }
   }, [companySettings]);
@@ -7285,6 +7288,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       name:name.trim(), phone:phone.trim(), email:email.trim(), website:website.trim(),
       street:street.trim(), city:city.trim(), state:state_.trim(), zip:zip.trim(),
       logoB64: logoB64||cs.logoB64||"", legalTerms:legalTerms.trim(), depositTerms:depositTerms.trim(),
+      googleReviewUrl: googleReviewUrl.trim(),
     };
     await syncCompanySettings(csData);
     setMessage("✅ Company settings saved.");
@@ -7306,6 +7310,10 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
           <label style={S.formLabel}>Estimate Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} style={S.input} autoCapitalize="none"/></label>
         </div>
         <label style={{...S.formLabel,marginTop:10}}>Website<input type="url" value={website} onChange={e=>setWebsite(e.target.value)} style={S.input}/></label>
+        <label style={{...S.formLabel,marginTop:10}}>Google Review Link
+          <span style={{fontSize:11, color:C.textDim, fontWeight:400}}> (optional — included in review request texts/emails to clients)</span>
+          <input type="url" value={googleReviewUrl} onChange={e=>setGoogleReviewUrl(e.target.value)} style={S.input} placeholder="https://g.page/r/.../review"/>
+        </label>
       </section>
       <section style={S.section}>
         <h2 style={S.h2}>Company Address</h2>
@@ -7807,7 +7815,7 @@ export default function App() {
   const [companySettings, setCompanySettings] = useState({
     name: "", phone: "", email: "", logoB64: "",
     legalTerms: "", depositTerms: "A 25% deposit is required to schedule work. Balance due upon completion.",
-    street: "", city: "", state: "", zip: "", website: "",
+    street: "", city: "", state: "", zip: "", website: "", googleReviewUrl: "",
   });
   const [iconStyle,     setIconStyle]    = useState("emoji"); // "emoji" | "lucide" — global, admin-set
   const [teamUsers,     setTeamUsers]    = useState([]);
