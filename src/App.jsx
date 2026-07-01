@@ -466,7 +466,7 @@ function hasRole(userRoleOrRoles, role) {
 
 function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant, isPlatformAdmin }) {
   const currentTenant = (myTenants||[]).find(t => t.tenantId === currentTenantId);
-  const currentLogo = currentTenant?.data?.logoUrl || ("data:image/png;base64," + LOGO_B64);
+  const currentLogo = currentTenant?.data?.logoUrl || ("data:image/png;base64," + BLACKTOPIQ_LOGO_B64);
   const currentCompanyAlt = currentTenant?.companyName || "Company logo";
 
   const tabsRef = useRef(null);
@@ -1697,20 +1697,20 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
 
       // Logo or company name fallback
       const logoBoxW2 = 260, logoBoxH2 = 80;
-      if (!companySettings?.logoB64) {
-        // No logo — render company name large
-        doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
-        doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
-      } else {
+      if (companySettings?.logoB64) {
         let logoW2 = logoBoxW2, logoH2 = logoBoxH2;
         try {
-          const logoDataUrl2 = "data:image/png;base64," + CS_LOGO;
+          const logoDataUrl2 = "data:image/png;base64," + companySettings.logoB64;
           const props2 = doc.getImageProperties(logoDataUrl2);
           const ratio2 = Math.min(logoBoxW2 / props2.width, logoBoxH2 / props2.height);
           logoW2 = props2.width * ratio2;
           logoH2 = props2.height * ratio2;
           doc.addImage(logoDataUrl2, "PNG", (PW-logoW2)/2, y, logoW2, logoH2);
         } catch(e){}
+      } else {
+        // No logo — render company name large
+        doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+        doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
       }
       y += logoBoxH2 + 8;
 
@@ -6862,36 +6862,23 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
 
       // Logo or company name fallback
       const logoBoxW = 260, logoBoxH = 80;
-      if (CS_LOGO && CS_LOGO !== BLACKTOPIQ_LOGO_B64) {
+      if (companySettings?.logoB64) {
         // Tenant has their own logo — render it
         let logoW = logoBoxW, logoH = logoBoxH;
         try {
-          const logoDataUrl = "data:image/png;base64," + CS_LOGO;
+          const logoDataUrl = "data:image/png;base64," + companySettings.logoB64;
           const props = doc.getImageProperties(logoDataUrl);
           const ratio = Math.min(logoBoxW / props.width, logoBoxH / props.height);
           logoW = props.width * ratio;
           logoH = props.height * ratio;
           doc.addImage(logoDataUrl, "PNG", (PW-logoW)/2, y, logoW, logoH);
         } catch(e) {}
-        y += logoBoxH + 8;
-      } else if (!companySettings?.logoB64) {
+      } else {
         // No logo uploaded — render company name large as header
         doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
         doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
-        y += logoBoxH + 8;
-      } else {
-        // BlacktopIQ default logo
-        let logoW = logoBoxW, logoH = logoBoxH;
-        try {
-          const logoDataUrl = "data:image/png;base64," + CS_LOGO;
-          const props = doc.getImageProperties(logoDataUrl);
-          const ratio = Math.min(logoBoxW / props.width, logoBoxH / props.height);
-          logoW = props.width * ratio;
-          logoH = props.height * ratio;
-          doc.addImage(logoDataUrl, "PNG", (PW-logoW)/2, y, logoW, logoH);
-        } catch(e) {}
-        y += logoBoxH + 8;
       }
+      y += logoBoxH + 8;
 
       // company sub-line
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
