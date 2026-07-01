@@ -1964,24 +1964,24 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
               const logoW2 = im.naturalWidth  * ratio2;
               const logoH2 = im.naturalHeight * ratio2;
               doc.addImage(im, "PNG", (PW - logoW2) / 2, y, logoW2, logoH2);
-              y += logoH2 + 10;
+              y += logoH2 + 20;
               res();
             };
             im.onerror = () => res(); // skip gracefully on bad image
             im.src = logoDataUrl2;
           });
-        } catch(e){ y += LOGO_MAX_H + 10; }
+        } catch(e){ y += LOGO_MAX_H + 20; }
       } else {
         // No logo — render company name large
         doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
         doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
-        y += LOGO_MAX_H + 10;
+        y += LOGO_MAX_H + 20;
       }
 
       // Company sub-line
-      doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+      doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
       doc.text(CS_NAME + "  \u00b7  " + CS_PHONE, PW/2, y, {align:"center"});
-      y += 16;
+      y += 20;
 
       // Gold rule
       doc.setDrawColor(...GOLD); doc.setLineWidth(2);
@@ -7144,24 +7144,24 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
               const logoW = im.naturalWidth  * ratio;
               const logoH = im.naturalHeight * ratio;
               doc.addImage(im, "PNG", (PW - logoW) / 2, y, logoW, logoH);
-              y += logoH + 10;
+              y += logoH + 20;
               res();
             };
             im.onerror = () => res();
             im.src = logoDataUrl;
           });
-        } catch(e){ y += LOGO_MAX_H + 10; }
+        } catch(e){ y += LOGO_MAX_H + 20; }
       } else {
         // No logo uploaded — render company name large as header
         doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
         doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
-        y += LOGO_MAX_H + 10;
+        y += LOGO_MAX_H + 20;
       }
 
       // company sub-line
-      doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+      doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
       doc.text(CS_NAME + "  \u00b7  " + CS_PHONE, PW/2, y, { align:"center" });
-      y += 16;
+      y += 20;
 
       // gold rule
       doc.setDrawColor(...GOLD); doc.setLineWidth(2);
