@@ -34,7 +34,7 @@ import Stripe from "stripe";
 
 const stripe        = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-const SUPABASE_URL  = process.env.SUPABASE_URL || "https://elzymtqlcceouftwhcdk.supabase.co";
+const SUPABASE_URL  = "https://elzymtqlcceouftwhcdk.supabase.co";
 
 export const config = { api: { bodyParser: false } };
 

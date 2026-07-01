@@ -3,7 +3,7 @@
 // from tenant.data.userCap (set by stripe-webhook.js) before sending the invite.
 // Accepts "owner" as the new primary role name, with "admin" as legacy fallback.
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://elzymtqlcceouftwhcdk.supabase.co";
+const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
 
 // Plan user caps — mirrors PLAN_USER_CAPS in App.jsx and stripe-webhook.js.
 // Used as fallback when tenant.data.userCap isn't set yet.
