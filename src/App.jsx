@@ -5718,9 +5718,16 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
                       headers:{"Content-Type":"application/json","Authorization":"Bearer "+accessToken},
                     });
                     const data = await res.json();
-                    if (data.url) window.location.href = data.url;
-                    else alert("Could not open billing portal: " + (data.error || "Unknown error"));
-                  } catch(e) { alert("Could not open billing portal."); }
+                    if (data.url) {
+                      window.location.href = data.url;
+                    } else if (res.status === 401) {
+                      alert("Your session has expired. Please sign out and sign back in, then try again.");
+                    } else if (res.status === 400 && data.error?.includes("No billing account")) {
+                      alert("Billing isn\'t set up yet for this account. Contact support@blacktopiq.com.");
+                    } else {
+                      alert(data.error || "Could not open billing portal. Try again or contact support.");
+                    }
+                  } catch(e) { alert("Could not reach billing portal. Check your connection and try again."); }
                 }}>
                 💳 Manage Subscription
               </button>
