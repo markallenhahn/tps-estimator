@@ -75,6 +75,58 @@ const C = {
   shadow:"0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
 };
 
+// ─── Brand color helpers ───────────────────────────────────────────────────────
+const DEFAULT_ACCENT = "#f0ab2e";
+const DEFAULT_HEADER = "#1a1a1a";
+
+// Convert hex color to [r,g,b] array for jsPDF
+const hexToRgb = (hex) => {
+  const h = hex.replace("#","");
+  const n = parseInt(h.length === 3
+    ? h.split("").map(c=>c+c).join("")
+    : h, 16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+};
+
+// Get brand colors from companySettings, falling back to TPS defaults
+const getBrand = (companySettings) => ({
+  accent:  companySettings?.accentColor  || DEFAULT_ACCENT,
+  header:  companySettings?.headerColor  || DEFAULT_HEADER,
+  accentRgb: hexToRgb(companySettings?.accentColor  || DEFAULT_ACCENT),
+  headerRgb: hexToRgb(companySettings?.headerColor  || DEFAULT_HEADER),
+});
+
+// Extract dominant colors from an image element using canvas pixel sampling
+const extractColorsFromImage = (imgEl, count = 5) => {
+  const size = 80;
+  const canvas = document.createElement("canvas");
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(imgEl, 0, 0, size, size);
+  const data = ctx.getImageData(0, 0, size, size).data;
+  // Bucket pixels into 32-level color cubes
+  const buckets = {};
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i+3];
+    if (a < 128) continue; // skip transparent
+    const r = Math.round(data[i]   / 32) * 32;
+    const g = Math.round(data[i+1] / 32) * 32;
+    const b = Math.round(data[i+2] / 32) * 32;
+    // Skip near-white and near-black — not useful brand colors
+    const brightness = (r + g + b) / 3;
+    if (brightness > 230 || brightness < 20) continue;
+    const key = `${r},${g},${b}`;
+    buckets[key] = (buckets[key] || 0) + 1;
+  }
+  return Object.entries(buckets)
+    .sort((a,b) => b[1]-a[1])
+    .slice(0, count)
+    .map(([key]) => {
+      const [r,g,b] = key.split(",").map(Number);
+      return "#" + [r,g,b].map(v => v.toString(16).padStart(2,"0")).join("");
+    });
+};
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const S = {
   app:{ minHeight:"100vh", width:"100%", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"column", textAlign:"left" },
@@ -862,7 +914,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     const c = sigCanvasRef.current; if (!c) return;
     const ctx = c.getContext("2d");
     const pos = getSigPos(e, c);
-    ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.strokeStyle = "#f59e0b";
+    ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.strokeStyle = getBrand(companySettings).accent;
     ctx.lineTo(pos.x, pos.y); ctx.stroke();
   };
 
@@ -950,10 +1002,13 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
 
   const addArea = () => {
     if (!newArea.name || !newArea.measurement) { alert("Name and measurement are required."); return; }
+    const svc = rates[newArea.serviceType];
+    const isZeroRate = svc && svc.unit !== "flat" && svc.unit !== "pct" && newArea.serviceType !== "other" && (!svc.rate || Number(svc.rate) === 0);
+    if (isZeroRate && !confirm(`No rate is set for ${svc.label}. This line item will calculate as $0. Continue anyway, or go to the Rates tab to set a price first?`)) return;
     const toAdd = {...newArea, id:Date.now()};
-    if (!canSeeAllJobs) delete toAdd.priceOverride; // estimators can't set this, even if it somehow ended up in state
+    if (!canSeeAllJobs) delete toAdd.priceOverride;
     updateJob(j => ({...j, areas:[...j.areas, toAdd]}));
-    setNewArea(initialArea());
+    setNewArea({...initialArea(), serviceType: defaultServiceType});
     setCalcRows([{id:1, l:"", w:""}]);
     setUseCalc(false);
   };
@@ -1555,6 +1610,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
   const CS_GOOGLE_REVIEW_URL = companySettings?.googleReviewUrl || "";
+  const brand = getBrand(companySettings);
 
   const [invoiceType, setInvoiceType] = useState("due");
   const [pdfLoading,  setPdfLoading]  = useState(false);
@@ -1629,28 +1685,33 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
       const PW = 612; const ML = 45; const MR = 45;
       let y = 36;
       const usable = PW - ML - MR;
-
-      const GOLD   = [201,162,39];
+      const _brand = getBrand(companySettings);
+      const GOLD   = _brand.accentRgb;
       const BLACK  = [17,17,17];
       const DGRAY  = [85,85,85];
       const LGRAY  = [244,244,244];
       const MGRAY  = [221,221,221];
       const WHITE  = [255,255,255];
-      const HDRBLK = [26,26,26];
+      const HDRBLK = _brand.headerRgb;
       const GREEN  = [34,197,94];
 
-      // Logo
-      const logoW = 260, logoH = 80;
+      // Logo or company name fallback
       const logoBoxW2 = 260, logoBoxH2 = 80;
-      let logoW2 = logoBoxW2, logoH2 = logoBoxH2;
-      try {
-        const logoDataUrl2 = "data:image/png;base64," + CS_LOGO;
-        const props2 = doc.getImageProperties(logoDataUrl2);
-        const ratio2 = Math.min(logoBoxW2 / props2.width, logoBoxH2 / props2.height);
-        logoW2 = props2.width * ratio2;
-        logoH2 = props2.height * ratio2;
-        doc.addImage(logoDataUrl2, "PNG", (PW-logoW2)/2, y, logoW2, logoH2);
-      } catch(e){}
+      if (!companySettings?.logoB64) {
+        // No logo — render company name large
+        doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+        doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
+      } else {
+        let logoW2 = logoBoxW2, logoH2 = logoBoxH2;
+        try {
+          const logoDataUrl2 = "data:image/png;base64," + CS_LOGO;
+          const props2 = doc.getImageProperties(logoDataUrl2);
+          const ratio2 = Math.min(logoBoxW2 / props2.width, logoBoxH2 / props2.height);
+          logoW2 = props2.width * ratio2;
+          logoH2 = props2.height * ratio2;
+          doc.addImage(logoDataUrl2, "PNG", (PW-logoW2)/2, y, logoW2, logoH2);
+        } catch(e){}
+      }
       y += logoBoxH2 + 8;
 
       // Company sub-line
@@ -1882,7 +1943,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
             <div style={S.coContact}>{CS_PHONE}</div>
           </div>
           <div style={S.estimateDate}>
-            <div style={{...S.estimateLabel, color: isPaid ? C.green : C.accent}}>
+            <div style={{...S.estimateLabel, color: isPaid ? C.green : brand.accent}}>
               {isPaid ? "✅ PAID INVOICE" : "INVOICE"}
             </div>
             <div style={S.estimateDateVal}>{currentJob.date}</div>
@@ -1939,7 +2000,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
 
         <div style={S.totalsBox}>
           {discount>0 && <div style={{...S.totalLine, color:C.danger, fontWeight:700}}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
-          <div style={{...S.totalLineBold, color: isPaid ? C.green : C.accent}}>
+          <div style={{...S.totalLineBold, color: isPaid ? C.green : brand.accent}}>
             <span>{isPaid ? "TOTAL PAID" : "TOTAL DUE"}</span>
             <span>{formatCurrency(total)}</span>
           </div>
@@ -1951,7 +2012,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
       {/* Actions */}
       <section style={S.section}>
         <div style={S.actionBtns}>
-          <button style={{...S.btnPrimary, opacity:pdfLoading?0.5:1, background: isPaid ? "#16a34a" : C.accent}}
+          <button style={{...S.btnPrimary, opacity:pdfLoading?0.5:1, background: isPaid ? "#16a34a" : brand.accent}}
             onClick={generatePDF} disabled={pdfLoading}>
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
@@ -4662,8 +4723,8 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
       const doc = new jsPDF({ unit:"pt", format:"letter" });
       const PW=612, ML=40, MR=40, usable=PW-ML-MR;
       let y=40;
-
-      const GOLD=[201,162,39], BLACK=[17,17,17], DGRAY=[85,85,85], LGRAY=[244,244,244], MGRAY=[221,221,221], HDRBLK=[26,26,26], GREEN=[34,197,94], RED=[239,68,68];
+      const _brandR = getBrand(companySettings);
+      const GOLD=_brandR.accentRgb, BLACK=[17,17,17], DGRAY=[85,85,85], LGRAY=[244,244,244], MGRAY=[221,221,221], HDRBLK=_brandR.headerRgb, GREEN=[34,197,94], RED=[239,68,68];
 
       // Logo
       try {
@@ -6611,6 +6672,8 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
+  const CS_GOOGLE_REVIEW_URL = companySettings?.googleReviewUrl || "";
+  const brand = getBrand(companySettings);
 
   const [sent,       setSent]       = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -6664,7 +6727,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
     if (isLocked || !clientDrawing.current) return; e.preventDefault();
     const c = clientSigRef.current; if (!c) return;
     const ctx = c.getContext("2d"); const pos = getPos(e,c);
-    ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.strokeStyle="#111111";
+    ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.strokeStyle=brand.accent;
     ctx.lineTo(pos.x,pos.y); ctx.stroke();
   };
   const cSigEnd = (e) => { e.preventDefault(); clientDrawing.current = false; };
@@ -6785,29 +6848,50 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
       let y = 36;
 
       // ── colors ──
-      const GOLD   = [201, 162, 39];
+      const _brand2 = getBrand(companySettings);
+      const GOLD   = _brand2.accentRgb;
       const BLACK  = [17,  17,  17];
       const DGRAY  = [85,  85,  85];
       const LGRAY  = [244, 244, 244];
       const MGRAY  = [221, 221, 221];
       const WHITE  = [255, 255, 255];
-      const HDRBLK = [26,  26,  26];
+      const HDRBLK = _brand2.headerRgb;
       const usable = PW - ML - MR;   // 522pt
 
       // ── PAGE 1 ────────────────────────────────────────────────────────────
 
-      // Logo — fit within a bounding box, preserving aspect ratio (no stretch)
+      // Logo or company name fallback
       const logoBoxW = 260, logoBoxH = 80;
-      let logoW = logoBoxW, logoH = logoBoxH;
-      try {
-        const logoDataUrl = "data:image/png;base64," + CS_LOGO;
-        const props = doc.getImageProperties(logoDataUrl);
-        const ratio = Math.min(logoBoxW / props.width, logoBoxH / props.height);
-        logoW = props.width * ratio;
-        logoH = props.height * ratio;
-        doc.addImage(logoDataUrl, "PNG", (PW-logoW)/2, y, logoW, logoH);
-      } catch(e) {}
-      y += logoBoxH + 8;
+      if (CS_LOGO && CS_LOGO !== BLACKTOPIQ_LOGO_B64) {
+        // Tenant has their own logo — render it
+        let logoW = logoBoxW, logoH = logoBoxH;
+        try {
+          const logoDataUrl = "data:image/png;base64," + CS_LOGO;
+          const props = doc.getImageProperties(logoDataUrl);
+          const ratio = Math.min(logoBoxW / props.width, logoBoxH / props.height);
+          logoW = props.width * ratio;
+          logoH = props.height * ratio;
+          doc.addImage(logoDataUrl, "PNG", (PW-logoW)/2, y, logoW, logoH);
+        } catch(e) {}
+        y += logoBoxH + 8;
+      } else if (!companySettings?.logoB64) {
+        // No logo uploaded — render company name large as header
+        doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+        doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
+        y += logoBoxH + 8;
+      } else {
+        // BlacktopIQ default logo
+        let logoW = logoBoxW, logoH = logoBoxH;
+        try {
+          const logoDataUrl = "data:image/png;base64," + CS_LOGO;
+          const props = doc.getImageProperties(logoDataUrl);
+          const ratio = Math.min(logoBoxW / props.width, logoBoxH / props.height);
+          logoW = props.width * ratio;
+          logoH = props.height * ratio;
+          doc.addImage(logoDataUrl, "PNG", (PW-logoW)/2, y, logoW, logoH);
+        } catch(e) {}
+        y += logoBoxH + 8;
+      }
 
       // company sub-line
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
@@ -7093,12 +7177,12 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
             <div style={S.totalsBox}>
               <div style={S.totalLine}><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
               {discount>0 && <div style={{...S.totalLine, color:C.danger, fontWeight:700}}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
-              <div style={S.totalLineBold}><span>TOTAL</span><span>{formatCurrency(finalTotal)}</span></div>
+              <div style={{...S.totalLineBold, color:brand.accent}}><span>TOTAL</span><span>{formatCurrency(finalTotal)}</span></div>
               {/* Price override — admin/manager only */}
               {canOverridePrice && (
               <div style={{marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}`}}>
                 <div style={{fontSize:12, color:C.textMuted, marginBottom:6}}>
-                  Override Total {hasOverride && <span style={{color:C.accent, fontWeight:700}}>· Active</span>}
+                  Override Total {hasOverride && <span style={{color:brand.accent, fontWeight:700}}>· Active</span>}
                 </div>
                 <div style={{display:"flex", gap:8, alignItems:"center"}}>
                   <span style={{color:C.textMuted, fontSize:14}}>$</span>
@@ -7504,6 +7588,9 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
   const [legalTerms,   setLegalTerms]   = useState(cs.legalTerms||"");
   const [depositTerms, setDepositTerms] = useState(cs.depositTerms||"A 25% deposit is required to schedule work. Balance due upon completion.");
   const [googleReviewUrl, setGoogleReviewUrl] = useState(cs.googleReviewUrl||"");
+  const [accentColor, setAccentColor] = useState(cs.accentColor || DEFAULT_ACCENT);
+  const [headerColor, setHeaderColor] = useState(cs.headerColor || DEFAULT_HEADER);
+  const [extractedColors, setExtractedColors] = useState([]);
   const [saving,  setSaving]  = useState(false);
   const [message, setMessage] = useState("");
 
@@ -7525,6 +7612,8 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       setLegalTerms(companySettings.legalTerms || "");
       setDepositTerms(companySettings.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.");
       setGoogleReviewUrl(companySettings.googleReviewUrl || "");
+      setAccentColor(companySettings.accentColor || DEFAULT_ACCENT);
+      setHeaderColor(companySettings.headerColor || DEFAULT_HEADER);
       hydrated.current = true;
     }
   }, [companySettings]);
@@ -7533,9 +7622,29 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
     const file = e.target.files[0]; if (!file) return;
     if (file.size > 500*1024) { setMessage("⚠️ Logo must be under 500 KB."); return; }
     const reader = new FileReader();
-    reader.onload = ev => { setLogoB64(ev.target.result.split(",")[1]); setLogoName(file.name); };
+    reader.onload = ev => {
+      const b64 = ev.target.result.split(",")[1];
+      setLogoB64(b64);
+      setLogoName(file.name);
+      // Extract dominant colors from the new logo
+      const img = new Image();
+      img.onload = () => {
+        const colors = extractColorsFromImage(img, 6);
+        setExtractedColors(colors);
+      };
+      img.src = ev.target.result;
+    };
     reader.readAsDataURL(file);
   };
+
+  // Extract colors from existing logo on mount
+  useEffect(() => {
+    const b64 = cs.logoB64;
+    if (!b64 || extractedColors.length > 0) return;
+    const img = new Image();
+    img.onload = () => setExtractedColors(extractColorsFromImage(img, 6));
+    img.src = "data:image/png;base64," + b64;
+  }, [cs.logoB64]);
 
   const save = async () => {
     if (!name.trim()) { setMessage("⚠️ Company name is required."); return; }
@@ -7545,6 +7654,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       street:street.trim(), city:city.trim(), state:state_.trim(), zip:zip.trim(),
       logoB64: logoB64||cs.logoB64||"", legalTerms:legalTerms.trim(), depositTerms:depositTerms.trim(),
       googleReviewUrl: googleReviewUrl.trim(),
+      accentColor, headerColor,
     };
     await syncCompanySettings(csData);
     setMessage("✅ Company settings saved.");
@@ -7586,6 +7696,98 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
         <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={handleLogo} style={{display:"block",fontSize:13,marginBottom:4}}/>
         {logoName && <p style={{fontSize:12,color:C.green}}>✅ New logo: {logoName}</p>}
         <p style={{fontSize:11,color:C.textDim}}>PNG recommended, under 500 KB.</p>
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Brand Colors</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginBottom:14}}>
+          These colors appear on your estimates, invoices, and PDFs.
+        </p>
+
+        {/* Live preview strip */}
+        <div style={{borderRadius:8, overflow:"hidden", marginBottom:16, boxShadow:C.shadow}}>
+          <div style={{background:headerColor, padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+            <span style={{color:accentColor, fontWeight:800, fontSize:16, letterSpacing:"0.04em"}}>ESTIMATE</span>
+            <span style={{color:"#ffffff", fontSize:12, opacity:0.7}}>Preview</span>
+          </div>
+          <div style={{background:"#ffffff", padding:"10px 20px", borderBottom:`3px solid ${accentColor}`}}>
+            <span style={{color:accentColor, fontWeight:700, fontSize:13}}>Total: $1,250.00</span>
+          </div>
+        </div>
+
+        <div style={{display:"flex", gap:24, flexWrap:"wrap"}}>
+          {/* Accent color */}
+          <div style={{flex:1, minWidth:160}}>
+            <label style={{...S.formLabel, marginBottom:6}}>
+              Accent Color
+              <span style={{fontSize:11, color:C.textDim, fontWeight:400}}> (rule line, totals, highlights)</span>
+            </label>
+            <div style={{display:"flex", alignItems:"center", gap:10}}>
+              <input type="color" value={accentColor} onChange={e => setAccentColor(e.target.value)}
+                style={{width:44, height:36, border:`1px solid ${C.border}`, borderRadius:6, cursor:"pointer", padding:2}}/>
+              <input type="text" value={accentColor} onChange={e => setAccentColor(e.target.value)}
+                style={{...S.input, width:90, fontFamily:"monospace", fontSize:13}}
+                placeholder="#f0ab2e"/>
+              <button style={{...S.btnSecondary, fontSize:12, padding:"6px 10px"}}
+                onClick={() => setAccentColor(DEFAULT_ACCENT)}>Reset</button>
+            </div>
+          </div>
+
+          {/* Header background color */}
+          <div style={{flex:1, minWidth:160}}>
+            <label style={{...S.formLabel, marginBottom:6}}>
+              Header Background
+              <span style={{fontSize:11, color:C.textDim, fontWeight:400}}> (top bar on PDFs)</span>
+            </label>
+            <div style={{display:"flex", alignItems:"center", gap:10}}>
+              <input type="color" value={headerColor} onChange={e => setHeaderColor(e.target.value)}
+                style={{width:44, height:36, border:`1px solid ${C.border}`, borderRadius:6, cursor:"pointer", padding:2}}/>
+              <input type="text" value={headerColor} onChange={e => setHeaderColor(e.target.value)}
+                style={{...S.input, width:90, fontFamily:"monospace", fontSize:13}}
+                placeholder="#1a1a1a"/>
+              <button style={{...S.btnSecondary, fontSize:12, padding:"6px 10px"}}
+                onClick={() => setHeaderColor(DEFAULT_HEADER)}>Reset</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Extracted colors from logo */}
+        {extractedColors.length > 0 && (
+          <div style={{marginTop:16}}>
+            <div style={{fontSize:12, color:C.textMuted, marginBottom:8, fontWeight:600}}>
+              🎨 Colors from your logo — click to use:
+            </div>
+            <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+              {extractedColors.map(color => (
+                <div key={color} style={{display:"flex", flexDirection:"column", alignItems:"center", gap:4}}>
+                  <div
+                    style={{width:36, height:36, borderRadius:6, background:color, cursor:"pointer",
+                      border:`2px solid ${color === accentColor || color === headerColor ? C.text : C.border}`,
+                      boxShadow: color === accentColor || color === headerColor ? `0 0 0 2px ${C.text}` : "none"}}
+                    title={color}
+                    onClick={() => {
+                      // First click sets accent, second click sets header
+                      if (accentColor === DEFAULT_ACCENT || accentColor === color) {
+                        setAccentColor(color);
+                      } else {
+                        setHeaderColor(color);
+                      }
+                    }}
+                  />
+                  <span style={{fontSize:9, color:C.textDim, fontFamily:"monospace"}}>{color}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:11, color:C.textDim, marginTop:8}}>
+              Click a swatch to set as accent color. Click a second swatch to set as header background.
+            </div>
+          </div>
+        )}
+        {!(logoB64||cs.logoB64) && (
+          <div style={{fontSize:12, color:C.textDim, marginTop:8}}>
+            Upload a logo above to automatically extract your brand colors.
+          </div>
+        )}
       </section>
       <section style={S.section}>
         <h2 style={S.h2}>Legal Terms</h2>
@@ -7734,7 +7936,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken })
   const [addrState,    setAddrState]    = useState("PA");
   const [addrZip,      setAddrZip]      = useState("");
   const [logoDataUrl,  setLogoDataUrl]  = useState(tenant?.data?.logoUrl || "");
-  const [services,     setServices]     = useState(["sealcoat","crackfill","patch"]);
+  const [services,     setServices]     = useState(["sealcoat","crackfill","patch","striping"]);
   const [rates,        setRatesDraft]   = useState(() => {
     const r = {};
     Object.keys(DEFAULT_RATES).forEach(k => { r[k] = DEFAULT_RATES[k].rate; });
@@ -7743,13 +7945,11 @@ function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken })
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
 
-  const SERVICE_OPTIONS = [
-    { key:"sealcoat",  label:"Sealcoat" },
-    { key:"crackfill", label:"Crack Fill" },
-    { key:"striping",  label:"Line Striping" },
-    { key:"patch",     label:"Patching" },
-    { key:"other",     label:"Other" },
-  ];
+  // Derive SERVICE_OPTIONS directly from DEFAULT_RATES so new services
+  // always appear here automatically without manual maintenance.
+  const SERVICE_OPTIONS = Object.entries(DEFAULT_RATES)
+    .filter(([k]) => k !== "other")
+    .map(([key, svc]) => ({ key, label: svc.label }));
   const toggleService = (key) => setServices(prev => prev.includes(key) ? prev.filter(s=>s!==key) : [...prev, key]);
 
   // Downscale the logo client-side before storing it — an unresized phone
@@ -7784,18 +7984,13 @@ function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken })
     if (!companyName.trim()) { setError("Company name is required."); return; }
     if (!phone.trim()) { setError("Company phone is required."); return; }
     if (!officeEmail.trim()) { setError("Office email is required."); return; }
-    if (!logoDataUrl) { setError("A company logo is required."); return; }
+    if (!logoDataUrl && !confirm("You haven't uploaded a logo. The BlacktopIQ logo will appear on your estimates and invoices until you add one in Company Settings. Continue anyway?")) return;
     if (!address.trim()) { setError("Street address is required."); return; }
     if (!addrCity.trim()) { setError("City is required."); return; }
     if (!addrState.trim()) { setError("State is required."); return; }
     if (!addrZip.trim()) { setError("ZIP code is required."); return; }
     if (services.length === 0) { setError("Select at least one service you offer."); return; }
-    for (const key of services) {
-      if (!rates[key] || Number(rates[key]) <= 0) {
-        setError(`Enter a rate for ${DEFAULT_RATES[key].label} before continuing.`);
-        return;
-      }
-    }
+    // Rates are optional at setup — owner can set them in the Rates tab after completing setup.
     setSaving(true);
     try {
       // 0. Owner's own personal profile — required just like any new user.
@@ -7900,10 +8095,15 @@ function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken })
           <section style={S.section}>
             <h2 style={S.h2}>Branding</h2>
             <label style={S.formLabel}>Company Logo
-              <input type="file" accept="image/*" onChange={e => handleLogoFile(e.target.files?.[0])} style={S.input} required/>
+              <span style={{fontSize:11, color:C.textDim, fontWeight:400}}> (optional — you can add this later in Company Settings)</span>
+              <input type="file" accept="image/*" onChange={e => handleLogoFile(e.target.files?.[0])} style={S.input}/>
             </label>
-            {logoDataUrl && (
+            {logoDataUrl ? (
               <img src={logoDataUrl} alt="Logo preview" style={{maxWidth:160, maxHeight:80, display:"block", marginTop:10, borderRadius:6}}/>
+            ) : (
+              <div style={{fontSize:12, color:C.textMuted, marginTop:8}}>
+                No logo uploaded — the BlacktopIQ logo will appear on estimates and invoices until you add one.
+              </div>
             )}
           </section>
 
@@ -7957,7 +8157,9 @@ function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken })
           {services.length > 0 && (
             <section style={S.section}>
               <h2 style={S.h2}>Starting Rates</h2>
-              <p style={{fontSize:11, color:C.textDim, margin:"0 0 10px"}}>Defaults shown — adjust to your own pricing before continuing.</p>
+              <p style={{fontSize:11, color:C.textDim, margin:"0 0 10px"}}>
+                Optional — set your starting prices now or skip and set them later in the Rates tab. You'll be warned if you try to add a line item without a rate set.
+              </p>
               {services.map(key => (
                 <label key={key} style={{...S.formLabel, marginBottom:10}}>
                   {DEFAULT_RATES[key].label} ({DEFAULT_RATES[key].rateLabel})
