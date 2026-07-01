@@ -6825,7 +6825,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
           {job.clientName||"Unnamed Client"}
         </div>
         <div style={{fontSize:11, color:C.textMuted, textTransform:"capitalize", marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
-          {(job.areas||[]).map(a=>a.serviceType).filter((v,i,a)=>a.indexOf(v)===i).join(", ") || "—"}
+          {(job.areas||[]).map(ar=>ar.serviceType).filter((v,i,arr)=>arr.indexOf(v)===i).join(", ") || "—"}
         </div>
         <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</div>
       </div>
