@@ -15,11 +15,18 @@ const PATCH_DEPTH_IN = 3;
 const calcPatchTons = (sqft) => (Number(sqft) * PATCH_DEPTH_IN) / 180;
 
 const DEFAULT_RATES = {
-  sealcoat:  { label:"Sealcoat",      unit:"sqft",  rate:0.30, rateLabel:"$/sq ft"  },
-  crackfill: { label:"Crack Fill",    unit:"linft", rate:1.50, rateLabel:"$/lin ft" },
-  patch:     { label:"Patching",      unit:"sqft",  rate:650,  rateLabel:"$/ton"    },
-  striping:  { label:"Line Striping", unit:"linft", rate:1.25, rateLabel:"$/lin ft" },
-  other:     { label:"Other",         unit:"flat",  rate:0,    rateLabel:"flat $"   },
+  sealcoat:     { label:"Sealcoat",          unit:"sqft",  rate:0.30, rateLabel:"$/sq ft"  },
+  crackfill:    { label:"Crack Fill",         unit:"linft", rate:1.50, rateLabel:"$/lin ft" },
+  patch:        { label:"Patching",           unit:"sqft",  rate:650,  rateLabel:"$/ton"    },
+  striping:     { label:"Line Striping",      unit:"linft", rate:1.25, rateLabel:"$/lin ft" },
+  paving:       { label:"Paving",             unit:"sqft",  rate:3.50, rateLabel:"$/sq ft"  },
+  infrared:     { label:"Infrared Patching",  unit:"sqft",  rate:8.00, rateLabel:"$/sq ft"  },
+  milling:      { label:"Milling",            unit:"sqft",  rate:1.50, rateLabel:"$/sq ft"  },
+  milloverlay:  { label:"Mill & Overlay",     unit:"sqft",  rate:4.50, rateLabel:"$/sq ft"  },
+  overlay:      { label:"Overlay",            unit:"sqft",  rate:2.50, rateLabel:"$/sq ft"  },
+  mobilization: { label:"Mobilization",       unit:"flat",  rate:500,  rateLabel:"flat $"   },
+  sitework:     { label:"Site Work",          unit:"flat",  rate:0,    rateLabel:"flat $"   },
+  other:        { label:"Other",              unit:"flat",  rate:0,    rateLabel:"flat $"   },
 };
 
 const initialJob = (rates) => ({
@@ -7985,7 +7992,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken })
   const [addrState,    setAddrState]    = useState("PA");
   const [addrZip,      setAddrZip]      = useState("");
   const [logoDataUrl,  setLogoDataUrl]  = useState(tenant?.data?.logoUrl || "");
-  const [services,     setServices]     = useState(["sealcoat","crackfill","patch","striping"]);
+  const [services,     setServices]     = useState(Object.keys(DEFAULT_RATES).filter(k => k !== "other"));
   const [rates,        setRatesDraft]   = useState(() => {
     const r = {};
     Object.keys(DEFAULT_RATES).forEach(k => { r[k] = DEFAULT_RATES[k].rate; });
