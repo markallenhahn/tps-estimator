@@ -472,9 +472,9 @@ function hasRole(userRoleOrRoles, role) {
   return Array.isArray(userRoleOrRoles) ? userRoleOrRoles.includes(role) : userRoleOrRoles === role;
 }
 
-function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant, isPlatformAdmin }) {
+function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant, isPlatformAdmin, companySettings={} }) {
   const currentTenant = (myTenants||[]).find(t => t.tenantId === currentTenantId);
-  const currentLogo = currentTenant?.data?.logoUrl || ("data:image/png;base64," + B_LOGO_B64);
+  const currentLogo = currentTenant?.data?.logoUrl || (companySettings?.logoB64 ? "data:image/png;base64," + companySettings.logoB64 : "data:image/png;base64," + B_LOGO_B64);
   const currentCompanyAlt = currentTenant?.companyName || "Company logo";
 
   const tabsRef = useRef(null);
@@ -9218,7 +9218,7 @@ export default function App() {
 
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
-      <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant} isPlatformAdmin={isPlatformAdmin}/>
+      <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant} isPlatformAdmin={isPlatformAdmin} companySettings={companySettings}/>
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {syncStatus && (
           <div style={{
