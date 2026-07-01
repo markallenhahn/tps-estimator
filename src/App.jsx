@@ -1952,23 +1952,31 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
       const GREEN  = [34,197,94];
 
       // Logo or company name fallback
-      const logoBoxW2 = 260, logoBoxH2 = 80;
+      const LOGO_MAX_W = 200, LOGO_MAX_H = 70; // pt — fixed max for every tenant
       if (companySettings?.logoB64) {
-        let logoW2 = logoBoxW2, logoH2 = logoBoxH2;
         try {
           const logoDataUrl2 = "data:image/png;base64," + companySettings.logoB64;
-          const props2 = doc.getImageProperties(logoDataUrl2);
-          const ratio2 = Math.min(logoBoxW2 / props2.width, logoBoxH2 / props2.height);
-          logoW2 = props2.width * ratio2;
-          logoH2 = props2.height * ratio2;
-          doc.addImage(logoDataUrl2, "PNG", (PW-logoW2)/2, y, logoW2, logoH2);
-        } catch(e){}
+          // Use a browser Image element — reliable for any file size / format
+          await new Promise((res) => {
+            const im = new Image();
+            im.onload = () => {
+              const ratio2 = Math.min(LOGO_MAX_W / im.naturalWidth, LOGO_MAX_H / im.naturalHeight);
+              const logoW2 = im.naturalWidth  * ratio2;
+              const logoH2 = im.naturalHeight * ratio2;
+              doc.addImage(im, "PNG", (PW - logoW2) / 2, y, logoW2, logoH2);
+              y += logoH2 + 10;
+              res();
+            };
+            im.onerror = () => res(); // skip gracefully on bad image
+            im.src = logoDataUrl2;
+          });
+        } catch(e){ y += LOGO_MAX_H + 10; }
       } else {
         // No logo — render company name large
         doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
         doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
+        y += LOGO_MAX_H + 10;
       }
-      y += logoBoxH2 + 8;
 
       // Company sub-line
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
@@ -4983,15 +4991,22 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
       const _brandR = getBrand(companySettings);
       const GOLD=_brandR.accentRgb, BLACK=[17,17,17], DGRAY=[85,85,85], LGRAY=[244,244,244], MGRAY=[221,221,221], HDRBLK=_brandR.headerRgb, GREEN=[34,197,94], RED=[239,68,68];
 
-      // Logo
-      try {
-        const logoDataUrl3 = "data:image/png;base64,"+CS_LOGO;
-        const props3 = doc.getImageProperties(logoDataUrl3);
-        const ratio3 = Math.min(200 / props3.width, 62 / props3.height);
-        const lw3 = props3.width * ratio3, lh3 = props3.height * ratio3;
-        doc.addImage(logoDataUrl3, "PNG", (PW-lw3)/2, y, lw3, lh3);
-      } catch(e){}
-      y+=72;
+      // Logo — fixed max size, Image element for reliable natural dimensions
+      await new Promise((res) => {
+        try {
+          const logoDataUrl3 = "data:image/png;base64," + CS_LOGO;
+          const im3 = new Image();
+          im3.onload = () => {
+            const ratio3 = Math.min(200 / im3.naturalWidth, 62 / im3.naturalHeight);
+            const lw3 = im3.naturalWidth * ratio3, lh3 = im3.naturalHeight * ratio3;
+            doc.addImage(im3, "PNG", (PW - lw3) / 2, y, lw3, lh3);
+            res();
+          };
+          im3.onerror = () => res();
+          im3.src = logoDataUrl3;
+        } catch(e){ res(); }
+      });
+      y += 72;
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
       doc.text(CS_NAME+" · "+CS_PHONE, PW/2, y, {align:"center"}); y+=14;
       doc.setDrawColor(...GOLD); doc.setLineWidth(2); doc.line(ML,y,PW-MR,y); y+=14;
@@ -7117,25 +7132,31 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
 
       // ── PAGE 1 ────────────────────────────────────────────────────────────
 
-      // Logo or company name fallback
-      const logoBoxW = 260, logoBoxH = 80;
+      // Logo or company name fallback — fixed max size for every tenant
+      const LOGO_MAX_W = 200, LOGO_MAX_H = 70; // pt
       if (companySettings?.logoB64) {
-        // Tenant has their own logo — render it
-        let logoW = logoBoxW, logoH = logoBoxH;
         try {
           const logoDataUrl = "data:image/png;base64," + companySettings.logoB64;
-          const props = doc.getImageProperties(logoDataUrl);
-          const ratio = Math.min(logoBoxW / props.width, logoBoxH / props.height);
-          logoW = props.width * ratio;
-          logoH = props.height * ratio;
-          doc.addImage(logoDataUrl, "PNG", (PW-logoW)/2, y, logoW, logoH);
-        } catch(e) {}
+          await new Promise((res) => {
+            const im = new Image();
+            im.onload = () => {
+              const ratio = Math.min(LOGO_MAX_W / im.naturalWidth, LOGO_MAX_H / im.naturalHeight);
+              const logoW = im.naturalWidth  * ratio;
+              const logoH = im.naturalHeight * ratio;
+              doc.addImage(im, "PNG", (PW - logoW) / 2, y, logoW, logoH);
+              y += logoH + 10;
+              res();
+            };
+            im.onerror = () => res();
+            im.src = logoDataUrl;
+          });
+        } catch(e){ y += LOGO_MAX_H + 10; }
       } else {
         // No logo uploaded — render company name large as header
         doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
         doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
+        y += LOGO_MAX_H + 10;
       }
-      y += logoBoxH + 8;
 
       // company sub-line
       doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
