@@ -15,27 +15,33 @@ const TONS_SERVICES = ["patch","paving","milling","overlay"];
 // True when the service is ton-capable AND currently set to $/ton pricing
 const isTonMode = (svcKey, rates) =>
   TONS_SERVICES.includes(svcKey) && (rates[svcKey]?.pricingMode ?? "ton") === "ton";
-const DEFAULT_ASPHALT_DENSITY = 145; // lbs per cubic foot
-const DEFAULT_ASPHALT_DEPTH_IN = 3;  // inches
+const DEFAULT_ASPHALT_DENSITY  = 145; // lbs per cubic foot
+const DEFAULT_ASPHALT_DEPTH_IN = 3;   // inches
+const DEFAULT_TONS_FORMULA     = "simple"; // "simple" | "density"
 
-// New formula: tons = (sqft × (depth_in / 12) × density_lbs_per_cuft) / 2000
-function calcTons(sqft, depthIn, density) {
-  const d = Number(depthIn  ?? DEFAULT_ASPHALT_DEPTH_IN);
-  const r = Number(density  ?? DEFAULT_ASPHALT_DENSITY);
-  return (Number(sqft) * (d / 12) * r) / 2000;
+// Two formula options the user can pick per service in the Rates tab:
+//   "simple"  -> (sqft x depthIn) / 180                       <- industry rule-of-thumb
+//   "density" -> (sqft x (depthIn/12) x density) / 2000       <- physics-based
+function calcTons(sqft, depthIn, density, formula) {
+  const d = Number(depthIn ?? DEFAULT_ASPHALT_DEPTH_IN);
+  const f = formula ?? DEFAULT_TONS_FORMULA;
+  if (f === "density") {
+    const r = Number(density ?? DEFAULT_ASPHALT_DENSITY);
+    return (Number(sqft) * (d / 12) * r) / 2000;
+  }
+  return (Number(sqft) * d) / 180;
 }
-// Legacy shim – kept so PDF / report call sites still work without changes
-const calcPatchTons = (sqft, depthIn, density) => calcTons(sqft, depthIn, density);
+const calcPatchTons = (sqft, depthIn, density, formula) => calcTons(sqft, depthIn, density, formula);
 
 const DEFAULT_RATES = {
   sealcoat:     { label:"Sealcoat",          unit:"sqft",  rate:0.30, rateLabel:"$/sq ft"  },
   crackfill:    { label:"Crack Fill",         unit:"linft", rate:1.50, rateLabel:"$/lin ft" },
-  patch:        { label:"Patching",           unit:"sqft",  rate:650,  rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton" },
+  patch:        { label:"Patching",           unit:"sqft",  rate:650,  rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton", tonsFormula:"simple" },
   striping:     { label:"Line Striping",      unit:"linft", rate:1.25, rateLabel:"$/lin ft" },
-  paving:       { label:"Paving",             unit:"sqft",  rate:3.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton" },
+  paving:       { label:"Paving",             unit:"sqft",  rate:3.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton", tonsFormula:"simple" },
   infrared:     { label:"Infrared Patching",  unit:"sqft",  rate:8.00, rateLabel:"$/sq ft"  },
-  milling:      { label:"Milling",            unit:"sqft",  rate:1.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton" },
-  overlay:      { label:"Overlay",            unit:"sqft",  rate:2.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton" },
+  milling:      { label:"Milling",            unit:"sqft",  rate:1.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton", tonsFormula:"simple" },
+  overlay:      { label:"Overlay",            unit:"sqft",  rate:2.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton", tonsFormula:"simple" },
   mobilization: { label:"Mobilization",       unit:"flat",  rate:500,  rateLabel:"flat $"   },
   sitework:     { label:"Site Work",          unit:"flat",  rate:0,    rateLabel:"flat $"   },
   other:        { label:"Other",              unit:"flat",  rate:0,    rateLabel:"flat $"   },
@@ -86,7 +92,8 @@ function calcLineAmt(area, rates) {
     // Use area-level depth/density, fall back to rate defaults, then global defaults
     const depth   = area.depthIn  ?? svc.depthIn  ?? DEFAULT_ASPHALT_DEPTH_IN;
     const density = area.density  ?? svc.density  ?? DEFAULT_ASPHALT_DENSITY;
-    return calcTons(qty, depth, density) * svc.rate;
+    const formula = area.tonsFormula ?? svc.tonsFormula ?? DEFAULT_TONS_FORMULA;
+    return calcTons(qty, depth, density, formula) * svc.rate;
   }
   if (area.serviceType === "other") return qty;
   return qty * svc.rate;
@@ -751,6 +758,10 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
             const isTonsCapable = TONS_SERVICES.includes(key);
             const pricingMode   = editing[key]?.pricingMode ?? (isTonsCapable ? "ton" : "sqft");
             const inTonMode     = isTonsCapable && pricingMode === "ton";
+            const tonsFormula   = editing[key]?.tonsFormula ?? DEFAULT_TONS_FORMULA;
+            const useDensity    = inTonMode && tonsFormula === "density";
+            const previewDepth  = editing[key]?.depthIn ?? DEFAULT_ASPHALT_DEPTH_IN;
+            const previewDensity= editing[key]?.density ?? DEFAULT_ASPHALT_DENSITY;
             return (
             <div key={key} style={{...S.rateRow, flexWrap:"wrap", gap:8}}>
               <div style={{...S.rateName, minWidth:140}}>{svc.label}</div>
@@ -767,7 +778,7 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
                 <span style={S.rateUnitLabel}>{inTonMode ? "$/ton" : isTonsCapable ? "$/sq ft" : svc.rateLabel}</span>
               </div>
               {isTonsCapable && (
-                <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
+                <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", width:"100%"}}>
                   <label style={{fontSize:12, color:C.textMuted, display:"flex", alignItems:"center", gap:4}}>
                     Price by:
                     <select
@@ -780,21 +791,33 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
                   </label>
                   {inTonMode && (<>
                   <label style={{fontSize:12, color:C.textMuted, display:"flex", alignItems:"center", gap:4}}>
+                    Formula:
+                    <select
+                      value={tonsFormula}
+                      onChange={e => setEditing(p => ({...p,[key]:{...p[key],tonsFormula:e.target.value}}))}
+                      style={{...S.rateInput, width:200, marginLeft:4, paddingTop:4, paddingBottom:4}}>
+                      <option value="simple">(sq ft × depth) ÷ 180</option>
+                      <option value="density">(sq ft × depth/12 × density) ÷ 2000</option>
+                    </select>
+                  </label>
+                  <label style={{fontSize:12, color:C.textMuted, display:"flex", alignItems:"center", gap:4}}>
                     Depth (in):
                     <input type="number" step="0.5" min="0.5" max="24"
-                      value={editing[key].depthIn ?? DEFAULT_ASPHALT_DEPTH_IN}
+                      value={previewDepth}
                       onChange={e => setEditing(p => ({...p,[key]:{...p[key],depthIn:e.target.value}}))}
                       style={{...S.rateInput, width:60}}/>
                   </label>
+                  {useDensity && (
                   <label style={{fontSize:12, color:C.textMuted, display:"flex", alignItems:"center", gap:4}}>
                     Density (lb/ft³):
                     <input type="number" step="1" min="50" max="300"
-                      value={editing[key].density ?? DEFAULT_ASPHALT_DENSITY}
+                      value={previewDensity}
                       onChange={e => setEditing(p => ({...p,[key]:{...p[key],density:e.target.value}}))}
                       style={{...S.rateInput, width:70}}/>
                   </label>
+                  )}
                   <span style={{fontSize:11, color:C.textMuted}}>
-                    → {calcTons(100, editing[key].depthIn??DEFAULT_ASPHALT_DEPTH_IN, editing[key].density??DEFAULT_ASPHALT_DENSITY).toFixed(3)} tons / 100 sq ft
+                    → {calcTons(100, previewDepth, previewDensity, tonsFormula).toFixed(3)} tons / 100 sq ft
                   </span>
                   </>)}
                 </div>
@@ -804,12 +827,13 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
           })}
         </div>
         <div style={S.formulaBox}>
-          <div style={S.formulaTitle}>🧮 Tonnage Formula (Patch, Paving, Milling, Overlay)</div>
+          <div style={S.formulaTitle}>🧮 Tonnage Formulas (Patch, Paving, Milling, Overlay)</div>
           <div style={S.formulaText}>
-            Tons = (sq ft × (depth ÷ 12) × density) ÷ 2000<br/>
+            <strong>Simple:</strong> Tons = (sq ft × depth in) ÷ 180<br/>
+            <strong>Density:</strong> Tons = (sq ft × (depth ÷ 12) × density) ÷ 2000<br/>
             Cost = Tons × rate per ton<br/>
             <span style={S.formulaEx}>
-              Patch example: 100 sq ft @ {editing.patch?.depthIn??DEFAULT_ASPHALT_DEPTH_IN}″ depth, {editing.patch?.density??DEFAULT_ASPHALT_DENSITY} lb/ft³ → {calcTons(100, editing.patch?.depthIn??DEFAULT_ASPHALT_DEPTH_IN, editing.patch?.density??DEFAULT_ASPHALT_DENSITY).toFixed(3)} tons → {formatCurrency(calcTons(100, editing.patch?.depthIn??DEFAULT_ASPHALT_DEPTH_IN, editing.patch?.density??DEFAULT_ASPHALT_DENSITY)*Number(editing.patch?.rate||650))}
+              Patch example: 100 sq ft @ {editing.patch?.depthIn??DEFAULT_ASPHALT_DEPTH_IN}″ → {calcTons(100, editing.patch?.depthIn??DEFAULT_ASPHALT_DEPTH_IN, editing.patch?.density??DEFAULT_ASPHALT_DENSITY, editing.patch?.tonsFormula??DEFAULT_TONS_FORMULA).toFixed(3)} tons → {formatCurrency(calcTons(100, editing.patch?.depthIn??DEFAULT_ASPHALT_DEPTH_IN, editing.patch?.density??DEFAULT_ASPHALT_DENSITY, editing.patch?.tonsFormula??DEFAULT_TONS_FORMULA)*Number(editing.patch?.rate||650))}
             </span>
           </div>
         </div>
@@ -1132,8 +1156,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       if (!newArea.overlayMeasurement) { alert("Overlay square footage is required for Mill & Overlay."); return; }
       const milSvc = rates["milling"];
       const ovrSvc = rates["overlay"];
-      const milArea = { id:Date.now(),       name:newArea.name + " — Milling",  serviceType:"milling", measurement:newArea.measurement,        depthIn:newArea.depthIn,        density:newArea.density,        condition:newArea.condition, notes:newArea.notes };
-      const ovrArea = { id:Date.now()+1,     name:newArea.name + " — Overlay",  serviceType:"overlay", measurement:newArea.overlayMeasurement,  depthIn:newArea.overlayDepthIn, density:newArea.overlayDensity, condition:newArea.condition, notes:newArea.notes };
+      const milArea = { id:Date.now(),       name:newArea.name + " — Milling",  serviceType:"milling", measurement:newArea.measurement,        depthIn:newArea.depthIn,        density:newArea.density,        tonsFormula:newArea.tonsFormula,        condition:newArea.condition, notes:newArea.notes };
+      const ovrArea = { id:Date.now()+1,     name:newArea.name + " — Overlay",  serviceType:"overlay", measurement:newArea.overlayMeasurement,  depthIn:newArea.overlayDepthIn, density:newArea.overlayDensity, tonsFormula:newArea.overlayTonsFormula, condition:newArea.condition, notes:newArea.notes };
       if (!canSeeAllJobs) { delete milArea.priceOverride; delete ovrArea.priceOverride; }
       updateJob(j => ({...j, areas:[...j.areas, milArea, ovrArea]}));
       setNewArea({...initialArea(), serviceType: defaultServiceType});
@@ -1570,7 +1594,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 {Number(newArea.measurement)>0 && (() => {
                   const d = newArea.depthIn ?? (rates.milling?.depthIn ?? DEFAULT_ASPHALT_DEPTH_IN);
                   const r = newArea.density ?? (rates.milling?.density ?? DEFAULT_ASPHALT_DENSITY);
-                  const t = calcTons(newArea.measurement, d, r);
+                  const fml = newArea.tonsFormula ?? (rates.milling?.tonsFormula ?? DEFAULT_TONS_FORMULA);
+                  const t = calcTons(newArea.measurement, d, r, fml);
                   return <span style={{color:"#92400e", fontSize:12, alignSelf:"flex-end", paddingBottom:4}}>{t.toFixed(2)} tons → {formatCurrency(t*(rates.milling?.rate||0))}</span>;
                 })()}
               </div>
@@ -1598,7 +1623,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 {Number(newArea.overlayMeasurement)>0 && (() => {
                   const d = newArea.overlayDepthIn ?? (rates.overlay?.depthIn ?? DEFAULT_ASPHALT_DEPTH_IN);
                   const r = newArea.overlayDensity ?? (rates.overlay?.density ?? DEFAULT_ASPHALT_DENSITY);
-                  const t = calcTons(newArea.overlayMeasurement, d, r);
+                  const fml = newArea.overlayTonsFormula ?? (rates.overlay?.tonsFormula ?? DEFAULT_TONS_FORMULA);
+                  const t = calcTons(newArea.overlayMeasurement, d, r, fml);
                   return <span style={{color:"#1e40af", fontSize:12, alignSelf:"flex-end", paddingBottom:4}}>{t.toFixed(2)} tons → {formatCurrency(t*(rates.overlay?.rate||0))}</span>;
                 })()}
               </div>
@@ -1629,7 +1655,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             {(() => {
               const d = newArea.depthIn ?? (rates[newArea.serviceType]?.depthIn ?? DEFAULT_ASPHALT_DEPTH_IN);
               const r = newArea.density ?? (rates[newArea.serviceType]?.density ?? DEFAULT_ASPHALT_DENSITY);
-              const tons = calcTons(newArea.measurement, d, r);
+              const fml = newArea.tonsFormula ?? (rates[newArea.serviceType]?.tonsFormula ?? DEFAULT_TONS_FORMULA);
+              const tons = calcTons(newArea.measurement, d, r, fml);
               const svcRate = rates[newArea.serviceType]?.rate || 0;
               return (
                 <span style={{color:"#4338ca"}}>
@@ -1666,13 +1693,14 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             {Object.entries(totalBySvc).map(([svc,qty]) => {
               const svcDepth   = rates[svc]?.depthIn  ?? DEFAULT_ASPHALT_DEPTH_IN;
               const svcDensity = rates[svc]?.density  ?? DEFAULT_ASPHALT_DENSITY;
-              const amt = svc==="other" ? qty : isTonMode(svc,rates) ? calcTons(qty, svcDepth, svcDensity)*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
+              const svcFormula = rates[svc]?.tonsFormula ?? DEFAULT_TONS_FORMULA;
+              const amt = svc==="other" ? qty : isTonMode(svc,rates) ? calcTons(qty, svcDepth, svcDensity, svcFormula)*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
               return (
                 <div key={svc} style={S.totalCard}>
                   <div style={S.totalSvc}>{rates[svc]?.label||svc}</div>
                   <div style={S.totalQty}>
                     {svc==="other" ? formatCurrency(qty) : qty.toLocaleString() + " " + (svc==="patch"?"sq ft":rates[svc]?.unit||"")}
-                    {isTonMode(svc,rates) && <span style={S.totalTons}> = {calcTons(qty, svcDepth, svcDensity).toFixed(2)} tons</span>}
+                    {isTonMode(svc,rates) && <span style={S.totalTons}> = {calcTons(qty, svcDepth, svcDensity, svcFormula).toFixed(2)} tons</span>}
                   </div>
                   <div style={S.totalAmt}>{svc==="other" ? "" : formatCurrency(amt)}</div>
                 </div>
@@ -1731,7 +1759,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                           {Number(editArea.measurement) > 0 && (() => {
                             const d = editArea.depthIn ?? (rates[editArea.serviceType]?.depthIn ?? DEFAULT_ASPHALT_DEPTH_IN);
                             const r = editArea.density ?? (rates[editArea.serviceType]?.density ?? DEFAULT_ASPHALT_DENSITY);
-                            const t = calcTons(editArea.measurement, d, r);
+                            const fml = editArea.tonsFormula ?? (rates[editArea.serviceType]?.tonsFormula ?? DEFAULT_TONS_FORMULA);
+                            const t = calcTons(editArea.measurement, d, r, fml);
                             return <span style={{fontSize:12, color:"#4338ca", alignSelf:"flex-end", paddingBottom:6}}>{t.toFixed(2)} tons → {formatCurrency(t*(rates[editArea.serviceType]?.rate||0))}</span>;
                           })()}
                         </div>
@@ -1777,7 +1806,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                       {a.serviceType==="other"
                         ? " · " + formatCurrency(Number(a.measurement||0))
                         : " · " + Number(a.measurement).toLocaleString() + " " + (svc?.unit==="linft"?"lin ft":"sq ft")}
-                      {isTonMode(a.serviceType,rates) && ` → ${calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2)} tons`}
+                      {isTonMode(a.serviceType,rates) && ` → ${calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)).toFixed(2)} tons`}
                     </div>
                     {a.notes && <div style={S.areaNotes}>{a.notes}</div>}
                     {hasLineOverride && <div style={{fontSize:11, color:C.accent, marginTop:2}}>✎ Price overridden</div>}
@@ -1902,7 +1931,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
     ...(currentJob.areas||[]).map(a => {
       const svc = rates[a.serviceType]; const amt = calcLineAmt(a,rates);
       const qtyStr = isTonMode(a.serviceType,rates)
-        ? (Number(a.measurement).toLocaleString() + " sq ft (" + calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2) + " tons)")
+        ? (Number(a.measurement).toLocaleString() + " sq ft (" + calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)).toFixed(2) + " tons)")
         : (Number(a.measurement).toLocaleString() + " " + svc?.unit);
       return a.name + " | " + svc?.label + " | " + qtyStr + " | " + formatCurrency(amt);
     }),
@@ -2055,7 +2084,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
         const svc  = rates[a.serviceType];
         const amt  = calcLineAmt(a,rates);
         const qty  = Number(a.measurement||0);
-        const tons = isTonMode(a.serviceType,rates) ? calcTons(qty, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
+        const tons = isTonMode(a.serviceType,rates) ? calcTons(qty, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)) : null;
         const qtyStr = tons !== null
           ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
           : qty.toLocaleString() + (svc?.unit==="linft" ? " lin ft" : " sq ft");
@@ -2238,7 +2267,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
             {(currentJob.areas||[]).map((a, idx) => {
               const svc  = rates[a.serviceType];
               const amt  = calcLineAmt(a,rates);
-              const tons = isTonMode(a.serviceType,rates) ? calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
+              const tons = isTonMode(a.serviceType,rates) ? calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)) : null;
               const qty  = Number(a.measurement).toLocaleString();
               const unit = svc?.unit==="linft" ? "lin ft" : "sq ft";
               return (
@@ -4080,7 +4109,7 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
               const svc = (j.rates||{})[a.serviceType]||{};
               const qty = Number(a.measurement||0);
               const jRates = j.rates||{};
-              const tons = isTonMode(a.serviceType,jRates) ? calcTons(qty, a.depthIn??(svc?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(svc?.density??DEFAULT_ASPHALT_DENSITY)) : 0;
+              const tons = isTonMode(a.serviceType,jRates) ? calcTons(qty, a.depthIn??(svc?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(svc?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(svc?.tonsFormula??DEFAULT_TONS_FORMULA)) : 0;
               return sum+(isTonMode(a.serviceType,jRates)?tons*(svc?.rate||0):a.serviceType==="other"?qty:qty*(svc?.rate||0));
             },0);
             return (
@@ -7072,7 +7101,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
     ...currentJob.areas.map(a => {
       const svc = rates[a.serviceType]; const amt = calcLineAmt(a,rates);
       const qtyStr = isTonMode(a.serviceType,rates)
-        ? (Number(a.measurement).toLocaleString() + " sq ft (" + calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2) + " tons)")
+        ? (Number(a.measurement).toLocaleString() + " sq ft (" + calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)).toFixed(2) + " tons)")
         : (Number(a.measurement).toLocaleString() + " " + svc?.unit);
       return a.name + " | " + svc?.label + " | " + qtyStr + " | " + formatCurrency(amt) + (a.notes ? " | Note: " + a.notes : "");
     }),
@@ -7221,7 +7250,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         const svc  = rates[a.serviceType];
         const amt  = calcLineAmt(a, rates);
         const qty  = Number(a.measurement || 0);
-        const tons = isTonMode(a.serviceType,rates) ? calcTons(qty, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
+        const tons = isTonMode(a.serviceType,rates) ? calcTons(qty, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)) : null;
         const qtyStr  = tons !== null
           ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
           : qty.toLocaleString() + (svc?.unit === "linft" ? " lin ft" : " sq ft");
@@ -7405,7 +7434,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
               {currentJob.areas.map((a, idx) => {
                 const svc  = rates[a.serviceType];
                 const amt  = calcLineAmt(a, rates);
-                const tons = isTonMode(a.serviceType,rates) ? calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
+                const tons = isTonMode(a.serviceType,rates) ? calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)) : null;
                 const qty  = Number(a.measurement).toLocaleString();
                 const unit = svc?.unit==="linft" ? "lin ft" : "sq ft";
                 return (
