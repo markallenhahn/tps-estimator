@@ -750,13 +750,13 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
             if (key !== "other" && !selectedServices.includes(key)) return null;
             const isTonsCapable = TONS_SERVICES.includes(key);
             const pricingMode   = editing[key]?.pricingMode ?? (isTonsCapable ? "ton" : "sqft");
-            const isTonMode     = isTonsCapable && pricingMode === "ton";
+            const inTonMode     = isTonsCapable && pricingMode === "ton";
             return (
             <div key={key} style={{...S.rateRow, flexWrap:"wrap", gap:8}}>
               <div style={{...S.rateName, minWidth:140}}>{svc.label}</div>
               <div style={{...S.rateUnit, minWidth:160}}>
                 {isTonsCapable
-                  ? (isTonMode ? "Enter sq ft → auto-calc tons" : "Per sq ft")
+                  ? (inTonMode ? "Enter sq ft → auto-calc tons" : "Per sq ft")
                   : svc.unit === "flat" ? "Flat rate" : svc.unit === "cuft" ? "Per cu ft" : svc.unit === "sqft" ? "Per sq ft" : svc.unit === "linft" ? "Per lin ft" : `Per ${svc.unit}`}
               </div>
               <div style={S.rateInputWrap}>
@@ -764,7 +764,7 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
                 <input type="number" value={editing[key].rate} step="0.01" min="0"
                   onChange={e => setEditing(p => ({...p,[key]:{...p[key],rate:e.target.value}}))}
                   style={S.rateInput}/>
-                <span style={S.rateUnitLabel}>{isTonMode ? "$/ton" : isTonsCapable ? "$/sq ft" : svc.rateLabel}</span>
+                <span style={S.rateUnitLabel}>{inTonMode ? "$/ton" : isTonsCapable ? "$/sq ft" : svc.rateLabel}</span>
               </div>
               {isTonsCapable && (
                 <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
@@ -778,7 +778,7 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
                       <option value="sqft">$/sq ft (area)</option>
                     </select>
                   </label>
-                  {isTonMode && (<>
+                  {inTonMode && (<>
                   <label style={{fontSize:12, color:C.textMuted, display:"flex", alignItems:"center", gap:4}}>
                     Depth (in):
                     <input type="number" step="0.5" min="0.5" max="24"
