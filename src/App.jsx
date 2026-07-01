@@ -498,7 +498,7 @@ function hasRole(userRoleOrRoles, role) {
 
 function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant, isPlatformAdmin, companySettings={} }) {
   const currentTenant = (myTenants||[]).find(t => t.tenantId === currentTenantId);
-  const currentLogo = currentTenant?.data?.logoUrl || (companySettings?.logoB64 ? "data:image/png;base64," + companySettings.logoB64 : "data:image/png;base64," + B_LOGO_B64);
+  const currentLogo = companySettings?.logoB64 ? "data:image/png;base64," + companySettings.logoB64 : (currentTenant?.data?.logoUrl || ("data:image/png;base64," + B_LOGO_B64));
   const currentCompanyAlt = currentTenant?.companyName || "Company logo";
 
   const tabsRef = useRef(null);
@@ -9055,6 +9055,19 @@ export default function App() {
         headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify({ data: csData }),
       });
+      // Keep tenant.data.logoUrl in sync so the nav bar always reflects
+      // the current logo even if the original wizard value was a file path
+      if (csData.logoB64) {
+        const curTenant = myTenants.find(t => t.tenantId === currentTenantId);
+        if (curTenant) {
+          const updatedData = { ...curTenant.data, logoUrl: "data:image/png;base64," + csData.logoB64 };
+          await tFetch("tenants?id=eq." + curTenant.tenantId, {
+            method: "PATCH",
+            body: JSON.stringify({ data: updatedData }),
+          });
+          setMyTenants(prev => prev.map(t => t.tenantId === currentTenantId ? { ...t, data: updatedData } : t));
+        }
+      }
     } catch(e) { console.error("syncCompanySettings error:", e); }
   };
 
