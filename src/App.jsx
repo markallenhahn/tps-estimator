@@ -1983,7 +1983,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
       const GREEN  = [34,197,94];
 
       // Logo or company name fallback
-      const LOGO_MAX_W = 200, LOGO_MAX_H = 70; // pt — fixed max for every tenant
+      const LOGO_MAX_W = 260, LOGO_MAX_H = 90; // pt — fixed max for every tenant
       if (companySettings?.logoB64) {
         try {
           const logoDataUrl2 = "data:image/png;base64," + companySettings.logoB64;
@@ -1991,6 +1991,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
           await new Promise((res) => {
             const im = new Image();
             im.onload = () => {
+              // Scale to fill the box — both up AND down, preserving aspect ratio
               const ratio2 = Math.min(LOGO_MAX_W / im.naturalWidth, LOGO_MAX_H / im.naturalHeight);
               const logoW2 = im.naturalWidth  * ratio2;
               const logoH2 = im.naturalHeight * ratio2;
@@ -5028,7 +5029,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
           const logoDataUrl3 = "data:image/png;base64," + CS_LOGO;
           const im3 = new Image();
           im3.onload = () => {
-            const ratio3 = Math.min(200 / im3.naturalWidth, 62 / im3.naturalHeight);
+            const ratio3 = Math.min(260 / im3.naturalWidth, 90 / im3.naturalHeight);
             const lw3 = im3.naturalWidth * ratio3, lh3 = im3.naturalHeight * ratio3;
             doc.addImage(im3, "PNG", (PW - lw3) / 2, y, lw3, lh3);
             res();
@@ -7164,13 +7165,14 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
       // ── PAGE 1 ────────────────────────────────────────────────────────────
 
       // Logo or company name fallback — fixed max size for every tenant
-      const LOGO_MAX_W = 200, LOGO_MAX_H = 70; // pt
+      const LOGO_MAX_W = 260, LOGO_MAX_H = 90; // pt
       if (companySettings?.logoB64) {
         try {
           const logoDataUrl = "data:image/png;base64," + companySettings.logoB64;
           await new Promise((res) => {
             const im = new Image();
             im.onload = () => {
+              // Scale to fill the box — both up AND down, preserving aspect ratio
               const ratio = Math.min(LOGO_MAX_W / im.naturalWidth, LOGO_MAX_H / im.naturalHeight);
               const logoW = im.naturalWidth  * ratio;
               const logoH = im.naturalHeight * ratio;
