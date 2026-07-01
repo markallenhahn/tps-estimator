@@ -1,132 +1,286 @@
-// Stripe webhook receiver — scaffold only, not wired to real tier updates yet.
+// api/stripe-webhook.js
+// Handles the full Stripe subscription lifecycle and writes plan data into
+// the tenant row so the app can gate features by plan without a Stripe call
+// on every page load.
 //
-// WHY THIS EXISTS NOW: tiers (Solo/Crew/Pro) are being held off until
-// multi-tenancy ships, since a tier has to belong to a *customer* and there's
-// only one customer (TPS) right now. But the webhook-handling shape — verify
-// the signature, parse the event, map a dollar amount to a tier — doesn't
-// depend on tenants existing. Building that piece now means there's only one
-// thing left to do later: swap the two TODOs below for real tenant lookups.
+// Fields written to tenant.data on each event:
+//   plan                — "solo" | "solo_plus" | "crew" | "crew_plus" | "pro"
+//   userCap             — integer (25 + add-on seats for pro, fixed for others)
+//   subscriptionStatus  — "active" | "paused" | "canceled" | "past_due"
+//   stripeCustomerId    — stored on first payment so future events can find tenant
+//   stripeSubscriptionId
+//   currentPeriodEnd    — ISO string, when the current billing period ends
+//   ownerEmail          — from Stripe customer record, stored for reference
+//   trialEndsAt         — set to 14 days after signup via redeem-tenant-invite.js
 //
-// Deploy location: /api/stripe-webhook.js (Vercel auto-detects this as a
-// serverless function at the path /api/stripe-webhook).
+// PLAN PRICES (in cents) — must match your Stripe price configuration exactly:
+//   Solo       $40/mo  = 4000
+//   Solo+      $75/mo  = 7500
+//   Crew       $120/mo = 12000
+//   Crew+      $165/mo = 16500
+//   Pro        $250/mo = 25000   (base; add-on seats are $20/mo each = 2000c)
 //
-// SETUP STEPS (do these before this does anything useful):
-// 1. npm install stripe
-// 2. In Vercel's dashboard -> Project -> Settings -> Environment Variables, add:
-//      STRIPE_SECRET_KEY       (from Stripe Dashboard -> Developers -> API keys)
-//      STRIPE_WEBHOOK_SECRET   (from step 3 below, starts with "whsec_")
-// 3. In Stripe Dashboard -> Developers -> Webhooks -> Add endpoint:
-//      URL: https://<your-vercel-domain>/api/stripe-webhook
-//      Events to send: invoice.payment_succeeded, customer.subscription.updated,
-//                      customer.subscription.deleted
-//    Stripe will show you the signing secret for STRIPE_WEBHOOK_SECRET above.
-// 4. Update the placeholder price thresholds in TIER_PRICE_CENTS below to match
-//    whatever you actually set up as your Solo/Crew/Pro prices in Stripe.
+// SETUP:
+//   1. npm install stripe
+//   2. Vercel env vars: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY
+//   3. Stripe Dashboard → Webhooks → Add endpoint:
+//        URL: https://<your-domain>/api/stripe-webhook
+//        Events: customer.subscription.created, customer.subscription.updated,
+//                customer.subscription.deleted, customer.subscription.paused,
+//                customer.subscription.resumed, invoice.payment_succeeded,
+//                invoice.payment_failed
 
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe        = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const SUPABASE_URL  = process.env.SUPABASE_URL || "https://elzymtqlcceouftwhcdk.supabase.co";
 
-// Vercel needs the raw, unparsed request body to verify Stripe's signature —
-// if the body parser runs first, the signature check will always fail.
-export const config = {
-  api: { bodyParser: false },
+export const config = { api: { bodyParser: false } };
+
+// ── Plan config (mirrors PLAN_CONFIG in App.jsx) ──────────────────────────────
+const PLAN_PRICE_CENTS = {
+  solo:      4000,
+  solo_plus: 7500,
+  crew:      12000,
+  crew_plus: 16500,
+  pro:       25000,
 };
+const PLAN_USER_CAPS = {
+  solo:      1,
+  solo_plus: 1,
+  crew:      5,
+  crew_plus: 5,
+  pro:       25, // base; add-ons calculated below
+};
+const ADDON_SEAT_PRICE_CENTS = 2000; // $20/mo per extra seat (Pro only)
 
+// Map the subscription's total amount to a plan key + userCap.
+// For Pro, any amount above the base price adds seats at $20 each.
+function derivePlanFromAmount(amountCents) {
+  // Sort descending so highest plan matches first
+  const entries = Object.entries(PLAN_PRICE_CENTS).sort((a, b) => b[1] - a[1]);
+  for (const [plan, price] of entries) {
+    if (amountCents >= price) {
+      let userCap = PLAN_USER_CAPS[plan];
+      if (plan === "pro" && amountCents > price) {
+        const extraCents = amountCents - price;
+        userCap += Math.floor(extraCents / ADDON_SEAT_PRICE_CENTS);
+      }
+      return { plan, userCap };
+    }
+  }
+  return { plan: null, userCap: 1 }; // unrecognized amount
+}
+
+// ── Supabase helpers ───────────────────────────────────────────────────────────
+const sbHeaders = (serviceKey) => ({
+  "apikey":        serviceKey,
+  "Authorization": "Bearer " + serviceKey,
+  "Content-Type":  "application/json",
+  "Prefer":        "return=representation",
+});
+
+async function findTenantByStripeCustomer(stripeCustomerId, serviceKey) {
+  const res = await fetch(
+    SUPABASE_URL + "/rest/v1/tenants?select=id,data&data->>stripeCustomerId=eq." + stripeCustomerId,
+    { headers: sbHeaders(serviceKey) }
+  );
+  const rows = await res.json();
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+}
+
+async function updateTenantData(tenantId, patch, serviceKey) {
+  // First fetch the current data blob so we can merge cleanly
+  const getRes = await fetch(
+    SUPABASE_URL + "/rest/v1/tenants?id=eq." + tenantId + "&select=data",
+    { headers: sbHeaders(serviceKey) }
+  );
+  const rows = await getRes.json();
+  const current = (Array.isArray(rows) && rows[0]?.data) || {};
+  const updated = { ...current, ...patch };
+  const patchRes = await fetch(
+    SUPABASE_URL + "/rest/v1/tenants?id=eq." + tenantId,
+    {
+      method:  "PATCH",
+      headers: sbHeaders(serviceKey),
+      body:    JSON.stringify({ data: updated }),
+    }
+  );
+  if (!patchRes.ok) {
+    const err = await patchRes.text();
+    console.error("[stripe-webhook] tenant update failed:", err);
+  }
+  return patchRes.ok;
+}
+
+// ── Raw body reader ────────────────────────────────────────────────────────────
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on("data", (chunk) => chunks.push(chunk));
-    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("data", (c) => chunks.push(c));
+    req.on("end",  () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
 }
 
-// PLACEHOLDER thresholds — replace with your real Stripe price amounts (in
-// cents) once Solo/Crew/Pro pricing is finalized. Mapping by amount (rather
-// than a fixed Stripe Price ID) is what lets this handle "however much came
-// in this month" the way Mark described, but it means these numbers MUST
-// match your actual prices exactly or accounts will get mis-tiered.
-const TIER_PRICE_CENTS = {
-  solo: 4900,   // e.g. $49/mo — EDIT ME
-  crew: 9900,   // e.g. $99/mo — EDIT ME
-  pro: 19900,   // e.g. $199/mo — EDIT ME
-};
-
-function amountToTier(amountCents) {
-  if (amountCents >= TIER_PRICE_CENTS.pro) return "pro";
-  if (amountCents >= TIER_PRICE_CENTS.crew) return "crew";
-  if (amountCents >= TIER_PRICE_CENTS.solo) return "solo";
-  return null; // didn't match any known tier price — log and investigate
-}
-
+// ── Main handler ───────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.status(405).end("Method Not Allowed");
-    return;
-  }
+  if (req.method !== "POST") return res.status(405).end("Method Not Allowed");
 
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!serviceKey) return res.status(500).json({ error: "Missing SUPABASE_SERVICE_KEY" });
+
+  // Verify Stripe signature
   let event;
   try {
-    const rawBody = await readRawBody(req);
+    const raw       = await readRawBody(req);
     const signature = req.headers["stripe-signature"];
-    event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+    event = stripe.webhooks.constructEvent(raw, signature, webhookSecret);
   } catch (err) {
-    // Signature didn't match — either a misconfigured secret, or someone
-    // hitting this endpoint who isn't actually Stripe. Reject either way.
-    console.error("Stripe webhook signature verification failed:", err.message);
-    res.status(400).send(`Webhook signature verification failed: ${err.message}`);
-    return;
+    console.error("[stripe-webhook] signature verification failed:", err.message);
+    return res.status(400).send("Webhook signature verification failed: " + err.message);
   }
 
-  switch (event.type) {
-    case "invoice.payment_succeeded": {
-      const invoice = event.data.object;
-      const stripeCustomerId = invoice.customer;
-      const amountPaidCents = invoice.amount_paid;
-      const tier = amountToTier(amountPaidCents);
+  const log = (msg) => console.log("[stripe-webhook]", msg);
 
-      // TODO once multi-tenancy ships: replace this log with a real lookup —
-      //   1. Find the tenant row where data.stripeCustomerId === stripeCustomerId
-      //   2. Set data.subscriptionTier = tier, data.subscriptionStatus = "active"
-      //   3. PATCH/POST that tenant row via sbFetch, same pattern as every
-      //      other table in this app.
-      // If tier comes back null, the paid amount didn't match any known
-      // price — that's worth alerting on rather than silently accepting it.
-      console.log(`[stripe-webhook] invoice.payment_succeeded: customer=${stripeCustomerId} amount=${amountPaidCents}c tier=${tier ?? "UNKNOWN"}`);
-      break;
+  try {
+    switch (event.type) {
+
+      // ── New subscription created or payment succeeded ───────────────────────
+      case "customer.subscription.created":
+      case "invoice.payment_succeeded": {
+        const obj = event.data.object;
+        const stripeCustomerId = obj.customer;
+        // For invoice events, amount_paid is the field; for subscription, use items
+        let amountCents;
+        if (event.type === "invoice.payment_succeeded") {
+          amountCents = obj.amount_paid;
+        } else {
+          // subscription.created — sum all items
+          amountCents = (obj.items?.data || []).reduce((s, i) => s + (i.price?.unit_amount || 0) * (i.quantity || 1), 0);
+        }
+        const { plan, userCap } = derivePlanFromAmount(amountCents);
+        log(`${event.type}: customer=${stripeCustomerId} amount=${amountCents}c → plan=${plan} userCap=${userCap}`);
+
+        if (!plan) {
+          log(`WARN: amount ${amountCents}c did not match any plan — skipping tenant update`);
+          break;
+        }
+
+        const tenant = await findTenantByStripeCustomer(stripeCustomerId, serviceKey);
+        if (!tenant) {
+          log(`WARN: no tenant found for stripeCustomerId=${stripeCustomerId}`);
+          break;
+        }
+
+        // Fetch owner email from Stripe
+        let ownerEmail = null;
+        try {
+          const customer = await stripe.customers.retrieve(stripeCustomerId);
+          ownerEmail = customer.email || null;
+        } catch(e) { /* non-fatal */ }
+
+        const subId = event.type === "invoice.payment_succeeded"
+          ? obj.subscription
+          : obj.id;
+        const periodEnd = event.type === "invoice.payment_succeeded"
+          ? (obj.lines?.data?.[0]?.period?.end ? new Date(obj.lines.data[0].period.end * 1000).toISOString() : null)
+          : (obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null);
+
+        await updateTenantData(tenant.id, {
+          plan,
+          userCap,
+          subscriptionStatus:   "active",
+          stripeCustomerId,
+          stripeSubscriptionId: subId,
+          currentPeriodEnd:     periodEnd,
+          ownerEmail,
+          pausedAt: null, // clear any previous pause
+        }, serviceKey);
+        break;
+      }
+
+      // ── Subscription updated (upgrade/downgrade/seat change) ───────────────
+      case "customer.subscription.updated": {
+        const sub = event.data.object;
+        const stripeCustomerId = sub.customer;
+        const amountCents = (sub.items?.data || []).reduce((s, i) => s + (i.price?.unit_amount || 0) * (i.quantity || 1), 0);
+        const { plan, userCap } = derivePlanFromAmount(amountCents);
+        const status = sub.status; // "active" | "past_due" | "canceled" | etc.
+        log(`subscription.updated: customer=${stripeCustomerId} amount=${amountCents}c → plan=${plan} status=${status}`);
+
+        const tenant = await findTenantByStripeCustomer(stripeCustomerId, serviceKey);
+        if (!tenant) { log(`WARN: no tenant for ${stripeCustomerId}`); break; }
+
+        const patch = {
+          subscriptionStatus:   status === "active" ? "active" : status,
+          stripeSubscriptionId: sub.id,
+          currentPeriodEnd:     sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        };
+        if (plan) { patch.plan = plan; patch.userCap = userCap; }
+        await updateTenantData(tenant.id, patch, serviceKey);
+        break;
+      }
+
+      // ── Subscription paused ────────────────────────────────────────────────
+      case "customer.subscription.paused": {
+        const sub = event.data.object;
+        const tenant = await findTenantByStripeCustomer(sub.customer, serviceKey);
+        if (!tenant) break;
+        log(`subscription.paused: customer=${sub.customer}`);
+        await updateTenantData(tenant.id, {
+          subscriptionStatus: "paused",
+          pausedAt: new Date().toISOString(),
+        }, serviceKey);
+        break;
+      }
+
+      // ── Subscription resumed ───────────────────────────────────────────────
+      case "customer.subscription.resumed": {
+        const sub = event.data.object;
+        const tenant = await findTenantByStripeCustomer(sub.customer, serviceKey);
+        if (!tenant) break;
+        log(`subscription.resumed: customer=${sub.customer}`);
+        await updateTenantData(tenant.id, {
+          subscriptionStatus: "active",
+          pausedAt: null,
+        }, serviceKey);
+        break;
+      }
+
+      // ── Subscription canceled ──────────────────────────────────────────────
+      case "customer.subscription.deleted": {
+        const sub = event.data.object;
+        const tenant = await findTenantByStripeCustomer(sub.customer, serviceKey);
+        if (!tenant) break;
+        log(`subscription.deleted: customer=${sub.customer}`);
+        await updateTenantData(tenant.id, {
+          subscriptionStatus: "canceled",
+          pausedAt: null,
+        }, serviceKey);
+        break;
+      }
+
+      // ── Payment failed ─────────────────────────────────────────────────────
+      case "invoice.payment_failed": {
+        const inv = event.data.object;
+        const tenant = await findTenantByStripeCustomer(inv.customer, serviceKey);
+        if (!tenant) break;
+        log(`invoice.payment_failed: customer=${inv.customer}`);
+        await updateTenantData(tenant.id, {
+          subscriptionStatus: "past_due",
+        }, serviceKey);
+        break;
+      }
+
+      default:
+        log(`unhandled event type: ${event.type}`);
     }
-
-    case "customer.subscription.updated": {
-      const subscription = event.data.object;
-      const stripeCustomerId = subscription.customer;
-      // TODO once multi-tenancy ships: re-derive tier from the subscription's
-      // current price/amount and update the tenant the same way as above —
-      // covers upgrades/downgrades that happen outside a fresh invoice.
-      console.log(`[stripe-webhook] customer.subscription.updated: customer=${stripeCustomerId} status=${subscription.status}`);
-      break;
-    }
-
-    case "customer.subscription.deleted": {
-      const subscription = event.data.object;
-      const stripeCustomerId = subscription.customer;
-      // TODO once multi-tenancy ships: find the tenant by stripeCustomerId and
-      // set data.subscriptionStatus = "canceled" (decide separately whether
-      // a canceled account loses access immediately or at period end).
-      console.log(`[stripe-webhook] customer.subscription.deleted: customer=${stripeCustomerId}`);
-      break;
-    }
-
-    default:
-      // Stripe sends many event types beyond the three above — anything
-      // unhandled is intentionally ignored, not an error.
-      console.log(`[stripe-webhook] unhandled event type: ${event.type}`);
+  } catch (err) {
+    console.error("[stripe-webhook] handler error:", err);
+    // Still return 200 so Stripe doesn't retry — log to investigate
   }
 
-  // Always 200 once signature verification passes, even for unhandled event
-  // types — Stripe retries (with backoff) on any non-2xx response, and
-  // retrying something we're deliberately ignoring just wastes their retries
-  // and clutters logs.
   res.status(200).json({ received: true });
 }

@@ -65,8 +65,10 @@ export default async function handler(req, res) {
         data: {
           companyName: companyName.trim(),
           phone: (phone || "").trim(),
-          subscriptionTier: null,
-          subscriptionStatus: "trial",
+          plan: null,
+          userCap: 5,
+          subscriptionStatus: null,
+          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
           setupComplete: false,
         },
       }),

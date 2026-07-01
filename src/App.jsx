@@ -15,6 +15,58 @@ const TONS_SERVICES = ["patch","paving","basepaving","milling","overlay"];
 // True when the service is ton-capable AND currently set to $/ton pricing
 const isTonMode = (svcKey, rates) =>
   TONS_SERVICES.includes(svcKey) && (rates[svcKey]?.pricingMode ?? "ton") === "ton";
+// ─── Subscription Plan Config ─────────────────────────────────────────────────
+const PLAN_CONFIG = {
+  solo:      { label:"Solo",      price:4000,  userCap:1,  features:["core"] },
+  solo_plus: { label:"Solo+",     price:7500,  userCap:1,  features:["core","zones","materials","reports","costs"] },
+  crew:      { label:"Crew",      price:12000, userCap:5,  features:["core","costs","labor","export"] },
+  crew_plus: { label:"Crew+",     price:16500, userCap:5,  features:["core","zones","materials","reports","costs","labor","export"] },
+  pro:       { label:"Pro",       price:25000, userCap:25, features:["core","zones","materials","reports","costs","labor","export","addon_users"] },
+  trial:     { label:"Trial",     price:0,     userCap:5,  features:["core","zones","materials","reports","costs","labor","export"] },
+};
+
+// Which tabs/features require which plan feature flag.
+// Tabs not listed here are always visible (home, jobs, schedule, estimate,
+// invoice, crm, rates, owner-hub, account).
+const PLAN_TAB_FEATURES = {
+  zones:     ["zones","materials","reports"],   // solo+ and above
+  materials: ["zones","materials","reports"],
+  reports:   ["zones","materials","reports"],
+  costs:     ["costs"],                         // solo+ and crew and above
+  labor:     ["labor"],                         // crew and above
+  export:    ["export"],                        // crew and above
+  team:      ["crew","crew_plus","pro"],         // not a feature flag — handled separately
+};
+
+// Returns the active plan object for a tenant, handling trial and missing plan.
+function getTenantPlan(tenantData) {
+  if (!tenantData) return PLAN_CONFIG.trial;
+  const { plan, subscriptionStatus, trialEndsAt } = tenantData;
+  // Active paid subscription
+  if (plan && PLAN_CONFIG[plan] && subscriptionStatus === "active") return PLAN_CONFIG[plan];
+  // Trial: no paid plan yet, within 14 days of account creation
+  if (trialEndsAt && new Date(trialEndsAt) > new Date()) return { ...PLAN_CONFIG.trial, label:"Trial" };
+  // Expired trial or canceled — drop to Solo feature set (read-only core)
+  if (plan && PLAN_CONFIG[plan]) return PLAN_CONFIG[plan]; // keep last known plan
+  return PLAN_CONFIG.trial; // fallback
+}
+
+// Returns true if the current plan includes the given feature flag.
+function planHasFeature(tenantData, feature) {
+  const plan = getTenantPlan(tenantData);
+  return plan.features.includes(feature);
+}
+
+// Returns true if the tenant's plan allows the given tab to be shown.
+// Owner-only tab visibility (team size) is enforced separately at the tab level.
+function planAllowsTab(tenantData, tabKey) {
+  const featureFlags = PLAN_TAB_FEATURES[tabKey];
+  if (!featureFlags) return true; // tab has no plan restriction
+  const plan = getTenantPlan(tenantData);
+  // Tab is allowed if plan.features contains ANY of the required flags
+  return featureFlags.some(f => plan.features.includes(f));
+}
+
 const DEFAULT_ASPHALT_DENSITY  = 145; // lbs per cubic foot
 const DEFAULT_ASPHALT_DEPTH_IN = 3;   // inches
 const DEFAULT_TONS_FORMULA     = "simple"; // "simple" | "density"
@@ -495,6 +547,42 @@ function getAccessLevel(permissions, tabKey, role) {
 // matters — string equality silently breaks the moment someone has 2 roles.
 function hasRole(userRoleOrRoles, role) {
   return Array.isArray(userRoleOrRoles) ? userRoleOrRoles.includes(role) : userRoleOrRoles === role;
+}
+
+// ─── Trial Banner ─────────────────────────────────────────────────────────────
+function TrialBanner({ tenantData, userRole, onGoToAccount }) {
+  const [dismissed, setDismissed] = React.useState(
+    () => sessionStorage.getItem("trialBannerDismissed") === "1"
+  );
+  if (dismissed) return null;
+  if (userRole !== "owner") return null;
+  const isTrialing = tenantData?.trialEndsAt && !tenantData?.subscriptionStatus;
+  if (!isTrialing) return null;
+  const daysLeft = Math.max(0, Math.ceil((new Date(tenantData.trialEndsAt) - new Date()) / (1000*60*60*24)));
+  const urgent = daysLeft <= 3;
+  const dismiss = () => { sessionStorage.setItem("trialBannerDismissed","1"); setDismissed(true); };
+  return (
+    <div style={{
+      background: urgent ? "#fef2f2" : "#fefce8",
+      borderBottom: `2px solid ${urgent ? "#fca5a5" : "#fde68a"}`,
+      padding:"10px 24px",
+      display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
+      fontSize:13, color: urgent ? "#991b1b" : "#92400e",
+    }}>
+      <span>
+        {urgent ? "⚠️" : "ℹ️"} Your free trial expires in <strong>{daysLeft} day{daysLeft !== 1 ? "s" : ""}</strong>.
+        Subscribe to keep full access.
+      </span>
+      <div style={{display:"flex", gap:8, flexShrink:0}}>
+        <button style={{fontSize:12, fontWeight:700, background: urgent ? "#ef4444" : "#d97706", color:"#fff", border:"none", borderRadius:6, padding:"5px 14px", cursor:"pointer"}}
+          onClick={onGoToAccount}>
+          Subscribe now
+        </button>
+        <button style={{fontSize:12, background:"none", border:"none", cursor:"pointer", color:"inherit", opacity:0.6}}
+          onClick={dismiss}>✕</button>
+      </div>
+    </div>
+  );
 }
 
 function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant, isPlatformAdmin, companySettings={} }) {
@@ -5513,7 +5601,7 @@ function CostsView({ currentJob, updateJob, rates }) {
 }
 
 // ─── User Settings View (any logged-in user) ───────────────────────────────────
-function UserSettingsView({ accessToken, userId, setView, onLogout }) {
+function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, userRole }) {
   const [firstName, setFirstName] = useState("");
   const [lastName,  setLastName]  = useState("");
   const [phone,     setPhone]     = useState("");
@@ -5594,6 +5682,52 @@ function UserSettingsView({ accessToken, userId, setView, onLogout }) {
       <div style={S.pageHeader}>
         <h1 style={S.h1}>User Settings</h1>
       </div>
+
+      {/* ── Subscription Plan ── */}
+      {userRole === "owner" && (() => {
+        const plan = getTenantPlan(tenantData);
+        const isTrialing = tenantData?.trialEndsAt && !tenantData?.subscriptionStatus;
+        const trialDaysLeft = isTrialing
+          ? Math.max(0, Math.ceil((new Date(tenantData.trialEndsAt) - new Date()) / (1000*60*60*24)))
+          : null;
+        const isCanceled = tenantData?.subscriptionStatus === "canceled";
+        const isPaused   = tenantData?.subscriptionStatus === "paused";
+        return (
+          <section style={S.section}>
+            <h2 style={S.h2}>Subscription</h2>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12}}>
+              <div>
+                <div style={{fontWeight:700, fontSize:16}}>
+                  {plan.label}
+                  {isTrialing && <span style={{marginLeft:8, fontSize:12, background:"#fef3c7", color:"#92400e", borderRadius:4, padding:"2px 8px", fontWeight:600}}>Trial — {trialDaysLeft}d left</span>}
+                  {isCanceled && <span style={{marginLeft:8, fontSize:12, background:"#fee2e2", color:"#991b1b", borderRadius:4, padding:"2px 8px", fontWeight:600}}>Canceled</span>}
+                  {isPaused   && <span style={{marginLeft:8, fontSize:12, background:"#fef3c7", color:"#92400e", borderRadius:4, padding:"2px 8px", fontWeight:600}}>Paused</span>}
+                </div>
+                <div style={{fontSize:12, color:C.textMuted, marginTop:4}}>
+                  {plan.userCap === 1 ? "1 user" : `Up to ${plan.userCap} users`}
+                  {tenantData?.userCap && tenantData.userCap !== plan.userCap ? ` (${tenantData.userCap} with add-ons)` : ""}
+                  {" · "}{plan.price === 0 ? "Free" : "$" + (plan.price/100).toFixed(0) + "/mo"}
+                </div>
+              </div>
+              <button
+                style={{...S.btnPrimary, fontSize:13}}
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/stripe-portal", {
+                      method:"POST",
+                      headers:{"Content-Type":"application/json","Authorization":"Bearer "+accessToken},
+                    });
+                    const data = await res.json();
+                    if (data.url) window.location.href = data.url;
+                    else alert("Could not open billing portal: " + (data.error || "Unknown error"));
+                  } catch(e) { alert("Could not open billing portal."); }
+                }}>
+                💳 Manage Subscription
+              </button>
+            </div>
+          </section>
+        );
+      })()}
 
       <section style={S.section}>
         <h2 style={S.h2}>Your Info</h2>
@@ -9476,6 +9610,7 @@ export default function App() {
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
       <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant} isPlatformAdmin={isPlatformAdmin} companySettings={companySettings}/>
+      <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {syncStatus && (
           <div style={{
@@ -9494,7 +9629,7 @@ export default function App() {
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
-        {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
+        {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"zones") && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
         {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId} servicesOffered={currentTenant?.data?.servicesOffered||[]}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}
           canOverridePrice={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager")}
@@ -9504,12 +9639,12 @@ export default function App() {
             (currentJob?.readyForReview || !["estimate","draft"].includes(currentJob?.status)))
         }
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings}/>}
-        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
-        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
+        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
+        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
-        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings}/></div>}
+        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
           setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: {...t.data, servicesOffered: services}} : t));
           tFetch("tenants?id=eq." + currentTenantId, { method:"PATCH", body:JSON.stringify({ data: {...currentTenant.data, servicesOffered: services} }) });
@@ -9517,13 +9652,13 @@ export default function App() {
         {view==="homebase" && userRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
         {view==="company-settings" && userRole==="owner" && <CompanySettingsView setView={navigateTo} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
         {view==="referral" && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
-        {view==="team"     && (userRole==="owner"||userRole==="manager") && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId}/>}
+        {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data}/>}
         {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
         {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token} permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions}/>}
         {view==="global-permissions" && isPlatformAdmin && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={false}/>}
         {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
-        {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout}/>}
-        {view==="export"   && userRole==="owner" && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo} companySettings={companySettings}/>}
+        {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout} tenantData={currentTenant?.data} userRole={userRole}/>}
+        {view==="export"   && userRole==="owner" && planAllowsTab(currentTenant?.data,"export") && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo} companySettings={companySettings}/>}
         </div>
       </div>
     </div>
