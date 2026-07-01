@@ -7865,7 +7865,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
 
   const handleLogo = (e) => {
     const file = e.target.files[0]; if (!file) return;
-    if (file.size > 500*1024) { setMessage("⚠️ Logo must be under 500 KB."); return; }
+    if (file.size > 5*1024*1024) { setMessage("⚠️ Logo must be under 5 MB."); return; }
     const reader = new FileReader();
     reader.onload = ev => {
       const b64 = ev.target.result.split(",")[1];
