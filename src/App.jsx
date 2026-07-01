@@ -588,8 +588,34 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
 }
 
 // ─── Rates Editor ─────────────────────────────────────────────────────────────
-function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob }) {
+function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, currentTenant, onServicesChange }) {
   const OTHER_RATE = {label:"Other", unit:"flat", rate:0, rateLabel:"flat $"};
+
+  // Services offered chip selector — derives options from DEFAULT_RATES
+  const SERVICE_OPTIONS = Object.entries(DEFAULT_RATES)
+    .filter(([k]) => k !== "other")
+    .map(([key, svc]) => ({ key, label: svc.label }));
+
+  const storedServices = currentTenant?.data?.servicesOffered;
+  // If tenant has no servicesOffered yet, default to ALL services shown
+  const [selectedServices, setSelectedServices] = useState(
+    storedServices && storedServices.length > 0 ? storedServices : SERVICE_OPTIONS.map(s => s.key)
+  );
+
+  // Sync if tenant data changes (e.g. after wizard completes)
+  useEffect(() => {
+    const s = currentTenant?.data?.servicesOffered;
+    if (s && s.length > 0) setSelectedServices(s);
+  }, [currentTenant?.data?.servicesOffered]);
+
+  const toggleService = (key) => {
+    const next = selectedServices.includes(key)
+      ? selectedServices.filter(k => k !== key)
+      : [...selectedServices, key];
+    if (next.length === 0) { alert("Select at least one service."); return; }
+    setSelectedServices(next);
+    onServicesChange && onServicesChange(next);
+  };
 
   // Build the base rates to edit from — always include "other", and always
   // backfill any missing service keys from DEFAULT_RATES so a malformed or
@@ -657,11 +683,46 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob }) {
         </div>
       )}
 
+      {/* Services Offered chip selector */}
+      {!currentJob && (
+        <section style={{...S.section, marginBottom:16}}>
+          <h2 style={S.h2}>Services You Offer</h2>
+          <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>
+            Select which services your company provides. Only these will appear in the rates table below and in the service dropdown on job measurements.
+          </p>
+          <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
+            {SERVICE_OPTIONS.map(({key, label}) => {
+              const active = selectedServices.includes(key);
+              return (
+                <button key={key}
+                  onClick={() => toggleService(key)}
+                  style={{
+                    padding:"6px 14px", borderRadius:20, fontSize:13, cursor:"pointer", border:"2px solid",
+                    borderColor: active ? C.accent : "#d1d5db",
+                    background: active ? C.accent : "#fff",
+                    color: active ? "#fff" : C.text,
+                    fontWeight: active ? 600 : 400,
+                  }}>
+                  {active ? "✓ " : ""}{label}
+                </button>
+              );
+            })}
+          </div>
+          {onServicesChange && (
+            <p style={{fontSize:11, color:C.textMuted, marginTop:8}}>
+              Changes are saved automatically. You can also update this in Company Settings.
+            </p>
+          )}
+        </section>
+      )}
+
       <section style={S.section}>
         <h2 style={S.h2}>Adjust Pricing</h2>
         <div style={S.ratesTable}>
           {Object.entries(editing).map(([key, svc]) => {
             if (!svc) return null;
+            // Only show services the tenant offers (+ always show "other")
+            if (key !== "other" && !selectedServices.includes(key)) return null;
             return (
             <div key={key} style={S.rateRow}>
               <div style={S.rateName}>{svc.label}</div>
@@ -769,7 +830,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
 }
 
 // ─── Media View ───────────────────────────────────────────────────────────────
-function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userRoles, userId, jobs, companySettings={}, accessToken, tenantId }) {
+function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userRoles, userId, jobs, companySettings={}, accessToken, tenantId, servicesOffered=[] }) {
   const CS_NAME = companySettings?.name || "";
   const isDesktop = useIsDesktop();
   // ── Photo capture ──
@@ -1331,7 +1392,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           </label>
           <label style={S.formLabel}>Service Type *
             <select value={newArea.serviceType} onChange={e => setNewArea(p => ({...p, serviceType:e.target.value, measurement:""}))} style={S.input}>
-              {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+              {Object.entries(rates).filter(([k]) => k === "other" || servicesOffered.length === 0 || servicesOffered.includes(k)).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
           </label>
           {!isOther(newArea.serviceType) && (
@@ -1470,7 +1531,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                       </label>
                       <label style={S.formLabel}>Service Type
                         <select value={editArea.serviceType} onChange={e => setEditArea(p => ({...p, serviceType:e.target.value}))} style={S.input}>
-                          {Object.entries(rates).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+                          {Object.entries(rates).filter(([k]) => k === "other" || servicesOffered.length === 0 || servicesOffered.includes(k)).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
                         </select>
                       </label>
                       <label style={S.formLabel}>
@@ -9169,7 +9230,7 @@ export default function App() {
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
-        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId} servicesOffered={currentTenant?.data?.servicesOffered||[]}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}
           canOverridePrice={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager")}
           readOnly={
@@ -9184,7 +9245,10 @@ export default function App() {
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings}/></div>}
-        {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob}/>}
+        {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
+          setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: {...t.data, servicesOffered: services}} : t));
+          tFetch("tenants?id=eq." + currentTenantId, { method:"PATCH", body:JSON.stringify({ data: {...currentTenant.data, servicesOffered: services} }) });
+        }}/>}
         {view==="homebase" && userRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
         {view==="company-settings" && userRole==="owner" && <CompanySettingsView setView={navigateTo} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
         {view==="referral" && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
