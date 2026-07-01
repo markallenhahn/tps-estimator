@@ -7567,6 +7567,7 @@ function JoinCompanyView({ token, onSuccess }) {
     e.preventDefault();
     setError("");
     if (!companyName.trim()) { setError("Company name is required."); return; }
+    if (!phone.trim()) { setError("Phone number is required."); return; }
     if (!email.trim()) { setError("Email is required."); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError("Enter a valid email address (e.g. name@company.com)."); return; }
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
@@ -7604,8 +7605,8 @@ function JoinCompanyView({ token, onSuccess }) {
           <label style={S.formLabel}>Company Name
             <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} placeholder="e.g. Smith Paving Co." required/>
           </label>
-          <label style={{...S.formLabel, marginTop:12}}>Phone (optional)
-            <input type="tel" value={phone} onChange={e => setPhone(formatPhone(e.target.value))} style={S.input}/>
+          <label style={{...S.formLabel, marginTop:12}}>Phone *
+            <input type="tel" value={phone} onChange={e => setPhone(formatPhone(e.target.value))} style={S.input} required/>
           </label>
           <label style={{...S.formLabel, marginTop:12}}>Your Email
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={S.input} required/>
@@ -8143,7 +8144,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken })
                 <input value={lastName} onChange={e => setLastName(e.target.value)} style={S.input} required/>
               </label>
             </div>
-            <label style={{...S.formLabel, marginTop:10}}>Your Phone
+            <label style={{...S.formLabel, marginTop:10}}>Your Phone *
               <input type="tel" value={ownerPhone} onChange={e => setOwnerPhone(formatPhone(e.target.value))} style={S.input} required/>
             </label>
           </section>
