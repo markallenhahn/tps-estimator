@@ -2772,9 +2772,9 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
 // upcoming-jobs forecast so both use identical math.
 function estimateJobMaterials(job, settings) {
   const areas = job.areas || [];
-  const sealcoatSqFt = areas.filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
-  const crackFillLinFt = areas.filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
-  const patchSqFt = areas.filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const sealcoatSqFt = areas.filter(a=>a.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+  const crackFillLinFt = areas.filter(a=>a.serviceType==="crackfill").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+  const patchSqFt = areas.filter(a=>a.serviceType==="patch").reduce((s,ar)=>s+Number(ar.measurement||0),0);
   return {
     sealcoat: settings.sealcoatSqFtPerGal > 0 ? sealcoatSqFt / settings.sealcoatSqFtPerGal : 0,
     crackfill: settings.crackfillLinFtPerUnit > 0 ? crackFillLinFt / settings.crackfillLinFtPerUnit : 0,
@@ -2804,7 +2804,7 @@ function latestScheduledDate(job) {
 // consumption data, as opposed to estimateJobMaterials() which applies the
 // coverage rate to produce an estimated material quantity.
 function jobRawMeasurement(job, serviceType) {
-  return (job.areas || []).filter(a => a.serviceType===serviceType).reduce((s,a)=>s+Number(a.measurement||0), 0);
+  return (job.areas || []).filter(a => a.serviceType===serviceType).reduce((s,ar)=>s+Number(ar.measurement||0), 0);
 }
 
 // "Done" = work that has actually happened and consumed material — used as
@@ -4171,9 +4171,9 @@ function calcJobFinancials(job, rates) {
   const TARGET_MARGIN          = 0.52;
 
   const areas = job.areas || [];
-  const sealcoatSqFt   = areas.filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
-  const crackFillLinFt = areas.filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
-  const patchSqFt      = areas.filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const sealcoatSqFt   = areas.filter(a=>a.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+  const crackFillLinFt = areas.filter(a=>a.serviceType==="crackfill").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+  const patchSqFt      = areas.filter(a=>a.serviceType==="patch").reduce((s,ar)=>s+Number(ar.measurement||0),0);
   const patchTons      = calcPatchTons(patchSqFt);
 
   const subtotal    = areas.reduce((sum,a)=>sum+calcLineAmt(a,rates),0);
@@ -5268,9 +5268,9 @@ function CostsView({ currentJob, updateJob, rates }) {
   const FUEL_PCT               = 0.05;
   const TARGET_MARGIN          = 0.52;
 
-  const sealcoatSqFt   = (currentJob.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
-  const crackFillLinFt = (currentJob.areas||[]).filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
-  const patchSqFt      = (currentJob.areas||[]).filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+  const sealcoatSqFt   = (currentJob.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+  const crackFillLinFt = (currentJob.areas||[]).filter(a=>a.serviceType==="crackfill").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+  const patchSqFt      = (currentJob.areas||[]).filter(a=>a.serviceType==="patch").reduce((s,ar)=>s+Number(ar.measurement||0),0);
   const patchTons      = calcPatchTons(patchSqFt);
 
   const subtotal    = (currentJob.areas||[]).reduce((sum,a)=>sum+calcLineAmt(a,rates),0);
@@ -6456,9 +6456,9 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
       const actuals = costs.actuals || {};
       const fullAddress = [j.address, j.city, j.state, j.zip].filter(Boolean).join(", ");
 
-      const sealcoatSqFt   = (j.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,a)=>s+Number(a.measurement||0),0);
-      const crackFillLinFt = (j.areas||[]).filter(a=>a.serviceType==="crackfill").reduce((s,a)=>s+Number(a.measurement||0),0);
-      const patchSqFt      = (j.areas||[]).filter(a=>a.serviceType==="patch").reduce((s,a)=>s+Number(a.measurement||0),0);
+      const sealcoatSqFt   = (j.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+      const crackFillLinFt = (j.areas||[]).filter(a=>a.serviceType==="crackfill").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+      const patchSqFt      = (j.areas||[]).filter(a=>a.serviceType==="patch").reduce((s,ar)=>s+Number(ar.measurement||0),0);
       const patchTons      = calcPatchTons(patchSqFt);
       const estSealcoat  = (sealcoatSqFt/70)*4.33;
       const estCrackFill = crackFillLinFt*0.14;
