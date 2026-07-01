@@ -1664,13 +1664,15 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           <h2 style={S.h2}>Running Totals</h2>
           <div style={S.totalsGrid}>
             {Object.entries(totalBySvc).map(([svc,qty]) => {
-              const amt = svc==="other" ? qty : isTonMode(svc,rates) ? calcTons(qty, a.depthIn??(rates[svc]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[svc]?.density??DEFAULT_ASPHALT_DENSITY))*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
+              const svcDepth   = rates[svc]?.depthIn  ?? DEFAULT_ASPHALT_DEPTH_IN;
+              const svcDensity = rates[svc]?.density  ?? DEFAULT_ASPHALT_DENSITY;
+              const amt = svc==="other" ? qty : isTonMode(svc,rates) ? calcTons(qty, svcDepth, svcDensity)*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
               return (
                 <div key={svc} style={S.totalCard}>
                   <div style={S.totalSvc}>{rates[svc]?.label||svc}</div>
                   <div style={S.totalQty}>
                     {svc==="other" ? formatCurrency(qty) : qty.toLocaleString() + " " + (svc==="patch"?"sq ft":rates[svc]?.unit||"")}
-                    {isTonMode(svc,rates) && <span style={S.totalTons}> = {calcTons(qty, a.depthIn??(rates[svc]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[svc]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2)} tons</span>}
+                    {isTonMode(svc,rates) && <span style={S.totalTons}> = {calcTons(qty, svcDepth, svcDensity).toFixed(2)} tons</span>}
                   </div>
                   <div style={S.totalAmt}>{svc==="other" ? "" : formatCurrency(amt)}</div>
                 </div>
