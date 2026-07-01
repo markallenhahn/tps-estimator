@@ -551,7 +551,7 @@ function hasRole(userRoleOrRoles, role) {
 
 // ─── Trial Banner ─────────────────────────────────────────────────────────────
 function TrialBanner({ tenantData, userRole, onGoToAccount }) {
-  const [dismissed, setDismissed] = React.useState(
+  const [dismissed, setDismissed] = useState(
     () => sessionStorage.getItem("trialBannerDismissed") === "1"
   );
   if (dismissed) return null;
