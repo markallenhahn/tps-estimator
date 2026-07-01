@@ -12,6 +12,9 @@ const B_LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAMcAAADZCAYAAACU2SQtAAAAAXNSR0IArs4c
 const BLACKTOPIQ_LOGO_B64 = "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";
 
 const TONS_SERVICES = ["patch","paving","milling","overlay"];
+// True when the service is ton-capable AND currently set to $/ton pricing
+const isTonMode = (svcKey, rates) =>
+  TONS_SERVICES.includes(svcKey) && (rates[svcKey]?.pricingMode ?? "ton") === "ton";
 const DEFAULT_ASPHALT_DENSITY = 145; // lbs per cubic foot
 const DEFAULT_ASPHALT_DEPTH_IN = 3;  // inches
 
@@ -27,12 +30,12 @@ const calcPatchTons = (sqft, depthIn, density) => calcTons(sqft, depthIn, densit
 const DEFAULT_RATES = {
   sealcoat:     { label:"Sealcoat",          unit:"sqft",  rate:0.30, rateLabel:"$/sq ft"  },
   crackfill:    { label:"Crack Fill",         unit:"linft", rate:1.50, rateLabel:"$/lin ft" },
-  patch:        { label:"Patching",           unit:"sqft",  rate:650,  rateLabel:"$/ton",    depthIn:3,   density:145 },
+  patch:        { label:"Patching",           unit:"sqft",  rate:650,  rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton" },
   striping:     { label:"Line Striping",      unit:"linft", rate:1.25, rateLabel:"$/lin ft" },
-  paving:       { label:"Paving",             unit:"sqft",  rate:3.50, rateLabel:"$/ton",    depthIn:3,   density:145 },
+  paving:       { label:"Paving",             unit:"sqft",  rate:3.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton" },
   infrared:     { label:"Infrared Patching",  unit:"sqft",  rate:8.00, rateLabel:"$/sq ft"  },
-  milling:      { label:"Milling",            unit:"sqft",  rate:1.50, rateLabel:"$/ton",    depthIn:3,   density:145 },
-  overlay:      { label:"Overlay",            unit:"sqft",  rate:2.50, rateLabel:"$/ton",    depthIn:3,   density:145 },
+  milling:      { label:"Milling",            unit:"sqft",  rate:1.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton" },
+  overlay:      { label:"Overlay",            unit:"sqft",  rate:2.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton" },
   mobilization: { label:"Mobilization",       unit:"flat",  rate:500,  rateLabel:"flat $"   },
   sitework:     { label:"Site Work",          unit:"flat",  rate:0,    rateLabel:"flat $"   },
   other:        { label:"Other",              unit:"flat",  rate:0,    rateLabel:"flat $"   },
@@ -79,7 +82,7 @@ function calcLineAmt(area, rates) {
   const svc = rates[area.serviceType];
   if (!svc) return 0;
   const qty = Number(area.measurement || 0);
-  if (TONS_SERVICES.includes(area.serviceType)) {
+  if (isTonMode(area.serviceType, rates)) {
     // Use area-level depth/density, fall back to rate defaults, then global defaults
     const depth   = area.depthIn  ?? svc.depthIn  ?? DEFAULT_ASPHALT_DEPTH_IN;
     const density = area.density  ?? svc.density  ?? DEFAULT_ASPHALT_DENSITY;
@@ -745,22 +748,37 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
             if (!svc) return null;
             // Only show services the tenant offers (+ always show "other")
             if (key !== "other" && !selectedServices.includes(key)) return null;
-            const isTons = TONS_SERVICES.includes(key);
+            const isTonsCapable = TONS_SERVICES.includes(key);
+            const pricingMode   = editing[key]?.pricingMode ?? (isTonsCapable ? "ton" : "sqft");
+            const isTonMode     = isTonsCapable && pricingMode === "ton";
             return (
             <div key={key} style={{...S.rateRow, flexWrap:"wrap", gap:8}}>
               <div style={{...S.rateName, minWidth:140}}>{svc.label}</div>
               <div style={{...S.rateUnit, minWidth:160}}>
-                {isTons ? "Enter sq ft → auto-calc tons" : svc.unit === "flat" ? "Flat rate" : svc.unit === "cuft" ? "Per cu ft" : svc.unit === "sqft" ? "Per sq ft" : svc.unit === "linft" ? "Per lin ft" : `Per ${svc.unit}`}
+                {isTonsCapable
+                  ? (isTonMode ? "Enter sq ft → auto-calc tons" : "Per sq ft")
+                  : svc.unit === "flat" ? "Flat rate" : svc.unit === "cuft" ? "Per cu ft" : svc.unit === "sqft" ? "Per sq ft" : svc.unit === "linft" ? "Per lin ft" : `Per ${svc.unit}`}
               </div>
               <div style={S.rateInputWrap}>
                 <span style={S.rateDollar}>$</span>
                 <input type="number" value={editing[key].rate} step="0.01" min="0"
                   onChange={e => setEditing(p => ({...p,[key]:{...p[key],rate:e.target.value}}))}
                   style={S.rateInput}/>
-                <span style={S.rateUnitLabel}>{isTons ? "$/ton" : svc.rateLabel}</span>
+                <span style={S.rateUnitLabel}>{isTonMode ? "$/ton" : isTonsCapable ? "$/sq ft" : svc.rateLabel}</span>
               </div>
-              {isTons && (
+              {isTonsCapable && (
                 <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
+                  <label style={{fontSize:12, color:C.textMuted, display:"flex", alignItems:"center", gap:4}}>
+                    Price by:
+                    <select
+                      value={pricingMode}
+                      onChange={e => setEditing(p => ({...p,[key]:{...p[key],pricingMode:e.target.value}}))}
+                      style={{...S.rateInput, width:110, marginLeft:4, paddingTop:4, paddingBottom:4}}>
+                      <option value="ton">$/ton (weight)</option>
+                      <option value="sqft">$/sq ft (area)</option>
+                    </select>
+                  </label>
+                  {isTonMode && (<>
                   <label style={{fontSize:12, color:C.textMuted, display:"flex", alignItems:"center", gap:4}}>
                     Depth (in):
                     <input type="number" step="0.5" min="0.5" max="24"
@@ -776,8 +794,9 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
                       style={{...S.rateInput, width:70}}/>
                   </label>
                   <span style={{fontSize:11, color:C.textMuted}}>
-                    → default {calcTons(100, editing[key].depthIn??DEFAULT_ASPHALT_DEPTH_IN, editing[key].density??DEFAULT_ASPHALT_DENSITY).toFixed(3)} tons / 100 sq ft
+                    → {calcTons(100, editing[key].depthIn??DEFAULT_ASPHALT_DEPTH_IN, editing[key].density??DEFAULT_ASPHALT_DENSITY).toFixed(3)} tons / 100 sq ft
                   </span>
+                  </>)}
                 </div>
               )}
             </div>
@@ -1157,7 +1176,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
 
   const measureLabel = (svcType) => {
     if (svcType === "other")   return "Amount ($) *";
-    if (TONS_SERVICES.includes(svcType)) return "Sq Ft * (tons auto-calc)";
+    if (isTonMode(svcType, rates)) return "Sq Ft * (tons auto-calc)";
+    if (TONS_SERVICES.includes(svcType)) return "Square Feet *";
     if (rates[svcType]?.unit === "sqft")  return "Square Feet *";
     return "Linear Feet *";
   };
@@ -1588,7 +1608,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
         )}
 
         {/* ── Single ton service depth/density preview ── */}
-        {TONS_SERVICES.includes(newArea.serviceType) && Number(newArea.measurement)>0 && (
+        {isTonMode(newArea.serviceType, rates) && Number(newArea.measurement)>0 && (
           <div style={{background:"#ede9fe", border:"1px solid #ddd6fe", borderRadius:8, padding:"8px 14px", marginTop:8, fontSize:13}}>
             <div style={{display:"flex", gap:16, flexWrap:"wrap", alignItems:"center", marginBottom:6}}>
               <label style={{fontSize:12, color:"#4338ca", display:"flex", alignItems:"center", gap:4}}>
@@ -1644,13 +1664,13 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           <h2 style={S.h2}>Running Totals</h2>
           <div style={S.totalsGrid}>
             {Object.entries(totalBySvc).map(([svc,qty]) => {
-              const amt = svc==="other" ? qty : TONS_SERVICES.includes(svc) ? calcTons(qty, a.depthIn??(rates[svc]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[svc]?.density??DEFAULT_ASPHALT_DENSITY))*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
+              const amt = svc==="other" ? qty : isTonMode(svc,rates) ? calcTons(qty, a.depthIn??(rates[svc]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[svc]?.density??DEFAULT_ASPHALT_DENSITY))*(rates[svc]?.rate||0) : qty*(rates[svc]?.rate||0);
               return (
                 <div key={svc} style={S.totalCard}>
                   <div style={S.totalSvc}>{rates[svc]?.label||svc}</div>
                   <div style={S.totalQty}>
                     {svc==="other" ? formatCurrency(qty) : qty.toLocaleString() + " " + (svc==="patch"?"sq ft":rates[svc]?.unit||"")}
-                    {TONS_SERVICES.includes(svc) && <span style={S.totalTons}> = {calcTons(qty, a.depthIn??(rates[svc]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[svc]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2)} tons</span>}
+                    {isTonMode(svc,rates) && <span style={S.totalTons}> = {calcTons(qty, a.depthIn??(rates[svc]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[svc]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2)} tons</span>}
                   </div>
                   <div style={S.totalAmt}>{svc==="other" ? "" : formatCurrency(amt)}</div>
                 </div>
@@ -1692,7 +1712,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                         <input type="number" value={editArea.measurement} min="0"
                           onChange={e => setEditArea(p => ({...p, measurement:e.target.value}))} style={S.input}/>
                       </label>
-                      {TONS_SERVICES.includes(editArea.serviceType) && (
+                      {isTonMode(editArea.serviceType, rates) && (
                         <div style={{display:"flex", gap:8, gridColumn:"1 / -1", flexWrap:"wrap"}}>
                           <label style={{...S.formLabel, flex:1, minWidth:100}}>Depth (in)
                             <input type="number" step="0.5" min="0.5" max="24"
@@ -1755,7 +1775,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                       {a.serviceType==="other"
                         ? " · " + formatCurrency(Number(a.measurement||0))
                         : " · " + Number(a.measurement).toLocaleString() + " " + (svc?.unit==="linft"?"lin ft":"sq ft")}
-                      {TONS_SERVICES.includes(a.serviceType) && ` → ${calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2)} tons`}
+                      {isTonMode(a.serviceType,rates) && ` → ${calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2)} tons`}
                     </div>
                     {a.notes && <div style={S.areaNotes}>{a.notes}</div>}
                     {hasLineOverride && <div style={{fontSize:11, color:C.accent, marginTop:2}}>✎ Price overridden</div>}
@@ -1879,7 +1899,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
     "─────────────────────────", "LINE ITEMS", "─────────────────────────",
     ...(currentJob.areas||[]).map(a => {
       const svc = rates[a.serviceType]; const amt = calcLineAmt(a,rates);
-      const qtyStr = TONS_SERVICES.includes(a.serviceType)
+      const qtyStr = isTonMode(a.serviceType,rates)
         ? (Number(a.measurement).toLocaleString() + " sq ft (" + calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2) + " tons)")
         : (Number(a.measurement).toLocaleString() + " " + svc?.unit);
       return a.name + " | " + svc?.label + " | " + qtyStr + " | " + formatCurrency(amt);
@@ -2025,7 +2045,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
         const svc  = rates[a.serviceType];
         const amt  = calcLineAmt(a,rates);
         const qty  = Number(a.measurement||0);
-        const tons = TONS_SERVICES.includes(a.serviceType) ? calcTons(qty, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
+        const tons = isTonMode(a.serviceType,rates) ? calcTons(qty, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
         const qtyStr = tons !== null
           ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
           : qty.toLocaleString() + (svc?.unit==="linft" ? " lin ft" : " sq ft");
@@ -2208,7 +2228,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
             {(currentJob.areas||[]).map((a, idx) => {
               const svc  = rates[a.serviceType];
               const amt  = calcLineAmt(a,rates);
-              const tons = TONS_SERVICES.includes(a.serviceType) ? calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
+              const tons = isTonMode(a.serviceType,rates) ? calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
               const qty  = Number(a.measurement).toLocaleString();
               const unit = svc?.unit==="linft" ? "lin ft" : "sq ft";
               return (
@@ -4049,8 +4069,9 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
             const total = (j.areas||[]).reduce((sum,a) => {
               const svc = (j.rates||{})[a.serviceType]||{};
               const qty = Number(a.measurement||0);
-              const tons = TONS_SERVICES.includes(a.serviceType) ? calcTons(qty, a.depthIn??(svc?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(svc?.density??DEFAULT_ASPHALT_DENSITY)) : 0;
-              return sum+(TONS_SERVICES.includes(a.serviceType)?tons*(svc?.rate||0):a.serviceType==="other"?qty:qty*(svc?.rate||0));
+              const jRates = j.rates||{};
+              const tons = isTonMode(a.serviceType,jRates) ? calcTons(qty, a.depthIn??(svc?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(svc?.density??DEFAULT_ASPHALT_DENSITY)) : 0;
+              return sum+(isTonMode(a.serviceType,jRates)?tons*(svc?.rate||0):a.serviceType==="other"?qty:qty*(svc?.rate||0));
             },0);
             return (
               <div key={j.id} style={S.schedJobCard}>
@@ -7033,7 +7054,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
     "─────────────────────────", "LINE ITEMS", "─────────────────────────",
     ...currentJob.areas.map(a => {
       const svc = rates[a.serviceType]; const amt = calcLineAmt(a,rates);
-      const qtyStr = TONS_SERVICES.includes(a.serviceType)
+      const qtyStr = isTonMode(a.serviceType,rates)
         ? (Number(a.measurement).toLocaleString() + " sq ft (" + calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)).toFixed(2) + " tons)")
         : (Number(a.measurement).toLocaleString() + " " + svc?.unit);
       return a.name + " | " + svc?.label + " | " + qtyStr + " | " + formatCurrency(amt) + (a.notes ? " | Note: " + a.notes : "");
@@ -7177,7 +7198,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         const svc  = rates[a.serviceType];
         const amt  = calcLineAmt(a, rates);
         const qty  = Number(a.measurement || 0);
-        const tons = TONS_SERVICES.includes(a.serviceType) ? calcTons(qty, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
+        const tons = isTonMode(a.serviceType,rates) ? calcTons(qty, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
         const qtyStr  = tons !== null
           ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
           : qty.toLocaleString() + (svc?.unit === "linft" ? " lin ft" : " sq ft");
@@ -7361,7 +7382,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
               {currentJob.areas.map((a, idx) => {
                 const svc  = rates[a.serviceType];
                 const amt  = calcLineAmt(a, rates);
-                const tons = TONS_SERVICES.includes(a.serviceType) ? calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
+                const tons = isTonMode(a.serviceType,rates) ? calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY)) : null;
                 const qty  = Number(a.measurement).toLocaleString();
                 const unit = svc?.unit==="linft" ? "lin ft" : "sq ft";
                 return (
