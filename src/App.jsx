@@ -7248,7 +7248,7 @@ const storageUpload = async (path, blob, accessToken, contentType = "image/jpeg"
 
 const storageDelete = async (path, accessToken) => {
   await fetch(
-    `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${encodeURIComponent(path)}`,
+    `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${path}`,
     {
       method: "DELETE",
       headers: {
@@ -8264,8 +8264,42 @@ export default function App() {
       return;
     }
 
-    // Supabase redirects invite/recovery links as:
-    // https://yourapp.com/#access_token=...&refresh_token=...&type=invite
+    // New Supabase format: token_hash + type as query params (used by auth hooks)
+    // e.g. /?token_hash=abc123&type=recovery
+    const qp = new URLSearchParams(window.location.search);
+    const tokenHash = qp.get("token_hash");
+    const tokenType = qp.get("type");
+    if (tokenHash && tokenType) {
+      window.history.replaceState(null, "", window.location.pathname);
+      // Exchange token_hash for a real session via Supabase OTP verify endpoint
+      const verifyAndSet = async () => {
+        try {
+          const res = await fetch(SUPABASE_URL + "/auth/v1/verify", {
+            method: "POST",
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ token_hash: tokenHash, type: tokenType }),
+          });
+          const data = await res.json();
+          if (data?.access_token) {
+            // For recovery/invite — show the set password screen
+            setInviteToken(data.access_token);
+          } else {
+            console.error("token_hash verify failed:", data);
+          }
+        } catch(e) {
+          console.error("token_hash verify error:", e);
+        }
+        setAuthChecked(true);
+      };
+      verifyAndSet();
+      return;
+    }
+
+    // Legacy Supabase format: access_token in URL hash
+    // e.g. /#access_token=...&type=invite
     const hash = window.location.hash || "";
     if (hash.includes("access_token") && (hash.includes("type=invite") || hash.includes("type=recovery") || hash.includes("type=signup"))) {
       const params = new URLSearchParams(hash.slice(1));
@@ -8273,7 +8307,6 @@ export default function App() {
       if (token) {
         setInviteToken(token);
         setAuthChecked(true);
-        // Clean the sensitive token out of the visible URL once captured
         window.history.replaceState(null, "", window.location.pathname);
         return;
       }
