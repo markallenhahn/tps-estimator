@@ -499,7 +499,7 @@ const ALL_TABS  = [
   {key:"home",     label:"Home"},
   {key:"jobs",     label:"Jobs"},
   {key:"schedule", label:"Schedule"},
-  {key:"zones",    label:"Smart Routing"},
+  {key:"zones",    label:"Smart Routing", shortLabel:"Routing"},
   {key:"estimate", label:"Estimate"},
   {key:"costs",    label:"Costs"},
   {key:"invoice",  label:"Invoice"},
@@ -676,7 +676,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
             data-active={view===t.key?"true":"false"}
             style={{...S.navTab, color: view===t.key ? C.accent : C.textMuted, borderBottomColor: view===t.key ? C.accent : "transparent"}}>
             <span style={S.navTabIcon}><TabIcon tabKey={t.key} iconStyle={iconStyle} size={16}/></span>
-            <span style={S.navTabLabel}>{t.label}</span>
+            <span style={S.navTabLabel}>{t.shortLabel || t.label}</span>
           </button>
         ))}
         {(userRole === "owner" || (userRoles||[]).includes("owner")) && (
