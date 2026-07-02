@@ -240,7 +240,7 @@ const S = {
   h2:{ fontSize:13, fontWeight:600, margin:"0 0 12px", color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.08em" },
   subhead:{ margin:"0 0 20px", color:C.textMuted, fontSize:13, lineHeight:1.4 },
   section:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:16, marginBottom:16, boxShadow:C.shadow },
-  formGrid:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:8, overflow:"hidden" },
+  formGrid:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:8 },
   formLabel:{ display:"flex", flexDirection:"column", gap:4, fontSize:13, color:C.textMuted, minWidth:0, overflow:"hidden" },
   input:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, padding:"8px 10px", color:C.text, fontSize:14, outline:"none", width:"100%", maxWidth:"100%", boxSizing:"border-box", minWidth:0, display:"block", overflow:"hidden" },
   btnPrimary:{ background:C.accent, color:"#000", border:"none", borderRadius:8, padding:"10px 20px", fontWeight:700, fontSize:14, cursor:"pointer" },
