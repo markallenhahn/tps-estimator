@@ -18,11 +18,11 @@ const isTonMode = (svcKey, rates) =>
 // ─── Subscription Plan Config ─────────────────────────────────────────────────
 const PLAN_CONFIG = {
   solo:      { label:"Solo",      price:4000,  userCap:1,  features:["core"] },
-  solo_plus: { label:"Solo+",     price:7500,  userCap:1,  features:["core","zones","materials","reports","costs"] },
-  crew:      { label:"Crew",      price:12000, userCap:5,  features:["core","costs","labor","export"] },
-  crew_plus: { label:"Crew+",     price:16500, userCap:5,  features:["core","zones","materials","reports","costs","labor","export"] },
-  pro:       { label:"Pro",       price:25000, userCap:25, features:["core","zones","materials","reports","costs","labor","export","addon_users"] },
-  trial:     { label:"Trial",     price:0,     userCap:5,  features:["core","zones","materials","reports","costs","labor","export"] },
+  solo_plus: { label:"Solo+",     price:7500,  userCap:1,  features:["core","zones","materials","reports","costs","expenses"] },
+  crew:      { label:"Crew",      price:12000, userCap:5,  features:["core","costs","labor","export","expenses"] },
+  crew_plus: { label:"Crew+",     price:16500, userCap:5,  features:["core","zones","materials","reports","costs","labor","export","expenses"] },
+  pro:       { label:"Pro",       price:25000, userCap:25, features:["core","zones","materials","reports","costs","labor","export","expenses","addon_users"] },
+  trial:     { label:"Trial",     price:0,     userCap:5,  features:["core","zones","materials","reports","costs","labor","export","expenses"] },
 };
 
 // Which tabs/features require which plan feature flag.
@@ -36,6 +36,7 @@ const PLAN_TAB_FEATURES = {
   labor:     ["labor"],                         // crew and above
   export:    ["export"],                        // crew and above
   team:      ["crew","crew_plus","pro"],         // not a feature flag — handled separately
+  expenses:  ["expenses"],                       // solo+ and above
 };
 
 // Returns the active plan object for a tenant, handling trial and missing plan.
@@ -241,7 +242,7 @@ const S = {
   section:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:16, marginBottom:16, boxShadow:C.shadow },
   formGrid:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:8 },
   formLabel:{ display:"flex", flexDirection:"column", gap:4, fontSize:13, color:C.textMuted, minWidth:0 },
-  input:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, padding:"8px 10px", color:C.text, fontSize:14, outline:"none", width:"100%", boxSizing:"border-box" },
+  input:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, padding:"8px 10px", color:C.text, fontSize:14, outline:"none", width:"100%", maxWidth:"100%", boxSizing:"border-box", minWidth:0 },
   btnPrimary:{ background:C.accent, color:"#000", border:"none", borderRadius:8, padding:"10px 20px", fontWeight:700, fontSize:14, cursor:"pointer" },
   btnSecondary:{ background:C.surface2, color:C.text, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 20px", fontWeight:600, fontSize:14, cursor:"pointer" },
   btnSmall:{ background:C.surface2, color:C.text, border:`1px solid ${C.border}`, borderRadius:6, padding:"5px 10px", fontSize:12, cursor:"pointer" },
@@ -502,6 +503,7 @@ const ALL_TABS  = [
   {key:"costs",    label:"Costs"},
   {key:"invoice",  label:"Invoice"},
   {key:"labor",    label:"Labor"},
+  {key:"expenses", label:"Expenses"},
   {key:"materials",label:"Materials"},
   {key:"crm",      label:"CRM"},
   {key:"reports",  label:"Reports"},
@@ -522,6 +524,7 @@ const DEFAULT_PERMISSIONS = {
   materials:{ estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", owner:"edit" },
   crm:      { estimator:"edit",   crew:"hidden", crewlead:"view", manager:"edit", owner:"edit" },
   reports:  { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
+  expenses: { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"view", owner:"edit" },
   rates:    { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
   team:     { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
 };
@@ -4857,30 +4860,31 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
           <button style={S.btnSecondary} onClick={exportToExcel}>📊 Export to Excel</button>
         </div>
 
-        <div style={{display:"grid", gridTemplateColumns: selected ? "320px 1fr" : "1fr", gap:16}}>
-          <div style={{maxHeight:560, overflowY:"auto", borderRight: selected ? `1px solid ${C.border}` : "none", paddingRight: selected?12:0}}>
-            {filtered.length === 0 ? (
-              <p style={{fontSize:12, color:C.textMuted}}>No customers match that search.</p>
-            ) : filtered.map(c => (
-              <div key={c.id} onClick={() => setSelectedId(c.id)}
-                style={{
-                  padding:"10px 12px", borderRadius:8, marginBottom:6, cursor:"pointer",
-                  background: selectedId===c.id ? C.accent : C.surface2,
-                  color: selectedId===c.id ? "#000" : C.text,
-                  border:`1px solid ${selectedId===c.id ? C.accent : C.border}`,
-                }}>
-                <div style={{fontWeight:700, fontSize:13}}>{c.name || "Unnamed"}</div>
-                <div style={{fontSize:11, opacity:0.8}}>{c.phone || c.email || "no contact info"}</div>
-                <div style={{fontSize:11, opacity:0.8, marginTop:2}}>
-                  {c.jobCount} job{c.jobCount!==1?"s":""} · {formatCurrency(c.totalRevenue)}
-                </div>
+        {/* Customer list — hidden on mobile when detail is open */}
+        <div style={{display: selected ? "none" : "block"}}>
+          {filtered.length === 0 ? (
+            <p style={{fontSize:12, color:C.textMuted}}>No customers match that search.</p>
+          ) : filtered.map(c => (
+            <div key={c.id} onClick={() => setSelectedId(c.id)}
+              style={{
+                padding:"12px 14px", borderRadius:8, marginBottom:8, cursor:"pointer",
+                background: C.surface2,
+                border:`1px solid ${C.border}`,
+              }}>
+              <div style={{fontWeight:700, fontSize:14}}>{c.name || "Unnamed"}</div>
+              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>{c.phone || c.email || "no contact info"}</div>
+              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
+                {c.jobCount} job{c.jobCount!==1?"s":""} · {formatCurrency(c.totalRevenue)}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+        </div>
 
-          {selected && (
-            <div>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10}}>
+        {/* Customer detail — full screen on mobile */}
+        {selected && (
+          <div>
+            <button style={{...S.btnSecondary, marginBottom:14, fontSize:13}} onClick={() => setSelectedId(null)}>← Back to Customers</button>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10}}>
                 <div style={{flex:1}}>
                   <div style={{display:"flex", alignItems:"center", gap:8}}>
                     <h2 style={{...S.h2, margin:0}}>{selected.name || "Unnamed"}</h2>
@@ -4889,7 +4893,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                     )}
                   </div>
                   {editingContact ? (
-                    <div style={{marginTop:8, maxWidth:320}}>
+                    <div style={{marginTop:8}}>
                       <input value={contactDraft.name} onChange={e=>setContactDraft(d=>({...d,name:e.target.value}))} placeholder="Name" style={{...S.input, marginBottom:6}}/>
                       <input value={contactDraft.phone} onChange={e=>setContactDraft(d=>({...d,phone:e.target.value}))} placeholder="Phone" style={{...S.input, marginBottom:6}}/>
                       <input value={contactDraft.email} onChange={e=>setContactDraft(d=>({...d,email:e.target.value}))} placeholder="Email" style={{...S.input, marginBottom:6}}/>
@@ -4970,8 +4974,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                 </div>
               ))}
             </div>
-          )}
-        </div>
+        )}
       </section>
     </div>
   );
@@ -5378,7 +5381,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
 }
 
 // ─── Costs View ───────────────────────────────────────────────────────────────
-function CostsView({ currentJob, updateJob, rates }) {
+function CostsView({ currentJob, updateJob, rates, expenses }) {
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const SEALCOAT_PRICE_PER_GAL = 4.33;
@@ -5577,6 +5580,34 @@ function CostsView({ currentJob, updateJob, rates }) {
           </>}
         </div>
       </section>
+
+      {/* Linked Expenses */}
+      {(() => {
+        const linked = (expenses||[]).filter(e => String(e.jobId) === String(currentJob.id));
+        if (linked.length === 0) return null;
+        const linkedTotal = linked.reduce((s,e) => s + Number(e.amount||0), 0);
+        return (
+          <section style={S.section}>
+            <h2 style={S.h2}>Logged Expenses</h2>
+            <div style={{fontSize:12, color:C.textMuted, marginBottom:10, marginTop:-8}}>
+              Expenses from the Expenses tab linked to this job. Not included in cost totals above — add to "Actual" fields manually if needed.
+            </div>
+            {linked.map(e => (
+              <div key={e.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${C.border}`}}>
+                <div>
+                  <div style={{fontSize:13, fontWeight:600}}>{e.vendorName||"Unknown"} — {e.category}</div>
+                  <div style={{fontSize:11, color:C.textMuted}}>{e.date} · {e.paymentMethod}{e.notes ? " · "+e.notes : ""}</div>
+                </div>
+                <div style={{fontWeight:700, fontSize:14, color:C.accent, flexShrink:0, marginLeft:12}}>{formatCurrency(Number(e.amount||0))}</div>
+              </div>
+            ))}
+            <div style={{display:"flex", justifyContent:"space-between", padding:"10px 0", fontWeight:700, fontSize:14}}>
+              <span>Total Logged</span>
+              <span style={{color:C.accent}}>{formatCurrency(linkedTotal)}</span>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Summary */}
       <section style={S.section}>
@@ -6547,6 +6578,269 @@ function CrewsSection({ users, isManager, tFetch }) {
 }
 
 // ─── Export View (secret) ──────────────────────────────────────────────────────
+
+// ─── Expenses View ─────────────────────────────────────────────────────────────
+const EXPENSE_CATEGORIES = [
+  "Overhead","Labor","Fuel","COGS",
+  "Subcontractors","Equipment","Job Supplies","Crew Supplies","Other",
+];
+const PAYMENT_METHODS = ["Company Card","Cash","Personal Card","Check","ACH/Transfer"];
+
+function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session }) {
+  const canEdit = userRole === "owner" || userRole === "manager";
+  const [showForm,    setShowForm]    = useState(false);
+  const [showVendors, setShowVendors] = useState(false);
+  const [newVendorName, setNewVendorName] = useState("");
+  const [newVendorPhone, setNewVendorPhone] = useState("");
+  const [newVendorEmail, setNewVendorEmail] = useState("");
+  const [filterCat,   setFilterCat]   = useState("All");
+  const [filterMethod,setFilterMethod]= useState("All");
+  const [filterJob,   setFilterJob]   = useState("All");
+  const [uploading,   setUploading]   = useState(false);
+
+  // Form state
+  const blankForm = () => ({
+    date: new Date().toISOString().slice(0,10),
+    vendorId: "", vendorName: "",
+    category: "Overhead", amount: "", paymentMethod: "Company Card",
+    jobId: "", notes: "", receiptUrl: "",
+  });
+  const [form, setForm] = useState(blankForm());
+  const setF = (patch) => setForm(p => ({...p, ...patch}));
+
+  const handleReceiptUpload = async (file) => {
+    if (!file) return;
+    if (file.size > 10*1024*1024) { alert("Receipt must be under 10MB."); return; }
+    setUploading(true);
+    try {
+      const ext  = file.name.split(".").pop().toLowerCase();
+      const path = `${currentTenantId}/${Date.now()}.${ext}`;
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+      const sb = createClient("https://elzymtqlcceouftwhcdk.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A", {
+        global: { headers: { Authorization: "Bearer " + session?.access_token } }
+      });
+      const { error } = await sb.storage.from("expense-receipts").upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data } = sb.storage.from("expense-receipts").getPublicUrl(path);
+      setF({ receiptUrl: data?.publicUrl || path });
+    } catch(e) {
+      alert("Upload failed: " + e.message);
+    } finally { setUploading(false); }
+  };
+
+  const saveExpense = () => {
+    if (!form.vendorName.trim()) { alert("Vendor is required."); return; }
+    if (!form.amount || Number(form.amount) <= 0) { alert("Amount is required."); return; }
+    const entry = { ...form, id: Date.now(), amount: Number(form.amount) };
+    addExpense(entry);
+    setForm(blankForm());
+    setShowForm(false);
+  };
+
+  const saveVendor = () => {
+    if (!newVendorName.trim()) { alert("Vendor name is required."); return; }
+    addVendor({ id: Date.now(), name: newVendorName.trim(), phone: newVendorPhone.trim(), email: newVendorEmail.trim() });
+    setNewVendorName(""); setNewVendorPhone(""); setNewVendorEmail("");
+  };
+
+  // Filters
+  const filtered = expenses.filter(e =>
+    (filterCat    === "All" || e.category      === filterCat) &&
+    (filterMethod === "All" || e.paymentMethod === filterMethod) &&
+    (filterJob    === "All" || String(e.jobId) === String(filterJob))
+  );
+
+  // Totals by category and payment method
+  const totalAmt = filtered.reduce((s,e) => s + Number(e.amount||0), 0);
+  const byCat    = EXPENSE_CATEGORIES.map(cat => ({
+    cat, amt: filtered.filter(e=>e.category===cat).reduce((s,e)=>s+Number(e.amount||0),0)
+  })).filter(r=>r.amt>0);
+  const byMethod = PAYMENT_METHODS.map(m => ({
+    method: m, amt: filtered.filter(e=>e.paymentMethod===m).reduce((s,e)=>s+Number(e.amount||0),0)
+  })).filter(r=>r.amt>0);
+
+  return (
+    <div className="tps-page" style={S.page}>
+      <h1 style={S.h1}>Expenses</h1>
+      <p style={S.subhead}>Log purchases, tie them to jobs, and track spend by category and payment method.</p>
+
+      {/* Action buttons */}
+      {canEdit && (
+        <div style={{display:"flex", gap:10, flexWrap:"wrap", marginBottom:16}}>
+          <button style={S.btnPrimary} onClick={() => setShowForm(v=>!v)}>
+            {showForm ? "▲ Cancel" : "+ Log Expense"}
+          </button>
+          <button style={S.btnSecondary} onClick={() => setShowVendors(v=>!v)}>
+            🏢 Manage Vendors ({vendors.length})
+          </button>
+        </div>
+      )}
+
+      {/* Log Expense Form */}
+      {showForm && canEdit && (
+        <section style={S.section}>
+          <h2 style={S.h2}>New Expense</h2>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
+            <label style={S.formLabel}>Date *
+              <input type="date" value={form.date} onChange={e=>setF({date:e.target.value})} style={S.input}/>
+            </label>
+            <label style={S.formLabel}>Amount ($) *
+              <input type="number" min="0" step="0.01" value={form.amount} onChange={e=>setF({amount:e.target.value})} style={S.input} placeholder="0.00"/>
+            </label>
+            <label style={{...S.formLabel, gridColumn:"1/-1"}}>Vendor *
+              <div style={{display:"flex", gap:6}}>
+                <select value={form.vendorId}
+                  onChange={e => {
+                    const v = vendors.find(v=>String(v.id)===e.target.value);
+                    setF({ vendorId: e.target.value, vendorName: v ? v.name : "" });
+                  }}
+                  style={{...S.input, flex:1}}>
+                  <option value="">— Select vendor or type below —</option>
+                  {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </div>
+              <input value={form.vendorName} onChange={e=>setF({vendorName:e.target.value, vendorId:""})}
+                style={{...S.input, marginTop:4}} placeholder="Or type vendor name (one-time)"/>
+            </label>
+            <label style={S.formLabel}>Category *
+              <select value={form.category} onChange={e=>setF({category:e.target.value})} style={S.input}>
+                {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label style={S.formLabel}>Payment Method
+              <select value={form.paymentMethod} onChange={e=>setF({paymentMethod:e.target.value})} style={S.input}>
+                {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
+              </select>
+            </label>
+            <label style={{...S.formLabel, gridColumn:"1/-1"}}>Link to Job (optional)
+              <select value={form.jobId} onChange={e=>setF({jobId:e.target.value})} style={S.input}>
+                <option value="">— Not tied to a specific job —</option>
+                {[...jobs].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(j=>(
+                  <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No address"} {j.date?"· "+j.date:""}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{...S.formLabel, gridColumn:"1/-1"}}>Notes
+              <input value={form.notes} onChange={e=>setF({notes:e.target.value})} style={S.input} placeholder="Optional description"/>
+            </label>
+            <label style={{...S.formLabel, gridColumn:"1/-1"}}>Receipt Photo (optional)
+              <input type="file" accept="image/*,application/pdf"
+                onChange={e=>handleReceiptUpload(e.target.files[0])}
+                style={{fontSize:13, marginTop:4}}/>
+              {uploading && <span style={{fontSize:12, color:C.textMuted, marginTop:4}}>Uploading...</span>}
+              {form.receiptUrl && <a href={form.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:12, color:C.accent, marginTop:4, display:"block"}}>✓ Receipt uploaded</a>}
+            </label>
+          </div>
+          <button style={{...S.btnPrimary, marginTop:14}} onClick={saveExpense}>Save Expense</button>
+        </section>
+      )}
+
+      {/* Vendor Manager */}
+      {showVendors && canEdit && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Vendors</h2>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10}}>
+            <input value={newVendorName} onChange={e=>setNewVendorName(e.target.value)}
+              style={S.input} placeholder="Vendor name *"/>
+            <input value={newVendorPhone} onChange={e=>setNewVendorPhone(e.target.value)}
+              style={S.input} placeholder="Phone (optional)"/>
+            <input value={newVendorEmail} onChange={e=>setNewVendorEmail(e.target.value)}
+              style={{...S.input, gridColumn:"1/-1"}} placeholder="Email (optional)"/>
+          </div>
+          <button style={S.btnPrimary} onClick={saveVendor}>+ Add Vendor</button>
+          <div style={{marginTop:12}}>
+            {vendors.length === 0 && <p style={{fontSize:13, color:C.textMuted}}>No vendors yet.</p>}
+            {vendors.map(v => (
+              <div key={v.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${C.border}`}}>
+                <div>
+                  <div style={{fontWeight:600, fontSize:13}}>{v.name}</div>
+                  {(v.phone||v.email) && <div style={{fontSize:11, color:C.textMuted}}>{[v.phone,v.email].filter(Boolean).join(" · ")}</div>}
+                </div>
+                <button style={{...S.btnSmall, color:C.danger}} onClick={()=>{ if(confirm("Delete "+v.name+"?")) deleteVendor(v.id); }}>✕</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Summary cards */}
+      {filtered.length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Summary · {formatCurrency(totalAmt)}</h2>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:8}}>
+            <div>
+              <div style={{fontSize:11, fontWeight:700, color:C.textMuted, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em"}}>By Category</div>
+              {byCat.map(r=>(
+                <div key={r.cat} style={{display:"flex", justifyContent:"space-between", fontSize:13, padding:"3px 0"}}>
+                  <span>{r.cat}</span><span style={{fontWeight:600}}>{formatCurrency(r.amt)}</span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{fontSize:11, fontWeight:700, color:C.textMuted, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em"}}>By Payment</div>
+              {byMethod.map(r=>(
+                <div key={r.method} style={{display:"flex", justifyContent:"space-between", fontSize:13, padding:"3px 0"}}>
+                  <span>{r.method}</span><span style={{fontWeight:600}}>{formatCurrency(r.amt)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Filters */}
+      <section style={S.section}>
+        <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:12}}>
+          <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+            <option value="All">All Categories</option>
+            {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={filterMethod} onChange={e=>setFilterMethod(e.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+            <option value="All">All Payment Methods</option>
+            {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
+          </select>
+          <select value={filterJob} onChange={e=>setFilterJob(e.target.value)} style={{...S.input, flex:1, minWidth:140}}>
+            <option value="All">All Jobs</option>
+            <option value="">Unlinked</option>
+            {jobs.map(j=><option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No addr"}</option>)}
+          </select>
+        </div>
+
+        {/* Expense list */}
+        {filtered.length === 0 ? (
+          <p style={{fontSize:13, color:C.textMuted}}>No expenses logged yet.</p>
+        ) : filtered.map(e => {
+          const linkedJob = jobs.find(j=>String(j.id)===String(e.jobId));
+          return (
+            <div key={e.id} style={{padding:"12px 0", borderBottom:`1px solid ${C.border}`}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+                    <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
+                    <span style={{fontSize:12, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
+                    <span style={{fontSize:12, color:C.textMuted}}>{e.paymentMethod}</span>
+                  </div>
+                  <div style={{fontSize:13, fontWeight:600, marginTop:3}}>{e.vendorName || "Unknown vendor"}</div>
+                  <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
+                    {e.date}
+                    {linkedJob && <span style={{marginLeft:8}}>📋 {linkedJob.clientName||"Unnamed"} · {linkedJob.address||""}</span>}
+                  </div>
+                  {e.notes && <div style={{fontSize:12, color:C.textMuted, marginTop:2, fontStyle:"italic"}}>{e.notes}</div>}
+                  {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:12, color:C.accent, marginTop:2, display:"block"}}>📎 View Receipt</a>}
+                </div>
+                {canEdit && (
+                  <button style={{...S.btnSmall, color:C.danger, marginLeft:8, flexShrink:0}}
+                    onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </section>
+    </div>
+  );
+}
+
 function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) {
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
@@ -7798,7 +8092,7 @@ const dataUrlToBlob = (dataUrl) => {
 // and the multi-tenancy tables themselves (tenants/tenant_users/tenant_invites,
 // which are how a tenant gets resolved in the first place).
 const TENANT_SCOPED_TABLES = [
-  "jobs","labor","materials","materialsettings","materialstock","customers",
+  "jobs","labor","expenses","vendors","materials","materialsettings","materialstock","customers",
   "crmlogs","zones","crews","rates","homebase","appsettings",
   "historical_jobs","company_settings",
 ];
@@ -8770,6 +9064,8 @@ export default function App() {
   const [stockChecks,       setStockChecks]       = useState([]);
   const [crmLogs,           setCrmLogs]           = useState([]);
   const [customers,         setCustomers]         = useState([]);
+  const [expenses,          setExpenses]          = useState([]);
+  const [vendors,           setVendors]           = useState([]);
   const isDesktopLayout = useIsDesktop();
 
   // ── Auth state ──
@@ -9055,6 +9351,14 @@ export default function App() {
         const ld = await lr.json();
         if (Array.isArray(ld)) setLaborEntries(ld.map(row => ({...row.data, id: row.id})));
 
+        const er = await tFetch("expenses?select=id,data&order=id.desc");
+        const ed = await er.json();
+        if (Array.isArray(ed)) setExpenses(ed.map(row => ({...row.data, id: row.id})));
+
+        const vr = await tFetch("vendors?select=id,data&order=id.desc");
+        const vd = await vr.json();
+        if (Array.isArray(vd)) setVendors(vd.map(row => ({...row.data, id: row.id})));
+
         const zr = await tFetch("zones?select=data&limit=1");
         const zd = await zr.json();
         if (Array.isArray(zd) && zd.length > 0) setZones(zd[0].data);
@@ -9310,6 +9614,49 @@ export default function App() {
   const addLaborEntry = (entry) => {
     setLaborEntries(prev => [entry, ...prev]);
     syncLaborEntry(entry);
+  };
+
+  // ── Expenses ──
+  const syncExpense = async (entry) => {
+    try {
+      await tFetch("expenses", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: entry.id, data: entry }),
+      });
+    } catch(e) { console.error("syncExpense error:", e); }
+  };
+  const addExpense = (entry) => {
+    setExpenses(prev => [entry, ...prev]);
+    syncExpense(entry);
+  };
+  const updateExpense = (id, patch) => {
+    setExpenses(prev => prev.map(e => e.id === id ? {...e, ...patch} : e));
+    const updated = expenses.find(e => e.id === id);
+    if (updated) syncExpense({...updated, ...patch});
+  };
+  const deleteExpense = async (id) => {
+    setExpenses(prev => prev.filter(e => e.id !== id));
+    try { await tFetch("expenses?id=eq."+id, { method: "DELETE" }); } catch(e) {}
+  };
+
+  // ── Vendors ──
+  const syncVendor = async (v) => {
+    try {
+      await tFetch("vendors", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: v.id, data: v }),
+      });
+    } catch(e) { console.error("syncVendor error:", e); }
+  };
+  const addVendor = (v) => {
+    setVendors(prev => [v, ...prev]);
+    syncVendor(v);
+  };
+  const deleteVendor = async (id) => {
+    setVendors(prev => prev.filter(v => v.id !== id));
+    try { await tFetch("vendors?id=eq."+id, { method: "DELETE" }); } catch(e) {}
   };
 
   // ── Material purchases (Materials tab) ──
@@ -9646,7 +9993,8 @@ export default function App() {
             (currentJob?.readyForReview || !["estimate","draft"].includes(currentJob?.status)))
         }
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
+        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
