@@ -470,6 +470,7 @@ const TAB_ICONS = {
   costs:       { emoji: "🧮", lucide: "Calculator" },
   invoice:     { emoji: "🧾", lucide: "Receipt" },
   labor:       { emoji: "👷", lucide: "HardHat" },
+  expenses:    { emoji: "💳", lucide: "CreditCard" },
   materials:   { emoji: "🧴", lucide: "Beaker" },
   crm:         { emoji: "📇", lucide: "Contact" },
   reports:     { emoji: "📊", lucide: "BarChart3" },
