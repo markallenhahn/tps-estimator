@@ -2302,7 +2302,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
             <div style={{display:"flex", gap:6, alignItems:"center"}}>
               <input type="date" value={currentJob.invoiceSentDate||""}
                 onChange={e => updateJob(j => ({...j, invoiceSentDate: e.target.value}))}
-                style={{...S.input, marginBottom:0, flex:1, minWidth:130}}/>
+                style={{...S.input, marginBottom:0, width:160, flexShrink:0, height:38, padding:"8px 10px", boxSizing:"border-box"}}/>
               {currentJob.invoiceSentDate && (
                 <button
                   onMouseDown={e => e.preventDefault()}
@@ -2312,6 +2312,11 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
                 </button>
               )}
             </div>
+            {currentJob.invoiceSentDate && currentJob.invoiceSentDate !== new Date().toISOString().slice(0,10) && (
+              <div style={{fontSize:11, color:"#b45309", marginTop:4, display:"flex", alignItems:"center", gap:4}}>
+                ⚠️ {currentJob.invoiceSentDate < new Date().toISOString().slice(0,10) ? "This date is in the past." : "This date is in the future."}
+              </div>
+            )}
           </label>
           {isPaid && (
             <label style={S.formLabel}>Payment Date
@@ -7872,7 +7877,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
             <div style={{display:"flex", gap:6, alignItems:"center"}}>
               <input type="date" value={currentJob.estimateSentDate||""}
                 onChange={e => updateJob(j => ({...j, estimateSentDate: e.target.value}))}
-                style={{...S.input, flex:1, minWidth:130}}/>
+                style={{...S.input, width:160, flexShrink:0, height:38, padding:"8px 10px", boxSizing:"border-box"}}/>
               {currentJob.estimateSentDate && (
                 <button
                   onMouseDown={e => e.preventDefault()}
@@ -7882,6 +7887,11 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
                 </button>
               )}
             </div>
+            {currentJob.estimateSentDate && currentJob.estimateSentDate !== new Date().toISOString().slice(0,10) && (
+              <div style={{fontSize:11, color:"#b45309", marginTop:4, display:"flex", alignItems:"center", gap:4}}>
+                ⚠️ {currentJob.estimateSentDate < new Date().toISOString().slice(0,10) ? "This date is in the past." : "This date is in the future."}
+              </div>
+            )}
           </label>
         </div>
       </section>

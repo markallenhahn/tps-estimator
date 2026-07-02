@@ -19,7 +19,7 @@ html, body {
   box-sizing: border-box;
 }
 
-/* Force ALL inputs, selects, textareas to stay inside their containers */
+/* Force ALL inputs to stay inside containers */
 input, select, textarea {
   box-sizing: border-box;
   max-width: 100%;
@@ -27,13 +27,16 @@ input, select, textarea {
   display: block;
 }
 
-/* Date inputs on iOS ignore width:100% unless forced with appearance:none */
+/* Date inputs: match exact size of text inputs — iOS ignores these without appearance:none */
 input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
+  height: 38px !important;
+  padding: 8px 10px !important;
   box-sizing: border-box !important;
-  -webkit-appearance: none;
-  appearance: none;
+  line-height: normal !important;
   overflow: hidden;
 }
