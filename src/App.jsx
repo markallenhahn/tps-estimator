@@ -2295,14 +2295,15 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
         <h2 style={S.h2}>Invoice Details</h2>
         <div style={S.formGrid}>
           <label style={S.formLabel}>Invoice #
-            <input value={invNum} onChange={e => setInvoiceNum(e.target.value)} style={S.input}
+            <input value={invNum} onChange={e => setInvoiceNum(e.target.value)}
+              style={{...S.input, height:42, boxSizing:"border-box"}}
               placeholder={(currentJob.estimateNum||"").replace("EST-","INV-") || "INV-00001"}/>
           </label>
           <label style={S.formLabel}>Invoice Sent Date
             <div style={{display:"flex", gap:6, alignItems:"center", overflow:"visible"}}>
               <input type="date" value={currentJob.invoiceSentDate||""}
                 onChange={e => updateJob(j => ({...j, invoiceSentDate: e.target.value}))}
-                style={{...S.input, marginBottom:0, flex:1, minWidth:0, height:38, padding:"8px 10px", boxSizing:"border-box"}}/>
+                style={{...S.input, marginBottom:0, flex:1, minWidth:0, height:42, padding:"8px 10px", boxSizing:"border-box"}}/>
               {currentJob.invoiceSentDate && (
                 <button
                   onMouseDown={e => e.preventDefault()}
@@ -7871,13 +7872,13 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         <div style={S.formGrid}>
           <label style={S.formLabel}>Estimate #
             <input value={currentJob.estimateNum||""} readOnly
-              style={{...S.input, opacity:0.7, cursor:"default"}}/>
+              style={{...S.input, opacity:0.7, cursor:"default", height:42, boxSizing:"border-box"}}/>
           </label>
           <label style={S.formLabel}>Estimate Sent Date
             <div style={{display:"flex", gap:6, alignItems:"center", overflow:"visible"}}>
               <input type="date" value={currentJob.estimateSentDate||""}
                 onChange={e => updateJob(j => ({...j, estimateSentDate: e.target.value}))}
-                style={{...S.input, flex:1, minWidth:0, height:38, padding:"8px 10px", boxSizing:"border-box"}}/>
+                style={{...S.input, flex:1, minWidth:0, height:42, padding:"8px 10px", boxSizing:"border-box"}}/>
               {currentJob.estimateSentDate && (
                 <button
                   onMouseDown={e => e.preventDefault()}
