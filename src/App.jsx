@@ -2298,9 +2298,17 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
               placeholder={(currentJob.estimateNum||"").replace("EST-","INV-") || "INV-00001"}/>
           </label>
           <label style={S.formLabel}>Invoice Sent Date
-            <input type="date" value={currentJob.invoiceSentDate||""}
-              onChange={e => updateJob(j => ({...j, invoiceSentDate: e.target.value}))}
-              style={{...S.input, marginBottom:0}}/>
+            <div style={{display:"flex", gap:6, alignItems:"center"}}>
+              <input type="date" value={currentJob.invoiceSentDate||""}
+                onChange={e => updateJob(j => ({...j, invoiceSentDate: e.target.value}))}
+                style={{...S.input, marginBottom:0, flex:1}}/>
+              {currentJob.invoiceSentDate && (
+                <button onClick={() => updateJob(j => ({...j, invoiceSentDate: ""}))}
+                  style={{...S.btnSmall, color:C.danger, flexShrink:0, padding:"6px 10px", fontSize:13}}>
+                  ✕
+                </button>
+              )}
+            </div>
           </label>
           {isPaid && (
             <label style={S.formLabel}>Payment Date
