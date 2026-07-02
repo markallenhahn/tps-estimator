@@ -19,16 +19,21 @@ html, body {
   box-sizing: border-box;
 }
 
-/* Prevent date inputs from overflowing their containers on iOS/mobile */
-input[type="date"] {
-  width: 100%;
+/* Force ALL inputs, selects, textareas to stay inside their containers */
+input, select, textarea {
+  box-sizing: border-box;
   max-width: 100%;
   min-width: 0;
-  box-sizing: border-box;
+  display: block;
 }
 
-/* Prevent any input from blowing out its flex/grid container */
-input, select, textarea {
-  min-width: 0;
-  max-width: 100%;
+/* Date inputs on iOS ignore width:100% unless forced with appearance:none */
+input[type="date"] {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  -webkit-appearance: none;
+  appearance: none;
+  overflow: hidden;
 }
