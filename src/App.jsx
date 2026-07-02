@@ -499,7 +499,7 @@ const ALL_TABS  = [
   {key:"home",     label:"Home"},
   {key:"jobs",     label:"Jobs"},
   {key:"schedule", label:"Schedule"},
-  {key:"zones",    label:"Zones"},
+  {key:"zones",    label:"Smart Routing"},
   {key:"estimate", label:"Estimate"},
   {key:"costs",    label:"Costs"},
   {key:"invoice",  label:"Invoice"},
@@ -974,7 +974,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
       <p style={S.subhead}>Route start/end point</p>
       <section style={S.section}>
         <p style={{fontSize:12, color:C.textMuted, marginTop:-4, marginBottom:12}}>
-          Used as the starting and ending point for optimized routes on the Zones tab.
+          Used as the starting and ending point for optimized routes in Smart Routing.
         </p>
         <div style={S.formGrid}>
           <label style={S.formLabel}>Street Address
@@ -1469,7 +1469,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             {!currentJob.crewId && !crewRec && currentJob.status === "signed" && (
               <p style={{fontSize:11, color:C.textDim, marginBottom:8}}>
                 {!zones?.list?.length
-                  ? "No area-based recommendation yet — calculate Zones at least once first."
+                  ? "No area-based recommendation yet — run Smart Routing at least once first."
                   : "No crew recommendation yet — no other jobs scheduled in this area."}
               </p>
             )}
@@ -3746,7 +3746,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
       notices.push(`${failedGeocode.length} job(s) failed to geocode and were left out of zones — ` +
         failedGeocode.map(f => `${f.job.clientName || "Unnamed"} [${f.status}]`).join("; "));
     }
-    if (notices.length) alert("Zones updated.\n\n" + notices.join("\n\n"));
+    if (notices.length) alert("Routes updated.\n\n" + notices.join("\n\n"));
   };
 
   // ── Live re-assignment when a new job is added (nearest centroid, no full recalc) ──
@@ -3800,7 +3800,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
 
   return (
     <div className="tps-page" style={S.page}>
-      <p style={S.subhead}>4 zones calculated from job density (filtered by category below), plus overflow</p>
+      <p style={S.subhead}>Jobs are automatically grouped into routes based on location density.</p>
 
       {/* Tab switcher */}
       <div style={{display:"flex", gap:8, marginBottom:16}}>
@@ -3850,7 +3850,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
           <div>
             <div style={{fontSize:13, fontWeight:600}}>
-              {zonesList.length>0 ? `${zonesList.length} zones · ${totalJobsInZones} jobs assigned` : "No zones calculated yet"}
+              {zonesList.length>0 ? `${zonesList.length} routes · ${totalJobsInZones} jobs assigned` : "No routes calculated yet"}
             </div>
             {zones?.lastCalculated && (
               <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>
@@ -3863,7 +3863,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
           <div style={{fontSize:12, color:C.accent, marginBottom:8}}>⏳ {calcProgress}</div>
         )}
         <button style={{...S.btnPrimary, width:"100%", opacity:calculating?0.6:1}} onClick={recalculateZones} disabled={calculating}>
-          {calculating ? "Calculating..." : filtersDirty ? "🔄 Recalculate Zones (filter changed)" : "🔄 Recalculate Zones"}
+          {calculating ? "Calculating..." : filtersDirty ? "🔄 Recalculate Routes (filter changed)" : "🔄 Recalculate Routes"}
         </button>
         <p style={{fontSize:11, color:C.textDim, marginTop:8, marginBottom:0}}>
           Only re-geocodes jobs that haven't been calculated yet — already-geocoded jobs are reused instantly. Outlier jobs more than 25 miles from any zone center go to Overflow.
@@ -3882,7 +3882,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
             <>
               <section style={S.section}>
                 <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
-                  <h2 style={{...S.h2, margin:0}}>Zone Names</h2>
+                  <h2 style={{...S.h2, margin:0}}>Route Names</h2>
                   {!editingNames ? (
                     <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={startEditingNames}>✎ Rename</button>
                   ) : (
@@ -5865,7 +5865,7 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle }) {
   const cards = [
     { key:"company-settings", icon:"🏢", title:"Company Settings", desc:"Update your company name, contact info, logo, and legal terms." },
     { key:"permissions", icon:"🔐", title:"Permissions", desc:"View what each role can see. Contact BlacktopIQ support to change." },
-    { key:"homebase",    icon:"🏠", title:"Home Base", desc:"The start/end address used for route optimization on the Zones tab." },
+    { key:"homebase",    icon:"🏠", title:"Home Base", desc:"The start/end address used for route optimization in Smart Routing." },
     { key:"export",      icon:"📦", title:"Data Export", desc:"Download full CSV exports of jobs, costs, and labor." },
     { key:"referral",    icon:"🔗", title:"Referral Link", desc:"Share your unique link and earn rewards when contractors sign up." },
   ];
