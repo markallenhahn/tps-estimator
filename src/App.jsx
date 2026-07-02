@@ -1500,6 +1500,17 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             <input value={currentJob.estimateNum||""} disabled={estimatorLocked}
               onChange={e => updateJob(j => ({...j, estimateNum:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
           </label>
+          <label style={S.formLabel}>Estimate Sent Date
+            <div style={{display:"flex", gap:6, alignItems:"center"}}>
+              <input type="date" value={currentJob.estimateSentDate||""}
+                onChange={e => updateJob(j => ({...j, estimateSentDate: e.target.value}))}
+                style={{...S.input, flex:1}}/>
+              {currentJob.estimateSentDate && (
+                <button onClick={() => updateJob(j => ({...j, estimateSentDate: ""}))}
+                  style={{...S.btnSmall, color:C.danger, flexShrink:0, padding:"6px 10px", fontSize:13}}>✕</button>
+              )}
+            </div>
+          </label>
         </div>
         <label style={S.formLabel}>Street Address
           <input value={currentJob.address||""} disabled={estimatorLocked}
@@ -2145,7 +2156,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
       doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
       doc.text("DATE", rx, ry, {align:"right"}); ry += 13;
       doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
-      doc.text(currentJob.date, rx, ry, {align:"right"}); ry += 20;
+      doc.text(currentJob.invoiceSentDate ? new Date(currentJob.invoiceSentDate+"T12:00:00").toLocaleDateString() : currentJob.date, rx, ry, {align:"right"}); ry += 20;
       doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
       doc.text("INVOICE #", rx, ry, {align:"right"}); ry += 13;
       doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
@@ -2343,7 +2354,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
             <div style={{...S.estimateLabel, color: isPaid ? C.green : brand.accent}}>
               {isPaid ? "✅ PAID INVOICE" : "INVOICE"}
             </div>
-            <div style={S.estimateDateVal}>{currentJob.date}</div>
+            <div style={S.estimateDateVal}>{currentJob.invoiceSentDate ? new Date(currentJob.invoiceSentDate+"T12:00:00").toLocaleDateString() : currentJob.date}</div>
             <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>{invNum}</div>
           </div>
         </div>
@@ -2410,7 +2421,13 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
       <section style={S.section}>
         <div style={S.actionBtns}>
           <button style={{...S.btnPrimary, opacity:pdfLoading?0.5:1, background: isPaid ? "#16a34a" : brand.accent}}
-            onClick={generatePDF} disabled={pdfLoading}>
+            onClick={() => {
+              if (!currentJob.invoiceSentDate) {
+                const go = confirm("You haven't set an Invoice Sent Date.\n\nHit OK to go back and set the date, or Cancel to download anyway.");
+                if (go) return; // stay on screen
+              }
+              generatePDF();
+            }} disabled={pdfLoading}>
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
           <button style={S.btnSecondary} onClick={emailInvoice}>✉️ Email</button>
@@ -7668,7 +7685,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
       doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
       doc.text("DATE", rx, ry, { align:"right" }); ry += 13;
       doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
-      doc.text(currentJob.date, rx, ry, { align:"right" }); ry += 20;
+      doc.text(currentJob.estimateSentDate ? new Date(currentJob.estimateSentDate+"T12:00:00").toLocaleDateString() : currentJob.date, rx, ry, { align:"right" }); ry += 20;
       doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
       doc.text("ESTIMATE #", rx, ry, { align:"right" }); ry += 13;
       doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
@@ -7859,7 +7876,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
           </div>
           <div style={S.estimateDate}>
             <div style={S.estimateLabel}>ESTIMATE</div>
-            <div style={S.estimateDateVal}>{currentJob.date}</div>
+            <div style={S.estimateDateVal}>{currentJob.estimateSentDate ? new Date(currentJob.estimateSentDate+"T12:00:00").toLocaleDateString() : currentJob.date}</div>
             {currentJob.estimateNum && <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{currentJob.estimateNum}</div>}
           </div>
         </div>
@@ -8021,7 +8038,14 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
 
       <section style={S.section}>
         <div style={S.actionBtns}>
-          <button style={{...S.btnPrimary, opacity:pdfLoading?0.5:1}} onClick={generatePDF} disabled={pdfLoading}>
+          <button style={{...S.btnPrimary, opacity:pdfLoading?0.5:1}}
+            onClick={() => {
+              if (!currentJob.estimateSentDate) {
+                const go = confirm("You haven't set an Estimate Sent Date.\n\nHit OK to go back and set the date, or Cancel to download anyway.");
+                if (go) return; // stay on screen
+              }
+              generatePDF();
+            }} disabled={pdfLoading}>
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
           <button style={S.btnSecondary} onClick={emailEstimate}>✉️ Email</button>
