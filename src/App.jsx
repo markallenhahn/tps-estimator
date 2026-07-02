@@ -4770,9 +4770,20 @@ function buildCustomerGroups(jobs, customers, rates) {
     const customer = byId.get(id);
     const sortedJobs = [...jobsForCustomer].sort((a,b) => (b.date||"").localeCompare(a.date||""));
     const totalRevenue = jobsForCustomer.reduce((s,j) => s + calcJobFinancials(j, rates).revenue, 0);
+    // Always prefer the most complete name — customer record may be stale (e.g. created
+    // from a job before the full name was entered). Fall back to job clientName if the
+    // customer record name is missing or just an initial (1-2 chars).
+    const bestJobName  = sortedJobs.find(j => (j.clientName||"").trim().length > 2)?.clientName || "";
+    const resolvedName = (customer.name||"").trim().length > 2 ? customer.name : (bestJobName || customer.name || "");
+    const bestPhone    = customer.phone   || sortedJobs.find(j => j.clientPhone)?.clientPhone || "";
+    const bestEmail    = customer.email   || sortedJobs.find(j => j.clientEmail)?.clientEmail || "";
+    const bestAddress  = customer.address || sortedJobs[0]?.address || "";
+    const bestCity     = customer.city    || sortedJobs[0]?.city    || "";
+    const bestState    = customer.state   || sortedJobs[0]?.state   || "";
+    const bestZip      = customer.zip     || sortedJobs[0]?.zip     || "";
     return {
-      id, name: customer.name||"", phone: customer.phone||"", email: customer.email||"",
-      address: customer.address||"", city: customer.city||"", state: customer.state||"", zip: customer.zip||"",
+      id, name: resolvedName, phone: bestPhone, email: bestEmail,
+      address: bestAddress, city: bestCity, state: bestState, zip: bestZip,
       jobs: sortedJobs, jobCount: jobsForCustomer.length, totalRevenue, lastJobDate: sortedJobs[0]?.date || "",
     };
   }).sort((a,b) => (b.lastJobDate||"").localeCompare(a.lastJobDate||""));
