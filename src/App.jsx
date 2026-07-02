@@ -572,6 +572,7 @@ function TrialBanner({ tenantData, userRole, onGoToAccount }) {
       padding:"10px 24px",
       display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
       fontSize:13, color: urgent ? "#991b1b" : "#92400e",
+      position:"sticky", top:0, zIndex:50,
     }}>
       <span>
         {urgent ? "⚠️" : "ℹ️"} Your free trial expires in <strong>{daysLeft} day{daysLeft !== 1 ? "s" : ""}</strong>.
@@ -10026,8 +10027,9 @@ export default function App() {
   return (
     <div style={isDesktopLayout ? S.appDesktop : S.app}>
       <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant} isPlatformAdmin={isPlatformAdmin} companySettings={companySettings}/>
-      <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>
+      {!isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
+        {isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
         {syncStatus && (
           <div style={{
             background: syncStatus.startsWith("⚠️") ? "#fee2e2" : "#dcfce7",
