@@ -18,3 +18,17 @@ html, body {
   text-align: left;
   box-sizing: border-box;
 }
+
+/* Prevent date inputs from overflowing their containers on iOS/mobile */
+input[type="date"] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Prevent any input from blowing out its flex/grid container */
+input, select, textarea {
+  min-width: 0;
+  max-width: 100%;
+}
