@@ -2299,15 +2299,15 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
               placeholder={(currentJob.estimateNum||"").replace("EST-","INV-") || "INV-00001"}/>
           </label>
           <label style={S.formLabel}>Invoice Sent Date
-            <div style={{display:"flex", gap:6, alignItems:"center"}}>
+            <div style={{display:"flex", gap:6, alignItems:"center", overflow:"visible"}}>
               <input type="date" value={currentJob.invoiceSentDate||""}
                 onChange={e => updateJob(j => ({...j, invoiceSentDate: e.target.value}))}
-                style={{...S.input, marginBottom:0, width:160, flexShrink:0, height:38, padding:"8px 10px", boxSizing:"border-box"}}/>
+                style={{...S.input, marginBottom:0, flex:1, minWidth:0, height:38, padding:"8px 10px", boxSizing:"border-box"}}/>
               {currentJob.invoiceSentDate && (
                 <button
                   onMouseDown={e => e.preventDefault()}
                   onClick={e => { e.preventDefault(); e.stopPropagation(); updateJob(j => ({...j, invoiceSentDate: ""})); }}
-                  style={{...S.btnSmall, color:C.danger, flexShrink:0, padding:"6px 10px", fontSize:13}}>
+                  style={{background:"none", border:"none", color:C.danger, fontSize:18, cursor:"pointer", flexShrink:0, padding:"0 4px", lineHeight:1}}>
                   ✕
                 </button>
               )}
@@ -7874,15 +7874,15 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
               style={{...S.input, opacity:0.7, cursor:"default"}}/>
           </label>
           <label style={S.formLabel}>Estimate Sent Date
-            <div style={{display:"flex", gap:6, alignItems:"center"}}>
+            <div style={{display:"flex", gap:6, alignItems:"center", overflow:"visible"}}>
               <input type="date" value={currentJob.estimateSentDate||""}
                 onChange={e => updateJob(j => ({...j, estimateSentDate: e.target.value}))}
-                style={{...S.input, width:160, flexShrink:0, height:38, padding:"8px 10px", boxSizing:"border-box"}}/>
+                style={{...S.input, flex:1, minWidth:0, height:38, padding:"8px 10px", boxSizing:"border-box"}}/>
               {currentJob.estimateSentDate && (
                 <button
                   onMouseDown={e => e.preventDefault()}
                   onClick={e => { e.preventDefault(); e.stopPropagation(); updateJob(j => ({...j, estimateSentDate: ""})); }}
-                  style={{...S.btnSmall, color:C.danger, flexShrink:0, padding:"6px 10px", fontSize:13}}>
+                  style={{background:"none", border:"none", color:C.danger, fontSize:18, cursor:"pointer", flexShrink:0, padding:"0 4px", lineHeight:1}}>
                   ✕
                 </button>
               )}
