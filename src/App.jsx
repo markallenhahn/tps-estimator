@@ -1500,17 +1500,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             <input value={currentJob.estimateNum||""} disabled={estimatorLocked}
               onChange={e => updateJob(j => ({...j, estimateNum:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
           </label>
-          <label style={S.formLabel}>Estimate Sent Date
-            <div style={{display:"flex", gap:6, alignItems:"center"}}>
-              <input type="date" value={currentJob.estimateSentDate||""}
-                onChange={e => updateJob(j => ({...j, estimateSentDate: e.target.value}))}
-                style={{...S.input, flex:1}}/>
-              {currentJob.estimateSentDate && (
-                <button onClick={() => updateJob(j => ({...j, estimateSentDate: ""}))}
-                  style={{...S.btnSmall, color:C.danger, flexShrink:0, padding:"6px 10px", fontSize:13}}>✕</button>
-              )}
-            </div>
-          </label>
+
         </div>
         <label style={S.formLabel}>Street Address
           <input value={currentJob.address||""} disabled={estimatorLocked}
@@ -2312,9 +2302,11 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
             <div style={{display:"flex", gap:6, alignItems:"center"}}>
               <input type="date" value={currentJob.invoiceSentDate||""}
                 onChange={e => updateJob(j => ({...j, invoiceSentDate: e.target.value}))}
-                style={{...S.input, marginBottom:0, flex:1}}/>
+                style={{...S.input, marginBottom:0, flex:1, minWidth:130}}/>
               {currentJob.invoiceSentDate && (
-                <button onClick={() => updateJob(j => ({...j, invoiceSentDate: ""}))}
+                <button
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); updateJob(j => ({...j, invoiceSentDate: ""})); }}
                   style={{...S.btnSmall, color:C.danger, flexShrink:0, padding:"6px 10px", fontSize:13}}>
                   ✕
                 </button>
@@ -7867,6 +7859,32 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
     <div className="tps-page" style={S.page}>
       <h1 style={S.h1}>Estimate</h1>
       <p style={S.subhead}>{currentJob.clientName||"Unnamed"} · {currentJob.address||"No address"}</p>
+
+      {/* Estimate details */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Estimate Details</h2>
+        <div style={S.formGrid}>
+          <label style={S.formLabel}>Estimate #
+            <input value={currentJob.estimateNum||""} readOnly
+              style={{...S.input, opacity:0.7, cursor:"default"}}/>
+          </label>
+          <label style={S.formLabel}>Estimate Sent Date
+            <div style={{display:"flex", gap:6, alignItems:"center"}}>
+              <input type="date" value={currentJob.estimateSentDate||""}
+                onChange={e => updateJob(j => ({...j, estimateSentDate: e.target.value}))}
+                style={{...S.input, flex:1, minWidth:130}}/>
+              {currentJob.estimateSentDate && (
+                <button
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); updateJob(j => ({...j, estimateSentDate: ""})); }}
+                  style={{...S.btnSmall, color:C.danger, flexShrink:0, padding:"6px 10px", fontSize:13}}>
+                  ✕
+                </button>
+              )}
+            </div>
+          </label>
+        </div>
+      </section>
 
       <section style={S.section}>
         <div style={S.estimateHeader}>
