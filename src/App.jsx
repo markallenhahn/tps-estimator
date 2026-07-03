@@ -7834,6 +7834,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 
   const roles = userRoles || [userRole];
   const canSeeAllJobs = hasRole(roles, "owner") || hasRole(roles, "manager");
+  const isCrewLead = hasRole(roles, "crewlead");
   // Anyone who isn't an admin or manager only ever sees jobs assigned
   // directly to them — no crew-wide visibility. Admins/managers see
   // everything on the main Jobs tab, but get the same strict "assigned to
@@ -7955,12 +7956,19 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
             </div>
             <div style={{display:"flex", gap:8}}>
               <button style={{...S.btnSmall, flex:1}} onClick={() => open(j)}>Open</button>
-              <select value={j.status} onChange={e => setStatus(j, e.target.value)}
-                style={{flex:1, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
-                  padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text, cursor:"pointer", outline:"none"}}>
-                {PIPELINE_STATUSES.map(s => <option key={s} value={s}>{pipelineStatusLabel(s)}</option>)}
-                <option value="lost">Lost</option>
-              </select>
+              {canSeeAllJobs || isCrewLead ? (
+                <select value={j.status} onChange={e => setStatus(j, e.target.value)}
+                  style={{flex:1, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
+                    padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text, cursor:"pointer", outline:"none"}}>
+                  {PIPELINE_STATUSES.map(s => <option key={s} value={s}>{pipelineStatusLabel(s)}</option>)}
+                  <option value="lost">Lost</option>
+                </select>
+              ) : (
+                <span style={{flex:1, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
+                  padding:"4px 8px", fontSize:12, fontWeight:600, color:C.text, textAlign:"center"}}>
+                  {pipelineStatusLabel(j.status)}
+                </span>
+              )}
             </div>
           </div>
         ))}
