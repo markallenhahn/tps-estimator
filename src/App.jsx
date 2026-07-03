@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, createPortal } from "react";
 import * as LucideIcons from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -1459,83 +1459,6 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 <button style={S.btnSecondary} onClick={() => setShowKickBack(true)}>↩ Kick Back</button>
               </div>
             )}
-            {/* Estimator Appointment Modal */}
-            {showApptModal && (
-              <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
-                <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-                  <h2 style={{...S.h2, marginTop:0}}>📋 Set Estimator Appointment</h2>
-                  {(() => {
-                    const assignee = teamUsers.find(u => u.id === apptAssignId);
-                    const assigneeName = assignee ? [assignee.first_name, assignee.last_name].filter(Boolean).join(" ") || assignee.email : "Estimator";
-                    return <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>Scheduling a site visit for <strong>{assigneeName}</strong>.</p>;
-                  })()}
-                  <div style={{display:"flex", flexDirection:"column", gap:10}}>
-                    <label style={S.formLabel}>Appointment Date *
-                      <input type="date" value={apptDate} onChange={e => {
-                        setApptDate(e.target.value);
-                        // Check conflicts when date changes
-                        if (e.target.value) {
-                          const conflicts = jobs.filter(j =>
-                            j.id !== currentJob.id &&
-                            j.assignedTo === apptAssignId &&
-                            j.estimatorAppointment?.date === e.target.value
-                          );
-                          setApptConflicts(conflicts);
-                        } else { setApptConflicts([]); }
-                      }} style={{...S.input, height:42, boxSizing:"border-box"}}/>
-                    </label>
-                    <label style={S.formLabel}>Appointment Time (optional)
-                      <input type="time" value={apptTime} onChange={e => setApptTime(e.target.value)}
-                        style={{...S.input, height:42, boxSizing:"border-box"}}/>
-                    </label>
-                    <label style={S.formLabel}>Notes for Estimator (optional)
-                      <input value={apptNotes} onChange={e => setApptNotes(e.target.value)}
-                        placeholder="e.g. Call before going, gate code 1234"
-                        style={S.input}/>
-                    </label>
-                  </div>
-                  {/* Conflict warnings */}
-                  {apptConflicts.length > 0 && (
-                    <div style={{background:"#fef3c7", border:"1px solid #fde68a", borderRadius:8, padding:"10px 12px", marginTop:12}}>
-                      <div style={{fontWeight:700, fontSize:13, color:"#92400e", marginBottom:6}}>
-                        ⚠️ {apptConflicts.length} other appointment{apptConflicts.length!==1?"s":""} on this date:
-                      </div>
-                      {apptConflicts.map(j => {
-                        const sameTime = apptTime && j.estimatorAppointment?.time === apptTime;
-                        return (
-                          <div key={j.id} style={{fontSize:12, color:"#92400e", marginBottom:4}}>
-                            {sameTime && <strong>⛔ Same time — </strong>}
-                            {j.clientName||"Unnamed"} · {j.address||"No address"}
-                            {j.estimatorAppointment?.time ? ` @ ${j.estimatorAppointment.time}` : ""}
-                          </div>
-                        );
-                      })}
-                      {apptTime && apptConflicts.some(j => j.estimatorAppointment?.time === apptTime) && (
-                        <div style={{fontSize:12, fontWeight:700, color:"#b91c1c", marginTop:6}}>
-                          Exact time conflict — please choose a different time.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div style={{display:"flex", gap:8, marginTop:16}}>
-                    <button
-                      style={{...S.btnPrimary, flex:1, opacity: (!apptDate || (apptTime && apptConflicts.some(j => j.estimatorAppointment?.time === apptTime))) ? 0.4 : 1}}
-                      disabled={!apptDate || (apptTime && apptConflicts.some(j => j.estimatorAppointment?.time === apptTime))}
-                      onClick={() => {
-                        updateJob(j => ({...j,
-                          assignedTo: apptAssignId,
-                          estimatorAppointment: { date: apptDate, time: apptTime, notes: apptNotes },
-                        }));
-                        setShowApptModal(false);
-                      }}>
-                      Confirm Appointment
-                    </button>
-                    <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowApptModal(false)}>Cancel</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Kick back modal */}
             {showKickBack && (
               <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
@@ -2152,6 +2075,81 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           </div>
         </section>
       )}
+
+      {/* ── ESTIMATOR APPOINTMENT MODAL ── */}
+      {showApptModal && createPortal(
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+            <h2 style={{...S.h2, marginTop:0}}>📋 Set Estimator Appointment</h2>
+            {(() => {
+              const assignee = teamUsers.find(u => u.id === apptAssignId);
+              const assigneeName = assignee ? [assignee.first_name, assignee.last_name].filter(Boolean).join(" ") || assignee.email : "Estimator";
+              return <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>Scheduling a site visit for <strong>{assigneeName}</strong>.</p>;
+            })()}
+            <div style={{display:"flex", flexDirection:"column", gap:10}}>
+              <label style={S.formLabel}>Appointment Date *
+                <input type="date" value={apptDate} onChange={e => {
+                  setApptDate(e.target.value);
+                  if (e.target.value) {
+                    const conflicts = jobs.filter(j =>
+                      j.id !== currentJob.id &&
+                      j.assignedTo === apptAssignId &&
+                      j.estimatorAppointment?.date === e.target.value
+                    );
+                    setApptConflicts(conflicts);
+                  } else { setApptConflicts([]); }
+                }} style={{...S.input, height:42, boxSizing:"border-box"}}/>
+              </label>
+              <label style={S.formLabel}>Appointment Time (optional)
+                <input type="time" value={apptTime} onChange={e => setApptTime(e.target.value)}
+                  style={{...S.input, height:42, boxSizing:"border-box"}}/>
+              </label>
+              <label style={S.formLabel}>Notes for Estimator (optional)
+                <input value={apptNotes} onChange={e => setApptNotes(e.target.value)}
+                  placeholder="e.g. Call before going, gate code 1234"
+                  style={S.input}/>
+              </label>
+            </div>
+            {apptConflicts.length > 0 && (
+              <div style={{background:"#fef3c7", border:"1px solid #fde68a", borderRadius:8, padding:"10px 12px", marginTop:12}}>
+                <div style={{fontWeight:700, fontSize:13, color:"#92400e", marginBottom:6}}>
+                  ⚠️ {apptConflicts.length} other appointment{apptConflicts.length!==1?"s":""} on this date:
+                </div>
+                {apptConflicts.map(j => {
+                  const sameTime = apptTime && j.estimatorAppointment?.time === apptTime;
+                  return (
+                    <div key={j.id} style={{fontSize:12, color:"#92400e", marginBottom:4}}>
+                      {sameTime && <strong>⛔ Same time — </strong>}
+                      {j.clientName||"Unnamed"} · {j.address||"No address"}
+                      {j.estimatorAppointment?.time ? ` @ ${j.estimatorAppointment.time}` : ""}
+                    </div>
+                  );
+                })}
+                {apptTime && apptConflicts.some(j => j.estimatorAppointment?.time === apptTime) && (
+                  <div style={{fontSize:12, fontWeight:700, color:"#b91c1c", marginTop:6}}>
+                    Exact time conflict — please choose a different time.
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{display:"flex", gap:8, marginTop:16}}>
+              <button
+                style={{...S.btnPrimary, flex:1, opacity: (!apptDate || (apptTime && apptConflicts.some(j => j.estimatorAppointment?.time === apptTime))) ? 0.4 : 1}}
+                disabled={!apptDate || (apptTime && apptConflicts.some(j => j.estimatorAppointment?.time === apptTime))}
+                onClick={() => {
+                  updateJob(j => ({...j,
+                    assignedTo: apptAssignId,
+                    estimatorAppointment: { date: apptDate, time: apptTime, notes: apptNotes },
+                  }));
+                  setShowApptModal(false);
+                }}>
+                Confirm Appointment
+              </button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowApptModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
 
       {/* ── AUDIT LOG ── */}
       {canSeeAllJobs && Array.isArray(currentJob.auditLog) && currentJob.auditLog.length > 0 && (
