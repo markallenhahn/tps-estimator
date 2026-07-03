@@ -9143,7 +9143,7 @@ function EstimateRequestLinkView({ setView, currentTenantId }) {
           {[
             ["1️⃣", "Client scans the QR code or visits your link"],
             ["2️⃣", "They fill out their name, address, services needed, and can add photos"],
-            ["3️⃣", "Their request appears as a new job in your Jobs pipeline with status "Estimate""],
+            ["3️⃣", "Their request appears as a new job in your Jobs pipeline with status 'Estimate'"],
             ["4️⃣", "You review, add measurements, and send them an estimate"],
           ].map(([num, text]) => (
             <div key={num} style={{display:"flex", gap:10, alignItems:"flex-start"}}>
