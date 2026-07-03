@@ -145,6 +145,14 @@ function formatPhone(value) {
   return "(" + digits.slice(0,3) + ") " + digits.slice(3,6) + "-" + digits.slice(6);
 }
 
+const formatTime12 = (t) => {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12  = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2,"0")} ${ampm}`;
+};
+
 function formatCurrency(n) {
   return "$" + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -1392,7 +1400,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           </select>
           {currentJob.estimatorAppointment?.date && (
             <div style={{fontSize:12, color:C.textMuted, marginTop:6, display:"flex", alignItems:"center", gap:8}}>
-              📋 Estimate visit: <strong>{currentJob.estimatorAppointment.date}{currentJob.estimatorAppointment.time ? " at " + currentJob.estimatorAppointment.time : ""}</strong>
+              📋 Estimate visit: <strong>{currentJob.estimatorAppointment.date}{currentJob.estimatorAppointment.time ? " at " + formatTime12(currentJob.estimatorAppointment.time) : ""}</strong>
               {currentJob.estimatorAppointment.notes && <span style={{fontStyle:"italic"}}>— {currentJob.estimatorAppointment.notes}</span>}
               {canSeeAllJobs && (
                 <button style={{...S.btnSmall, fontSize:11}} onClick={() => {
@@ -2128,7 +2136,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                     <div key={j.id} style={{fontSize:12, color:"#92400e", marginBottom:4}}>
                       {sameTime && <strong>⛔ Same time — </strong>}
                       {j.clientName||"Unnamed"} · {j.address||"No address"}
-                      {j.estimatorAppointment?.time ? ` @ ${j.estimatorAppointment.time}` : ""}
+                      {j.estimatorAppointment?.time ? ` @ ${formatTime12(j.estimatorAppointment.time)}` : ""}
                     </div>
                   );
                 })}
@@ -4573,7 +4581,7 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
                       {j.isEstimateVisit ? (
                         <div style={{...S.schedJobMeta, color:"#7c3aed", fontWeight:600}}>
                           📋 {new Date(j.estimatorAppointment.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
-                          {j.estimatorAppointment.time ? ` at ${j.estimatorAppointment.time}` : ""}
+                          {j.estimatorAppointment.time ? ` at ${formatTime12(j.estimatorAppointment.time)}` : ""}
                           {j.estimatorAppointment.notes ? ` — ${j.estimatorAppointment.notes}` : ""}
                         </div>
                       ) : (<>
