@@ -1140,7 +1140,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     if (photo?.storagePath) {
       storageDelete(photo.storagePath, accessToken).catch(e => console.error("Storage delete failed:", e));
     }
-    updateJob(j => ({...j, photos: j.photos.filter(p => p.id !== id)}));
+    updateJob(j => ({...j, photos: (j.photos||[]).filter(p => p.id !== id)}));
   };
 
   // ── Signature pad helpers ──
@@ -2029,11 +2029,11 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
         )}
       </section>
 
-      {currentJob.photos.length > 0 && (
+      {(currentJob.photos||[]).length > 0 && (
         <section style={S.section}>
-          <h2 style={S.h2}>Photos ({currentJob.photos.length})</h2>
+          <h2 style={S.h2}>Photos ({(currentJob.photos||[]).length})</h2>
           <div style={S.mediaPhotoGrid}>
-            {currentJob.photos.map(p => (
+            {(currentJob.photos||[]).map(p => (
               <div key={p.id} style={S.mediaPhotoCard} onClick={() => setLightbox({type:'photo', item:p})}>
                 <img src={p.url || p.dataUrl} alt={p.label} style={S.mediaPhotoImg}/>
                 <div style={S.mediaPhotoOverlay}>
@@ -8384,11 +8384,11 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         )}
       </section>
 
-      {currentJob.photos.length > 0 && (
+      {(currentJob.photos||[]).length > 0 && (
         <section style={S.section}>
-          <h2 style={S.h2}>Inspection Photos ({currentJob.photos.length})</h2>
+          <h2 style={S.h2}>Inspection Photos ({(currentJob.photos||[]).length})</h2>
           <div style={S.photoGridSmall}>
-            {currentJob.photos.map(p => (
+            {(currentJob.photos||[]).map(p => (
               <div key={p.id} style={S.photoCardSmall}>
                 <img src={p.url || p.dataUrl} alt={p.label} style={S.photoImgSmall}/>
                 <div style={S.photoLabelSmall}>{p.label}</div>
