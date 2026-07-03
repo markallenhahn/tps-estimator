@@ -4344,7 +4344,7 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
                     <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
                     <div style={S.schedJobAddr}>{j.address||""}{j.city?", "+j.city:""}</div>
                     <div style={S.schedJobMeta}>
-                      {j.areas.length} area{j.areas.length!==1?"s":""}{total>0?" · $"+total.toFixed(0):""}
+                      {(j.areas||[]).length} area{(j.areas||[]).length!==1?"s":""}{total>0?" · $"+total.toFixed(0):""}
                     </div>
                     {j.notes && <div style={S.schedJobNotes}>{j.notes}</div>}
                   </div>
