@@ -7869,33 +7869,38 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 
   const PipelineCard = ({ job, draggable }) => {
     const isPendingReview = job.readyForReview || job.status === "pending_review";
+    // Pending review cards are not draggable — they must be reviewed first
+    const isDraggable = draggable && !isPendingReview;
     return (
     <div
-      draggable={draggable}
-      onDragStart={draggable ? (e => { e.dataTransfer.setData("text/plain", String(job.id)); }) : undefined}
+      draggable={isDraggable}
+      onDragStart={isDraggable ? (e => { e.dataTransfer.setData("text/plain", String(job.id)); }) : undefined}
       style={{
         background: isPendingReview ? "#fefce8" : C.surface,
         borderBottom:`1px solid ${isPendingReview ? "#fde68a" : C.border}`,
         borderLeft: isPendingReview ? "3px solid #f59e0b" : "none",
-        padding:10, height:isPendingReview ? 108 : 92, boxSizing:"border-box",
+        padding:10, height:92, boxSizing:"border-box",
         display:"flex", flexDirection:"column", justifyContent:"space-between",
       }}>
       <div onClick={() => open(job)} style={{cursor:"pointer", overflow:"hidden"}}>
-        <div style={{fontWeight:700, fontSize:13, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
-          {job.clientName||"Unnamed Client"}
-        </div>
-        {isPendingReview && (
-          <div style={{fontSize:10, fontWeight:700, color:"#92400e", background:"#fef3c7", borderRadius:4, padding:"1px 6px", display:"inline-block", marginBottom:4}}>
-            ⏳ Pending Review
+        <div style={{display:"flex", alignItems:"center", gap:4, marginBottom:2, overflow:"hidden"}}>
+          <div style={{fontWeight:700, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1}}>
+            {job.clientName||"Unnamed Client"}
           </div>
-        )}
-        <div style={{fontSize:11, color:C.textMuted, textTransform:"capitalize", marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+          {isPendingReview && (
+            <div style={{fontSize:9, fontWeight:700, color:"#92400e", background:"#fef3c7", borderRadius:4, padding:"1px 5px", flexShrink:0}}>
+              ⏳
+            </div>
+          )}
+        </div>
+        <div style={{fontSize:11, color:C.textMuted, textTransform:"capitalize", marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
           {(job.areas||[]).map(ar=>ar.serviceType).filter((v,i,arr)=>arr.indexOf(v)===i).join(", ") || "—"}
         </div>
         {canSeeAllJobs && <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</div>}
       </div>
       <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark ${job.clientName||"this job"} as Lost? It'll drop off the pipeline.`)) setStatus(job, "lost"); }}
-        style={{fontSize:10, color:C.textMuted, background:"none", border:"none", cursor:"pointer", padding:0, textAlign:"left"}}>
+        style={{fontSize:10, fontWeight:600, color:"#b91c1c", background:"#fef2f2", border:"1px solid #fecaca",
+          borderRadius:4, cursor:"pointer", padding:"2px 8px", textAlign:"center", marginTop:4}}>
         Mark Lost
       </button>
     </div>
