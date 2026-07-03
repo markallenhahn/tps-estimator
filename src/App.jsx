@@ -5896,7 +5896,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
                     } else if (res.status === 401) {
                       alert("Your session has expired. Please sign out and sign back in, then try again.");
                     } else if (res.status === 400 && data.error?.includes("No billing account")) {
-                      alert("Billing isn\'t set up yet for this account. Contact support@blacktopiq.com.");
+                      alert("Billing isn't set up yet for this account. Contact support@blacktopiq.com.");
                     } else {
                       alert(data.error || "Could not open billing portal. Try again or contact support.");
                     }
@@ -8606,7 +8606,7 @@ function EstimateRequestForm({ tenantId }) {
     if (!phone.trim() && !email.trim()) { setError("Please enter a phone number or email address."); return; }
     if (!address.trim()) { setError("Please enter a street address."); return; }
     if (services.length === 0) { setError("Please select at least one service."); return; }
-    if (!captcha) { setError("Please check the box to confirm you\'re not a robot."); return; }
+    if (!captcha) { setError("Please check the box to confirm you're not a robot."); return; }
 
     setSubmitting(true);
     try {
@@ -8647,7 +8647,7 @@ function EstimateRequestForm({ tenantId }) {
         <div style={{fontSize:48, marginBottom:16}}>✅</div>
         <h2 style={{fontSize:22, fontWeight:700, marginBottom:12}}>Request Received!</h2>
         <p style={{fontSize:14, color:"#6b7280", lineHeight:1.6}}>
-          Thank you, <strong>{name}</strong>. We\'ve received your estimate request and will be in touch soon.
+          Thank you, <strong>{name}</strong>. We've received your estimate request and will be in touch soon.
         </p>
         <p style={{fontSize:13, color:"#9ca3af", marginTop:16}}>— {brand.name}</p>
       </div>
@@ -8665,7 +8665,7 @@ function EstimateRequestForm({ tenantId }) {
             : <div style={{fontSize:22, fontWeight:700, marginBottom:12}}>{brand.name}</div>
           }
           <h1 style={{fontSize:20, fontWeight:700, margin:"0 0 4px"}}>Request a Free Estimate</h1>
-          <p style={{fontSize:13, color:"#6b7280", margin:0}}>Fill out the form below and we\'ll get back to you shortly.</p>
+          <p style={{fontSize:13, color:"#6b7280", margin:0}}>Fill out the form below and we'll get back to you shortly.</p>
         </div>
 
         <div style={{background:"#fff", borderRadius:12, padding:24, boxShadow:"0 2px 12px rgba(0,0,0,0.06)", display:"flex", flexDirection:"column", gap:16}}>
@@ -8763,7 +8763,7 @@ function EstimateRequestForm({ tenantId }) {
               style={{width:22, height:22, borderRadius:4, border:`2px solid ${captcha ? brand.accent : "#d1d5db"}`, background: captcha ? brand.accent : "#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer"}}>
               {captcha && <span style={{color:"#000", fontSize:14, fontWeight:700}}>✓</span>}
             </div>
-            I\'m not a robot
+            I'm not a robot
           </label>
 
           {/* Error */}
