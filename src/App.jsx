@@ -7927,6 +7927,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
     return (
       <div className="tps-page" style={S.page}>
         {headerRow}
+        {(canSeeAllJobs || isCrewLead) && (
         <div style={{display:"flex", gap:6, overflowX:"auto", paddingBottom:10, marginBottom:14, borderBottom:`1px solid ${C.border}`}}>
           {columns.map(c => (
             <button key={c.status} onClick={() => setMobileStatus(c.status)}
@@ -7939,6 +7940,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
             </button>
           ))}
         </div>
+        )}
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:12}}>
           <span style={{fontSize:16, fontWeight:700}}>{pipelineStatusLabel(col.status)}</span>
           <span style={{fontSize:12, color:C.textMuted}}>{col.jobs.length} job{col.jobs.length!==1?"s":""}{canSeeAllJobs ? " · " + formatCurrency(col.total) : ""}</span>
