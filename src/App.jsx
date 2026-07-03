@@ -1354,8 +1354,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
         )}
       </div>
 
-      {/* ── ASSIGNMENT ── */}
-      {teamUsers && teamUsers.length > 0 && (
+      {/* ── ASSIGNMENT — owner/manager only ── */}
+      {canSeeAllJobs && teamUsers && teamUsers.length > 0 && (
         <section style={S.section}>
           <h2 style={S.h2}>Assigned To</h2>
           {!currentJob.assignedTo && estimatorRec && (
@@ -7984,7 +7984,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
           <div key={c.status}
             onDragOver={e => { e.preventDefault(); setDragOverStatus(c.status); }}
             onDragLeave={() => setDragOverStatus(prev => prev===c.status ? null : prev)}
-            onDrop={e => handleDrop(e, c.status)}
+            onDrop={e => { if (canSeeAllJobs || isCrewLead) handleDrop(e, c.status); }}
             style={{
               minWidth:0,
               borderRight: i < columns.length-1 ? `1px solid ${C.border}` : "none",
@@ -8000,7 +8000,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
             </div>
             <div style={{fontSize:11, color:C.textMuted, padding:"6px 10px", textAlign:"center", borderBottom:`1px solid ${C.border}`}}>{c.jobs.length}{canSeeAllJobs ? " · " + formatCurrency(c.total) : ""}</div>
             <div style={{minHeight:40}}>
-              {c.jobs.map(j => <PipelineCard key={j.id} job={j} draggable/>)}
+              {c.jobs.map(j => <PipelineCard key={j.id} job={j} draggable={canSeeAllJobs || isCrewLead}/>)}
             </div>
           </div>
         ))}
