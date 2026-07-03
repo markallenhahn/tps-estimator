@@ -7152,7 +7152,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
 // estimate, invoice, costs, labor). Shows client name, address, status
 // changer, and quick-jump tabs between job screens.
 function JobContextBar({ currentJob, updateJob, setView, view, permissions, userRoles, userRole, planData, iconStyle }) {
-  if (!currentJob) return null;
+  if (!currentJob || !currentJob.id) return null;
 
   const roles = userRoles || [userRole];
   const canEdit = hasRole(roles, "owner") || hasRole(roles, "manager") || hasRole(roles, "crewlead");
@@ -7278,7 +7278,7 @@ function daysSince(isoOrDateStr) {
 // Default aging thresholds — adjustable later, not exposed as settings yet.
 const AGING = { estimateStuckDays: 7, sentNoResponseDays: 3, unpaidInvoiceDays: 14 };
 
-function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView }) {
+function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView, rates }) {
   const isDesktopLayout = useIsDesktop();
   const roles = userRoles || [userRole];
   const isEstimator = hasRole(roles, "estimator");
@@ -7294,6 +7294,12 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
 
   const open = (job) => { setCurrentJob(job); setView("jobdetail"); };
   const todayStr = new Date().toISOString().slice(0,10);
+  const [homeTab, setHomeTab] = useState("dashboard"); // "dashboard" | "requests"
+
+  // Jobs that came in via the estimate request form
+  const requestJobs = canSeeAllJobs
+    ? visibleJobs.filter(j => j.source === "request_form" && ["estimate","draft"].includes(j.status))
+    : [];
 
   // ── Action Needed ──
   const actionItems = [];
@@ -7383,6 +7389,65 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
 
   return (
     <div className="tps-page" style={S.page}>
+      {/* Home tabs */}
+      {canSeeAllJobs && (
+        <div style={{display:"flex", gap:8, marginBottom:16}}>
+          <button onClick={() => setHomeTab("dashboard")}
+            style={{fontSize:13, fontWeight:600, padding:"7px 16px", borderRadius:8, border:"none", cursor:"pointer",
+              background: homeTab==="dashboard" ? C.accent : C.surface2,
+              color: homeTab==="dashboard" ? "#000" : C.textMuted}}>
+            🏠 Dashboard
+          </button>
+          <button onClick={() => setHomeTab("requests")}
+            style={{fontSize:13, fontWeight:600, padding:"7px 16px", borderRadius:8, border:"none", cursor:"pointer",
+              background: homeTab==="requests" ? C.accent : C.surface2,
+              color: homeTab==="requests" ? "#000" : C.textMuted,
+              position:"relative"}}>
+            📝 Estimate Requests
+            {requestJobs.length > 0 && (
+              <span style={{position:"absolute", top:-6, right:-6, background:C.danger, color:"#fff",
+                borderRadius:"50%", width:18, height:18, fontSize:10, fontWeight:700,
+                display:"flex", alignItems:"center", justifyContent:"center"}}>
+                {requestJobs.length}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {homeTab === "requests" && canSeeAllJobs ? (
+        <section style={S.section}>
+          <h2 style={S.h2}>Estimate Requests ({requestJobs.length})</h2>
+          <p style={{fontSize:12, color:C.textMuted, marginBottom:12, marginTop:-8}}>
+            Jobs submitted via your estimate request form — review and follow up with the client.
+          </p>
+          {requestJobs.length === 0 ? (
+            <p style={{fontSize:13, color:C.textMuted}}>No new estimate requests.</p>
+          ) : requestJobs.map(j => (
+            <div key={j.id} onClick={() => open(j)}
+              style={{padding:"12px 14px", background:C.surface2, borderRadius:8, marginBottom:8,
+                border:`1px solid ${C.border}`, cursor:"pointer"}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{fontWeight:700, fontSize:14}}>{j.clientName||"Unnamed"}</div>
+                  <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>{j.address||""}{j.city ? ", "+j.city : ""}</div>
+                  <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>{j.clientPhone||j.clientEmail||""}</div>
+                  {j.notes && (
+                    <div style={{fontSize:12, color:C.textMuted, marginTop:4, fontStyle:"italic",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                      {j.notes.split("\n")[0]}
+                    </div>
+                  )}
+                </div>
+                <div style={{textAlign:"right", flexShrink:0, marginLeft:12}}>
+                  <div style={{fontSize:11, color:C.textMuted}}>{j.date}</div>
+                  <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+      ) : (
       <p style={S.subhead}>What needs your attention right now.</p>
 
       <div style={{display: isDesktopLayout ? "grid" : "block", gridTemplateColumns: isDesktopLayout ? "1fr 1fr" : undefined, gap: isDesktopLayout ? 20 : 0}}>
@@ -7492,6 +7557,7 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
           </>
         )}
       </section>
+      )} {/* end homeTab ternary */}
     </div>
   );
 }
@@ -10016,7 +10082,7 @@ export default function App() {
       try {
         const jr = await tFetch("jobs?select=id,data&order=id.desc");
         const jd = await jr.json();
-        if (Array.isArray(jd)) setJobs(jd.map(row => ({...row.data, id: row.id})));
+        if (Array.isArray(jd)) setJobs(jd.map(row => ({areas:[], ...row.data, id: row.id})));
 
         const rr = await tFetch("rates?select=data&order=id.desc&limit=1");
         const rd = await rr.json();
@@ -10695,7 +10761,7 @@ export default function App() {
             <button onClick={goBack} style={S.btnSecondary}>← Back</button>
           </div>
         )}
-        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
+        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
