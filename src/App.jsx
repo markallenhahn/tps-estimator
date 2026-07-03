@@ -7278,7 +7278,7 @@ function daysSince(isoOrDateStr) {
 // Default aging thresholds — adjustable later, not exposed as settings yet.
 const AGING = { estimateStuckDays: 7, sentNoResponseDays: 3, unpaidInvoiceDays: 14 };
 
-function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView, rates }) {
+function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView, rates, tFetch, setJobs }) {
   const isDesktopLayout = useIsDesktop();
   const roles = userRoles || [userRole];
   const isEstimator = hasRole(roles, "estimator");
@@ -7293,12 +7293,32 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
   );
 
   const open = (job) => { setCurrentJob(job); setView("jobdetail"); };
+
+  // For request form jobs: fetch fresh from Supabase before opening
+  // in case the job was just created and isn't in local state yet
+  const openRequest = async (job) => {
+    if (jobs.find(j => j.id === job.id)) {
+      // Already in local state — open directly
+      setCurrentJob(job); setView("jobdetail"); return;
+    }
+    try {
+      const res = await tFetch("jobs?id=eq." + job.id + "&select=id,data&limit=1");
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows[0]) {
+        const fresh = { areas:[], ...rows[0].data, id: rows[0].id };
+        setJobs(prev => prev.some(j => j.id === fresh.id) ? prev : [fresh, ...prev]);
+        setCurrentJob(fresh); setView("jobdetail");
+      }
+    } catch(e) { setCurrentJob(job); setView("jobdetail"); }
+  };
+
   const todayStr = new Date().toISOString().slice(0,10);
   const [homeTab, setHomeTab] = useState("dashboard"); // "dashboard" | "requests"
 
   // Jobs that came in via the estimate request form
   const requestJobs = canSeeAllJobs
-    ? visibleJobs.filter(j => j.source === "request_form" && ["estimate","draft"].includes(j.status))
+    ? [...visibleJobs, ...jobs.filter(j => j.source === "request_form" && !visibleJobs.find(v => v.id === j.id))]
+        .filter(j => j.source === "request_form" && ["estimate","draft"].includes(j.status))
     : [];
 
   // ── Action Needed ──
@@ -7424,7 +7444,7 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
           {requestJobs.length === 0 ? (
             <p style={{fontSize:13, color:C.textMuted}}>No new estimate requests.</p>
           ) : requestJobs.map(j => (
-            <div key={j.id} onClick={() => open(j)}
+            <div key={j.id} onClick={() => openRequest(j)}
               style={{padding:"12px 14px", background:C.surface2, borderRadius:8, marginBottom:8,
                 border:`1px solid ${C.border}`, cursor:"pointer"}}>
               <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
@@ -10763,7 +10783,7 @@ export default function App() {
             <button onClick={goBack} style={S.btnSecondary}>← Back</button>
           </div>
         )}
-        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates}/></div>}
+        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} tFetch={tFetch} setJobs={setJobs}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
