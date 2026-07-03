@@ -7174,7 +7174,6 @@ function JobContextBar({ currentJob, updateJob, setView, view, permissions, user
     { key: "estimate",  label: "Estimate", icon: "$",  permKey: "estimate" },
     { key: "invoice",   label: "Invoice",  icon: "🧾", permKey: "invoice" },
     { key: "costs",     label: "Costs",    icon: "📊", permKey: "costs",   plan: true },
-    { key: "labor",     label: "Labor",    icon: "👷", permKey: "labor",   plan: true },
   ].filter(t => {
     if (!t.permKey) return true;
     if (getAccessLevel(permissions, t.permKey, userRoles) === "hidden") return false;
@@ -10687,7 +10686,7 @@ export default function App() {
           }}>{syncStatus}</div>
         )}
         <div style={S.content}>
-        {viewHistory.length > 0 && !["jobdetail","estimate","invoice","costs","labor"].includes(view) && (
+        {viewHistory.length > 0 && !["jobdetail","estimate","invoice","costs"].includes(view) && (
           <div style={{display:"flex", justifyContent:"flex-end", padding:"16px 24px 0", boxSizing:"border-box"}}>
             <button onClick={goBack} style={S.btnSecondary}>← Back</button>
           </div>
@@ -10698,7 +10697,7 @@ export default function App() {
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"zones") && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
         {/* ── Job context bar — shared across all job-scoped views ── */}
-        {["jobdetail","estimate","invoice","costs","labor"].includes(view) && currentJob && (
+        {["jobdetail","estimate","invoice","costs"].includes(view) && currentJob && (
           <JobContextBar
             currentJob={currentJob}
             updateJob={updateJob}
