@@ -958,7 +958,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
       const fullAddr = [street.trim(), city.trim(), state_.trim(), zip.trim()].filter(Boolean).join(", ");
       const geo = await geocodeAddress(fullAddr);
       if (!geo) { setHomeMsg("⚠️ Could not find that address. Check spelling and try again."); setSavingHome(false); return; }
-      const data = { address: fullAddr, street: street.trim(), city: city.trim(), state: state_.trim(), zip: zip.trim(), lat: geo.lat, lng: geo.lng };
+      const data = { address: fullAddr, street: street.trim(), city: city.trim(), state: stateAbbr.trim(), zip: zip.trim(), lat: geo.lat, lng: geo.lng };
       setHomeBase(data);
       await syncHomeBase(data);
       setHomeMsg("✅ Home base saved.");
@@ -990,7 +990,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
         </div>
         <div style={S.formGrid}>
           <label style={S.formLabel}>State
-            <input type="text" value={state_} onChange={e => setState_(e.target.value)}
+            <input type="text" value={stateAbbr} onChange={e => setState_(e.target.value)}
               style={S.input} placeholder="PA" maxLength={2}/>
           </label>
           <label style={S.formLabel}>ZIP
@@ -8562,7 +8562,7 @@ function EstimateRequestForm({ tenantId }) {
   const [email,        setEmail]        = useState("");
   const [address,      setAddress]      = useState("");
   const [city,         setCity]         = useState("");
-  const [state,        setState_]       = useState("");
+  const [stateAbbr,    setStateAbbr]    = useState("");
   const [zip,          setZip]          = useState("");
   const [services,     setServices]     = useState([]);
   const [notes,        setNotes]        = useState("");
@@ -8615,7 +8615,7 @@ function EstimateRequestForm({ tenantId }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tenantId, name: name.trim(), phone: phone.trim(), email: email.trim(),
-          address: address.trim(), city: city.trim(), state: state_.trim(), zip: zip.trim(),
+          address: address.trim(), city: city.trim(), state: stateAbbr.trim(), zip: zip.trim(),
           services, notes: notes.trim(), photos,
         }),
       });
@@ -8702,7 +8702,7 @@ function EstimateRequestForm({ tenantId }) {
               <div style={{display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:8}}>
                 <input value={city} onChange={e=>setCity(e.target.value)} placeholder="City"
                   style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
-                <input value={state_} onChange={e=>setState_(e.target.value)} placeholder="State" maxLength={2}
+                <input value={stateAbbr} onChange={e=>setStateAbbr(e.target.value)} placeholder="State" maxLength={2}
                   style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
                 <input value={zip} onChange={e=>setZip(e.target.value)} placeholder="ZIP"
                   style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
@@ -8971,7 +8971,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
         <label style={S.formLabel}>Street<input type="text" value={street} onChange={e=>setStreet(e.target.value)} style={S.input}/></label>
         <div style={{...S.formGrid,marginTop:10}}>
           <label style={S.formLabel}>City<input type="text" value={city} onChange={e=>setCity(e.target.value)} style={S.input}/></label>
-          <label style={S.formLabel}>State<input type="text" value={state_} onChange={e=>setState_(e.target.value)} style={S.input} maxLength={2}/></label>
+          <label style={S.formLabel}>State<input type="text" value={stateAbbr} onChange={e=>setStateAbbr(e.target.value)} style={S.input} maxLength={2}/></label>
         </div>
         <label style={{...S.formLabel,marginTop:10}}>ZIP<input type="text" value={zip} onChange={e=>setZip(e.target.value)} style={S.input} maxLength={10}/></label>
       </section>
