@@ -8306,7 +8306,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
                   </div>
                 );
               })}
-            </div>}
+            </div>
 
             {canSeeMoney && <div style={S.adjustRow}>
               <label style={S.adjustLabel}>Markup %
