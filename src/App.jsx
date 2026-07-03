@@ -1346,7 +1346,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       </div>
       <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
         <p style={{...S.subhead, margin:0}}>{currentJob.address||"No address"}</p>
-        {deleteJob && !estimatorLocked && (
+        {deleteJob && (!estimatorLocked || currentJob.createdBy === userId) && (
           <button onClick={() => { if (confirm(`Delete this job for ${currentJob.clientName||"this client"}? This can't be undone.`)) { deleteJob(currentJob.id); setView("jobs"); } }}
             style={{fontSize:12, color:C.danger, background:"none", border:"none", cursor:"pointer", padding:0}}>
             🗑 Delete Job
@@ -7845,6 +7845,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
   const create = () => {
     const j = initialJob(rates);
     j.estimateNum = genEstimateNum(jobs);
+    j.createdBy = userId;
     if (userId && userRole!=="owner" && userRole!=="manager") j.assignedTo = userId;
     setJobs(p => [j,...p]);
     setCurrentJob(j);
