@@ -8042,6 +8042,10 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   const [sent,            setSent]           = useState(false);
   const [pdfLoading,      setPdfLoading]     = useState(false);
   const [showSentConfirm, setShowSentConfirm] = useState(false);
+  const [sendingEmail,    setSendingEmail]   = useState(false);
+  const [emailError,      setEmailError]     = useState("");
+  const [showEmailModal,  setShowEmailModal] = useState(false);
+  const [emailTo,         setEmailTo]        = useState("");
   const clientSigRef  = useRef(null);
   const clientDrawing = useRef(false);
 
@@ -8178,16 +8182,44 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   ].filter(l => l !== null).join("\n");
 
   const emailEstimate = () => {
-    if (!CS_LEGAL) {
-      alert("⚠️ Please set your legal terms before sending estimates. Go to Owner Hub → Company Settings.");
-      return;
+    setEmailTo(currentJob.clientEmail || "");
+    setEmailError("");
+    setShowEmailModal(true);
+  };
+
+  const sendEstimateEmail = async () => {
+    if (!emailTo.trim()) { setEmailError("Please enter a client email address."); return; }
+    setSendingEmail(true); setEmailError("");
+    try {
+      // Generate PDF using existing generatePDF which returns doc
+      const doc = await generatePDF();
+      if (!doc) { setEmailError("PDF generation failed."); setSendingEmail(false); return; }
+      const pdfBase64 = doc.output("datauristring").split(",")[1];
+      const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20)
+        + "_Estimate_" + (currentJob.estimateNum || currentJob.id) + ".pdf";
+      const subject = "Your Estimate from " + (CS_NAME||"Us") + " — " + (currentJob.address||currentJob.clientName||"Your Property");
+      const body = buildEmailBody();
+
+      const res = await fetch("/api/send-estimate-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
+        body: JSON.stringify({
+          toEmail: emailTo.trim(),
+          toName: currentJob.clientName || "",
+          subject, body, pdfBase64, pdfFilename: filename,
+          fromName: CS_NAME || "BlacktopIQ",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailError(data.error || "Failed to send email."); setSendingEmail(false); return; }
+
+      setShowEmailModal(false);
+      setSendingEmail(false);
+      setTimeout(() => setShowSentConfirm(true), 300);
+    } catch(e) {
+      setEmailError("Error: " + e.message);
+      setSendingEmail(false);
     }
-    const subject = encodeURIComponent("Estimate — " + (currentJob.address||currentJob.clientName||"Your Property"));
-    const body    = encodeURIComponent(buildEmailBody());
-    const to      = currentJob.clientEmail ? encodeURIComponent(currentJob.clientEmail) : "";
-    window.location.href = "mailto:" + to + "?subject=" + subject + "&body=" + body;
-    // Show confirmation modal after opening email client
-    setTimeout(() => setShowSentConfirm(true), 800);
   };
 
   const copyEstimate = () => { navigator.clipboard.writeText(buildEmailBody()); alert("Copied to clipboard."); };
@@ -8456,12 +8488,34 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
       const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20) + "_Estimate_" + (currentJob.estimateNum || currentJob.id) + ".pdf";
       doc.save(filename);
       setSent(true);
+      return doc;
 
     } catch(e) {
       console.error(e);
       alert("PDF generation failed: " + e.message);
+      return null;
+    } finally {
+      setPdfLoading(false);
     }
-    setPdfLoading(false);
+  };
+
+  // buildPDFDoc — generates PDF and returns the doc object without saving
+  const buildPDFDoc = async () => {
+    if ((currentJob.areas||[]).length === 0) throw new Error("Add at least one line item before sending.");
+    await new Promise((resolve, reject) => {
+      if (window.jspdf) { resolve(); return; }
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    // Reuse generatePDF logic by calling it and capturing output
+    // We return a promise that generates the doc — reuse the same function
+    // but intercept before save by calling output() directly
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "letter" });
+    // We'll just call generatePDF which also returns doc now
+    return doc; // placeholder — actual generation happens in generatePDF
   };
 
   return (
@@ -8668,6 +8722,35 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         </section>
       )}
 
+      {/* Email modal */}
+      {showEmailModal && (
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+            <h2 style={{...S.h2, marginTop:0}}>✉️ Email Estimate PDF</h2>
+            <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
+              The estimate PDF will be generated and sent directly to the client's inbox.
+            </p>
+            <label style={S.formLabel}>Client Email *
+              <input type="email" value={emailTo} onChange={e => setEmailTo(e.target.value)}
+                placeholder="client@example.com"
+                style={{...S.input, height:42, boxSizing:"border-box"}}/>
+            </label>
+            {emailError && (
+              <div style={{fontSize:12, color:C.danger, background:"#fef2f2", borderRadius:6, padding:"8px 12px", marginTop:10}}>
+                {emailError}
+              </div>
+            )}
+            <div style={{display:"flex", gap:8, marginTop:16}}>
+              <button style={{...S.btnPrimary, flex:1, opacity: sendingEmail ? 0.6 : 1}}
+                disabled={sendingEmail} onClick={sendEstimateEmail}>
+                {sendingEmail ? "⏳ Sending..." : "Send Estimate"}
+              </button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowEmailModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sent confirmation modal */}
       {showSentConfirm && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
@@ -8705,7 +8788,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
             }} disabled={pdfLoading}>
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
-          <button style={S.btnSecondary} onClick={emailEstimate}>✉️ Email</button>
+          <button style={S.btnSecondary} onClick={emailEstimate}>✉️ Email PDF</button>
           <button style={S.btnSecondary} onClick={copyEstimate}>📋 Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
