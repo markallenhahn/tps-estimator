@@ -1648,8 +1648,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
         </label>
       </section>
 
-      {/* ── COMPANY SIGNATURE ── */}
-      <section style={S.section}>
+      {/* ── COMPANY SIGNATURE — owner/manager only ── */}
+      {canSeeAllJobs && <section style={S.section}>
         <h2 style={S.h2}>{CS_NAME || "Company"} Representative Signature</h2>
         {currentJob.signature ? (
           <div style={S.signedBanner}>
@@ -1696,7 +1696,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             </div>
           </>
         )}
-      </section>
+      </section>}
 
       {/* ── MEASUREMENTS ── */}
       {!measurementsLocked && (
