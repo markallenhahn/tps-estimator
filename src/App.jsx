@@ -8551,7 +8551,7 @@ const ESTIMATE_REQUEST_SERVICES = [
 
 function EstimateRequestForm({ tenantId }) {
   const [tenantInfo,   setTenantInfo]   = useState(null);
-  const [loadingInfo,  setLoadingInfo]  = useState(true);
+  const [loadingInfo,  setLoadingInfo]  = useState(false); // show form immediately, load branding in background
   const [submitted,    setSubmitted]    = useState(false);
   const [submitting,   setSubmitting]   = useState(false);
   const [error,        setError]        = useState("");
