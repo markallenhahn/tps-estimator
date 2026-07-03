@@ -4257,8 +4257,22 @@ function ZonesMapView({ jobs, zones, zoneColors, fullAddressOf }) {
 }
 
 // ─── Schedule View ────────────────────────────────────────────────────────────
-function ScheduleView({ jobs, setCurrentJob, setView }) {
+function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userId }) {
   const today    = new Date();
+  const roles = userRoles || [userRole];
+  const canSeeAll = hasRole(roles, "owner") || hasRole(roles, "manager") || hasRole(roles, "crewlead");
+  const isEstimatorOrCrew = !canSeeAll;
+  // Estimators and crew only see their own assigned jobs, and only upcoming (not past)
+  const todayStr = new Date().toISOString().slice(0,10);
+  const visibleJobs = isEstimatorOrCrew
+    ? jobs.filter(j => {
+        if (j.assignedTo !== userId) return false;
+        // Only show jobs with at least one future or today scheduled date
+        const dates = (j.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
+        const lastDate = dates.length ? dates.sort().slice(-1)[0] : j.scheduledDate;
+        return lastDate && lastDate >= todayStr;
+      })
+    : jobs;
   const [year,        setYear]        = useState(today.getFullYear());
   const [month,       setMonth]       = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState(null);
@@ -4279,7 +4293,7 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
   while (cells.length%7!==0) cells.push(null);
 
   const jobsByDate = {};
-  jobs.forEach(j => {
+  visibleJobs.forEach(j => {
     const days = j.scheduleDays?.filter(d=>d.date) || (j.scheduledDate ? [{date:j.scheduledDate, label:""}] : []);
     days.forEach(day => {
       if (!jobsByDate[day.date]) jobsByDate[day.date] = [];
@@ -4382,7 +4396,7 @@ function ScheduleView({ jobs, setCurrentJob, setView }) {
       )}
 
       {!selectedDay && (() => {
-        const upcoming = jobs
+        const upcoming = visibleJobs
           .filter(j => (j.scheduleDays||[]).some(d=>d.date&&d.date>=todayKey) || (j.scheduledDate&&j.scheduledDate>=todayKey))
           .sort((a,b) => {
             const aDate = (a.scheduleDays||[]).filter(d=>d.date).map(d=>d.date).sort()[0] || a.scheduledDate || "";
@@ -8244,7 +8258,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
             <input value={currentJob.estimateNum||""} readOnly
               style={{...S.input, opacity:0.7, cursor:"default", height:42, boxSizing:"border-box"}}/>
           </label>
-          <label style={S.formLabel}>Estimate Sent Date
+          {canSeeMoney && <label style={S.formLabel}>Estimate Sent Date
             <div style={{display:"flex", gap:6, alignItems:"center", overflow:"visible"}}>
               <input type="date" value={currentJob.estimateSentDate||""}
                 onChange={e => updateJob(j => ({...j, estimateSentDate: e.target.value}))}
@@ -8263,7 +8277,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
                 ⚠️ {currentJob.estimateSentDate < new Date().toISOString().slice(0,10) ? "This date is in the past." : "This date is in the future."}
               </div>
             )}
-          </label>
+          </label>}
         </div>
       </section>
 
@@ -8379,8 +8393,8 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         <div style={S.estimateFooter}>{CS_DEPOSIT}</div>
       </section>
 
-      {/* Client Acceptance */}
-      <section style={S.section}>
+      {/* Client Acceptance — owner/manager/crewlead only */}
+      {canSeeMoney && <section style={S.section}>
         <h2 style={S.h2}>Client Acceptance</h2>
 
         {isSigned ? (
@@ -8419,7 +8433,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
             </div>
           </>
         )}
-      </section>
+      </section>}
 
       {(currentJob.photos||[]).length > 0 && (
         <section style={S.section}>
@@ -10850,7 +10864,7 @@ export default function App() {
         {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} tFetch={tFetch} setJobs={setJobs} updateJobById={updateJobById}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
-        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
+        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"zones") && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
         {/* ── Job context bar — shared across all job-scoped views ── */}
         {["jobdetail","estimate","invoice","costs"].includes(view) && currentJob && (
