@@ -1054,6 +1054,12 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   const [showPayModal,    setShowPayModal]    = useState(false);
   const [payModalDate,    setPayModalDate]    = useState("");
   const [payModalMethod,  setPayModalMethod]  = useState("Check");
+  const [showApptModal,   setShowApptModal]   = useState(false);
+  const [apptAssignId,    setApptAssignId]    = useState("");
+  const [apptDate,        setApptDate]        = useState("");
+  const [apptTime,        setApptTime]        = useState("");
+  const [apptNotes,       setApptNotes]       = useState("");
+  const [apptConflicts,   setApptConflicts]   = useState([]);
 
   const roles = userRoles || [userRole];
   const isEstimator   = hasRole(roles, "estimator");
@@ -1349,12 +1355,29 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               <span style={{fontSize:12, color:C.textMuted}}>
                 💡 Recommended: <strong style={{color:C.text}}>{[estimatorRec.user.first_name, estimatorRec.user.last_name].filter(Boolean).join(" ") || estimatorRec.user.email}</strong> — {estimatorRec.reason}
               </span>
-              <button style={S.btnSmall} onClick={() => updateJob(j => ({...j, assignedTo: estimatorRec.user.id}))}>Assign</button>
+              <button style={S.btnSmall} onClick={() => {
+                setApptAssignId(estimatorRec.user.id);
+                setApptDate(""); setApptTime(""); setApptNotes(""); setApptConflicts([]);
+                setShowApptModal(true);
+              }}>Assign</button>
             </div>
           )}
           <select
             value={currentJob.assignedTo || ""}
-            onChange={e => updateJob(j => ({...j, assignedTo: e.target.value || null}))}
+            onChange={e => {
+              const newId = e.target.value || null;
+              if (newId && canSeeAllJobs) {
+                // Open appointment modal for owner/manager
+                setApptAssignId(newId);
+                setApptDate(currentJob.estimatorAppointment?.date || "");
+                setApptTime(currentJob.estimatorAppointment?.time || "");
+                setApptNotes(currentJob.estimatorAppointment?.notes || "");
+                setApptConflicts([]);
+                setShowApptModal(true);
+              } else {
+                updateJob(j => ({...j, assignedTo: newId}));
+              }
+            }}
             style={S.input}>
             <option value="">— Unassigned —</option>
             {teamUsers.map(u => {
@@ -1362,6 +1385,22 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               return <option key={u.id} value={u.id}>{name} ({ROLE_LABELS[u.role]||u.role})</option>;
             })}
           </select>
+          {currentJob.estimatorAppointment?.date && (
+            <div style={{fontSize:12, color:C.textMuted, marginTop:6, display:"flex", alignItems:"center", gap:8}}>
+              📋 Estimate visit: <strong>{currentJob.estimatorAppointment.date}{currentJob.estimatorAppointment.time ? " at " + currentJob.estimatorAppointment.time : ""}</strong>
+              {currentJob.estimatorAppointment.notes && <span style={{fontStyle:"italic"}}>— {currentJob.estimatorAppointment.notes}</span>}
+              {canSeeAllJobs && (
+                <button style={{...S.btnSmall, fontSize:11}} onClick={() => {
+                  setApptAssignId(currentJob.assignedTo||"");
+                  setApptDate(currentJob.estimatorAppointment?.date||"");
+                  setApptTime(currentJob.estimatorAppointment?.time||"");
+                  setApptNotes(currentJob.estimatorAppointment?.notes||"");
+                  setApptConflicts([]);
+                  setShowApptModal(true);
+                }}>✎ Edit</button>
+              )}
+            </div>
+          )}
           {(crews||[]).length > 0 && (
             <div style={{fontSize:11, color:C.textMuted, marginTop:6}}>
               {(() => {
@@ -1416,6 +1455,83 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 <button style={S.btnSecondary} onClick={() => setShowKickBack(true)}>↩ Kick Back</button>
               </div>
             )}
+            {/* Estimator Appointment Modal */}
+            {showApptModal && (
+              <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+                <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+                  <h2 style={{...S.h2, marginTop:0}}>📋 Set Estimator Appointment</h2>
+                  {(() => {
+                    const assignee = teamUsers.find(u => u.id === apptAssignId);
+                    const assigneeName = assignee ? [assignee.first_name, assignee.last_name].filter(Boolean).join(" ") || assignee.email : "Estimator";
+                    return <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>Scheduling a site visit for <strong>{assigneeName}</strong>.</p>;
+                  })()}
+                  <div style={{display:"flex", flexDirection:"column", gap:10}}>
+                    <label style={S.formLabel}>Appointment Date *
+                      <input type="date" value={apptDate} onChange={e => {
+                        setApptDate(e.target.value);
+                        // Check conflicts when date changes
+                        if (e.target.value) {
+                          const conflicts = jobs.filter(j =>
+                            j.id !== currentJob.id &&
+                            j.assignedTo === apptAssignId &&
+                            j.estimatorAppointment?.date === e.target.value
+                          );
+                          setApptConflicts(conflicts);
+                        } else { setApptConflicts([]); }
+                      }} style={{...S.input, height:42, boxSizing:"border-box"}}/>
+                    </label>
+                    <label style={S.formLabel}>Appointment Time (optional)
+                      <input type="time" value={apptTime} onChange={e => setApptTime(e.target.value)}
+                        style={{...S.input, height:42, boxSizing:"border-box"}}/>
+                    </label>
+                    <label style={S.formLabel}>Notes for Estimator (optional)
+                      <input value={apptNotes} onChange={e => setApptNotes(e.target.value)}
+                        placeholder="e.g. Call before going, gate code 1234"
+                        style={S.input}/>
+                    </label>
+                  </div>
+                  {/* Conflict warnings */}
+                  {apptConflicts.length > 0 && (
+                    <div style={{background:"#fef3c7", border:"1px solid #fde68a", borderRadius:8, padding:"10px 12px", marginTop:12}}>
+                      <div style={{fontWeight:700, fontSize:13, color:"#92400e", marginBottom:6}}>
+                        ⚠️ {apptConflicts.length} other appointment{apptConflicts.length!==1?"s":""} on this date:
+                      </div>
+                      {apptConflicts.map(j => {
+                        const sameTime = apptTime && j.estimatorAppointment?.time === apptTime;
+                        return (
+                          <div key={j.id} style={{fontSize:12, color:"#92400e", marginBottom:4}}>
+                            {sameTime && <strong>⛔ Same time — </strong>}
+                            {j.clientName||"Unnamed"} · {j.address||"No address"}
+                            {j.estimatorAppointment?.time ? ` @ ${j.estimatorAppointment.time}` : ""}
+                          </div>
+                        );
+                      })}
+                      {apptTime && apptConflicts.some(j => j.estimatorAppointment?.time === apptTime) && (
+                        <div style={{fontSize:12, fontWeight:700, color:"#b91c1c", marginTop:6}}>
+                          Exact time conflict — please choose a different time.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div style={{display:"flex", gap:8, marginTop:16}}>
+                    <button
+                      style={{...S.btnPrimary, flex:1, opacity: (!apptDate || (apptTime && apptConflicts.some(j => j.estimatorAppointment?.time === apptTime))) ? 0.4 : 1}}
+                      disabled={!apptDate || (apptTime && apptConflicts.some(j => j.estimatorAppointment?.time === apptTime))}
+                      onClick={() => {
+                        updateJob(j => ({...j,
+                          assignedTo: apptAssignId,
+                          estimatorAppointment: { date: apptDate, time: apptTime, notes: apptNotes },
+                        }));
+                        setShowApptModal(false);
+                      }}>
+                      Confirm Appointment
+                    </button>
+                    <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowApptModal(false)}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Kick back modal */}
             {showKickBack && (
               <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
@@ -4293,12 +4409,26 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
   while (cells.length%7!==0) cells.push(null);
 
   const jobsByDate = {};
-  visibleJobs.forEach(j => {
+  const allScheduleJobs = isEstimatorOrCrew ? visibleJobs : jobs;
+  // Regular scheduled jobs
+  allScheduleJobs.forEach(j => {
     const days = j.scheduleDays?.filter(d=>d.date) || (j.scheduledDate ? [{date:j.scheduledDate, label:""}] : []);
     days.forEach(day => {
       if (!jobsByDate[day.date]) jobsByDate[day.date] = [];
       if (!jobsByDate[day.date].find(x=>x.id===j.id)) jobsByDate[day.date].push(j);
     });
+  });
+  // Estimator appointments — show on calendar for everyone, tagged with isEstimateVisit
+  jobs.forEach(j => {
+    if (!j.estimatorAppointment?.date) return;
+    const date = j.estimatorAppointment.date;
+    // For estimator/crew: only show their own appointments
+    if (isEstimatorOrCrew && j.assignedTo !== userId) return;
+    if (!jobsByDate[date]) jobsByDate[date] = [];
+    // Add as a special entry with isEstimateVisit flag
+    if (!jobsByDate[date].find(x => x.id === j.id && x.isEstimateVisit)) {
+      jobsByDate[date].push({...j, isEstimateVisit: true});
+    }
   });
   const dateKey     = d => d ? `${year}-${pad(month+1)}-${pad(d)}` : null;
   const selectedJobs = selectedDay ? (jobsByDate[selectedDay]||[]) : [];
@@ -4396,34 +4526,59 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
       )}
 
       {!selectedDay && (() => {
-        const upcoming = visibleJobs
-          .filter(j => (j.scheduleDays||[]).some(d=>d.date&&d.date>=todayKey) || (j.scheduledDate&&j.scheduledDate>=todayKey))
+        // Build upcoming: scheduled jobs + estimate visits
+        const upcomingVisits = jobs
+          .filter(j => j.estimatorAppointment?.date >= todayKey)
+          .filter(j => !isEstimatorOrCrew || j.assignedTo === userId)
+          .map(j => ({...j, isEstimateVisit: true}));
+        const upcomingWork = visibleJobs
+          .filter(j => (j.scheduleDays||[]).some(d=>d.date&&d.date>=todayKey) || (j.scheduledDate&&j.scheduledDate>=todayKey));
+        // Merge and deduplicate (a job could appear as both work and visit)
+        const upcoming = [...upcomingWork,
+          ...upcomingVisits.filter(v => !upcomingWork.find(w => w.id === v.id))]
           .sort((a,b) => {
-            const aDate = (a.scheduleDays||[]).filter(d=>d.date).map(d=>d.date).sort()[0] || a.scheduledDate || "";
-            const bDate = (b.scheduleDays||[]).filter(d=>d.date).map(d=>d.date).sort()[0] || b.scheduledDate || "";
-            return aDate.localeCompare(bDate);
-          }).slice(0,10);
+            const aDate = a.isEstimateVisit ? a.estimatorAppointment?.date : ((a.scheduleDays||[]).filter(d=>d.date).map(d=>d.date).sort()[0] || a.scheduledDate || "");
+            const bDate = b.isEstimateVisit ? b.estimatorAppointment?.date : ((b.scheduleDays||[]).filter(d=>d.date).map(d=>d.date).sort()[0] || b.scheduledDate || "");
+            return (aDate||"").localeCompare(bDate||"");
+          }).slice(0,15);
         if (!upcoming.length) return <div style={{...S.empty, marginTop:20}}><p style={S.emptyText}>No upcoming scheduled jobs.</p></div>;
         return (
           <section style={{...S.section, marginTop:20}}>
             <h2 style={S.h2}>Upcoming</h2>
             {upcoming.map(j => (
-              <div key={j.id} style={S.schedJobCard}>
+              <div key={j.id + (j.isEstimateVisit?"_visit":"")} style={{
+                ...S.schedJobCard,
+                borderLeft: j.isEstimateVisit ? "3px solid #7c3aed" : `1px solid ${C.border}`,
+                background: j.isEstimateVisit ? "#f5f3ff" : C.surface2,
+              }}>
                 <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
                   <div style={{flex:1, minWidth:0, marginRight:8}}>
-                    <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                    <div style={{display:"flex", alignItems:"center", gap:6}}>
+                      <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                      {j.isEstimateVisit && (
+                        <span style={{fontSize:10, fontWeight:700, background:"#ede9fe", color:"#7c3aed", borderRadius:4, padding:"2px 6px"}}>📋 Estimate Visit</span>
+                      )}
+                    </div>
                     <div style={S.schedJobAddr}>{j.address||"No address"}</div>
                     <div style={{marginTop:4}}>
-                      {(j.scheduleDays||[]).filter(d=>d.date).map((day,di) => (
-                        <div key={day.id||di} style={{...S.schedJobMeta, color:C.accent, fontWeight:600}}>
-                          📅 Day {di+1}{day.label?" — "+day.label:""}: {new Date(day.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                      {j.isEstimateVisit ? (
+                        <div style={{...S.schedJobMeta, color:"#7c3aed", fontWeight:600}}>
+                          📋 {new Date(j.estimatorAppointment.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                          {j.estimatorAppointment.time ? ` at ${j.estimatorAppointment.time}` : ""}
+                          {j.estimatorAppointment.notes ? ` — ${j.estimatorAppointment.notes}` : ""}
                         </div>
-                      ))}
-                      {!(j.scheduleDays||[]).length && j.scheduledDate && (
-                        <div style={{...S.schedJobMeta, color:C.accent, fontWeight:600}}>
-                          📅 {new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
-                        </div>
-                      )}
+                      ) : (<>
+                        {(j.scheduleDays||[]).filter(d=>d.date).map((day,di) => (
+                          <div key={day.id||di} style={{...S.schedJobMeta, color:C.accent, fontWeight:600}}>
+                            📅 Day {di+1}{day.label?" — "+day.label:""}: {new Date(day.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                          </div>
+                        ))}
+                        {!(j.scheduleDays||[]).length && j.scheduledDate && (
+                          <div style={{...S.schedJobMeta, color:C.accent, fontWeight:600}}>
+                            📅 {new Date(j.scheduledDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                          </div>
+                        )}
+                      </>)}
                     </div>
                   </div>
                   <span style={{...S.statusBadge,...(S[`status_${j.status}`]||S.status_draft)}}>{j.status}</span>
