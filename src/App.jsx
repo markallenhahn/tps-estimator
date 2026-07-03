@@ -1088,6 +1088,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   // Estimate/Draft — editing after the fact would invalidate whatever's
   // already been reviewed, sent, or signed off on.
   const measurementsLocked = estimatorLocked && (currentJob.readyForReview || !["estimate","draft"].includes(currentJob.status));
+  // Estimators can edit client info only on jobs they personally created
+  const clientInfoLocked = estimatorLocked && currentJob.createdBy !== userId;
   const myCrew = (crews||[]).find(c => c.leadId === userId);
 
   // Compute (and cache) this job's zone, then derive estimator/crew
@@ -1605,14 +1607,14 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {/* ── CLIENT INFO ── */}
       <section style={S.section}>
         <h2 style={S.h2}>Client Info</h2>
-        {estimatorLocked && (
-          <p style={{fontSize:11, color:C.textDim, margin:"0 0 10px"}}>Client details are locked once a job is assigned to you — let an admin or manager know if anything here needs correcting.</p>
+        {clientInfoLocked && (
+          <p style={{fontSize:11, color:C.textDim, margin:"0 0 10px"}}>Client details are locked — let an admin or manager know if anything needs correcting.</p>
         )}
         <div style={S.formGrid}>
           {[["clientName","Client Name","text"],["clientPhone","Phone","tel"],["clientEmail","Email","email"]].map(([f,l,t]) => (
             <label key={f} style={S.formLabel}>{l}
-              <input type={t} value={currentJob[f]||""} disabled={estimatorLocked}
-                onChange={e => updateJob(j => ({...j,[f]:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
+              <input type={t} value={currentJob[f]||""} disabled={clientInfoLocked}
+                onChange={e => updateJob(j => ({...j,[f]:e.target.value}))} style={{...S.input, ...(clientInfoLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
             </label>
           ))}
           <label style={S.formLabel}>Estimate #
@@ -1622,28 +1624,28 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
 
         </div>
         <label style={S.formLabel}>Street Address
-          <input value={currentJob.address||""} disabled={estimatorLocked}
+          <input value={currentJob.address||""} disabled={clientInfoLocked}
             onChange={e => updateJob(j => ({...j, address:e.target.value}))}
-            style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}} placeholder="123 Main St"/>
+            style={{...S.input, ...(clientInfoLocked?{opacity:0.6, cursor:"not-allowed"}:{})}} placeholder="123 Main St"/>
         </label>
         <div style={{...S.formGrid, marginTop:10, gridTemplateColumns:"2fr 1fr 1fr"}}>
           <label style={S.formLabel}>City
-            <input value={currentJob.city||""} disabled={estimatorLocked}
-              onChange={e => updateJob(j => ({...j, city:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
+            <input value={currentJob.city||""} disabled={clientInfoLocked}
+              onChange={e => updateJob(j => ({...j, city:e.target.value}))} style={{...S.input, ...(clientInfoLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
           </label>
           <label style={S.formLabel}>State
-            <input value={currentJob.state||"PA"} disabled={estimatorLocked}
-              onChange={e => updateJob(j => ({...j, state:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
+            <input value={currentJob.state||"PA"} disabled={clientInfoLocked}
+              onChange={e => updateJob(j => ({...j, state:e.target.value}))} style={{...S.input, ...(clientInfoLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
           </label>
           <label style={S.formLabel}>ZIP
-            <input value={currentJob.zip||""} disabled={estimatorLocked}
-              onChange={e => updateJob(j => ({...j, zip:e.target.value}))} style={{...S.input, ...(estimatorLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
+            <input value={currentJob.zip||""} disabled={clientInfoLocked}
+              onChange={e => updateJob(j => ({...j, zip:e.target.value}))} style={{...S.input, ...(clientInfoLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
           </label>
         </div>
         <label style={{...S.formLabel, marginTop:10}}>Site Notes
-          <textarea value={currentJob.notes||""}
+          <textarea value={currentJob.notes||""} disabled={clientInfoLocked}
             onChange={e => updateJob(j => ({...j, notes:e.target.value}))}
-            style={{...S.input, height:72, resize:"vertical"}}
+            style={{...S.input, height:72, resize:"vertical", ...(clientInfoLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}
             placeholder="General condition, access notes, special instructions..."/>
         </label>
       </section>
