@@ -7374,13 +7374,13 @@ function JobContextBar({ currentJob, updateJob, setView, view, permissions, user
   if (!currentJob || !currentJob.id) return null;
 
   const roles = userRoles || [userRole];
-  const isEstimatorRole = hasRole(roles, "estimator");
-  const isCrewRole      = hasRole(roles, "crew");
+  const isEstimator_ctx = hasRole(roles, "estimator");
+  const isCrew_ctx      = hasRole(roles, "crew");
   const canSeeAllJobs   = hasRole(roles, "owner") || hasRole(roles, "manager");
   const isCrewLead      = hasRole(roles, "crewlead");
   // Only crew lead and above can change status — estimator and crew cannot
   const canEdit = (hasRole(roles, "owner") || hasRole(roles, "manager") || isCrewLead)
-    && !isEstimatorRole && !isCrewRole;
+    && !isEstimator_ctx && !isCrew_ctx;
 
   // Status options based on role
   const ALL_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
