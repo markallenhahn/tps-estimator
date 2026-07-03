@@ -7879,8 +7879,8 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
         background: isPendingReview ? "#fefce8" : C.surface,
         borderBottom:`1px solid ${isPendingReview ? "#fde68a" : C.border}`,
         borderLeft: isPendingReview ? "3px solid #f59e0b" : "none",
-        padding:10, height:92, boxSizing:"border-box",
-        display:"flex", flexDirection:"column", justifyContent:"space-between",
+        padding:10, boxSizing:"border-box",
+        display:"flex", flexDirection:"column", gap:6,
       }}>
       <div onClick={() => open(job)} style={{cursor:"pointer", overflow:"hidden"}}>
         <div style={{display:"flex", alignItems:"center", gap:4, marginBottom:2, overflow:"hidden"}}>
@@ -7900,7 +7900,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
       </div>
       <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark ${job.clientName||"this job"} as Lost? It'll drop off the pipeline.`)) setStatus(job, "lost"); }}
         style={{fontSize:10, fontWeight:600, color:"#b91c1c", background:"#fef2f2", border:"1px solid #fecaca",
-          borderRadius:4, cursor:"pointer", padding:"2px 8px", textAlign:"center", marginTop:4}}>
+          borderRadius:4, cursor:"pointer", padding:"2px 8px", textAlign:"center", marginTop:"auto"}}>
         Mark Lost
       </button>
     </div>
