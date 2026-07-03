@@ -106,12 +106,25 @@ const initialJob = (rates) => ({
   clientName:"", clientEmail:"", clientPhone:"",
   address:"", city:"", state:"PA", zip:"",
   date: new Date().toLocaleDateString(),
-  estimateNum: `EST-${Date.now().toString().slice(-5)}`,
+  estimateNum: `EST-${Date.now().toString().slice(-5)}`, // overwritten by genEstimateNum
   notes:"", areas:[], photos:[],
   status:"estimate",
   statusChangedAt: new Date().toISOString(),
   rates: rates ? {...rates} : null,
 });
+
+// Generate a date-based sequential estimate number: EST-MMDD-### 
+// Sequence is per-day, based on how many estimates already exist today.
+function genEstimateNum(jobs) {
+  const now   = new Date();
+  const mm    = String(now.getMonth() + 1).padStart(2, "0");
+  const dd    = String(now.getDate()).padStart(2, "0");
+  const prefix = `EST-${mm}${dd}`;
+  // Count how many estimates were created today with this prefix
+  const todayCount = (jobs||[]).filter(j => (j.estimateNum||"").startsWith(prefix)).length;
+  const seq = String(todayCount + 1).padStart(3, "0");
+  return `${prefix}-${seq}`;
+}
 
 const initialArea = () => ({
   id: Date.now(), name:"", serviceType:"sealcoat",
@@ -7624,6 +7637,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 
   const create = () => {
     const j = initialJob(rates);
+    j.estimateNum = genEstimateNum(jobs);
     if (userId && userRole!=="owner" && userRole!=="manager") j.assignedTo = userId;
     setJobs(p => [j,...p]);
     setCurrentJob(j);

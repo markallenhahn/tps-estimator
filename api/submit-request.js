@@ -99,7 +99,12 @@ export default async function handler(req, res) {
       fullAddress,
       status:       "estimate",
       source:       "request_form",
-      estimateNum:  "EST-" + String(jobId).slice(-5),
+      estimateNum:  (() => {
+        const now = new Date();
+        const mm  = String(now.getMonth()+1).padStart(2,"0");
+        const dd  = String(now.getDate()).padStart(2,"0");
+        return `EST-${mm}${dd}-001`;  // seq starts at 001 for request form jobs
+      })(),
       date:         new Date().toISOString().slice(0, 10),
       notes:        fullNotes,
       areas:        [],
