@@ -7151,7 +7151,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
 // Persistent bar shown at the top of every job-scoped view (job detail,
 // estimate, invoice, costs, labor). Shows client name, address, status
 // changer, and quick-jump tabs between job screens.
-function JobContextBar({ currentJob, updateJob, setView, view, permissions, userRoles, userRole, planData }) {
+function JobContextBar({ currentJob, updateJob, setView, view, permissions, userRoles, userRole, planData, iconStyle }) {
   if (!currentJob) return null;
 
   const roles = userRoles || [userRole];
@@ -7248,9 +7248,10 @@ function JobContextBar({ currentJob, updateJob, setView, view, permissions, user
               padding:"5px 10px", borderRadius:6, border:"none", cursor:"pointer",
               background: view === t.key ? C.accent : C.surface2,
               color: view === t.key ? "#000" : C.textMuted,
-              flexShrink:0,
+              flexShrink:0, display:"flex", alignItems:"center", gap:4,
             }}>
-            {t.icon} {t.label}
+            <TabIcon tabKey={t.key} iconStyle={iconStyle} size={13}/>
+            {t.label}
           </button>
         ))}
       </div>
@@ -10707,6 +10708,7 @@ export default function App() {
             userRoles={userRoles}
             userRole={userRole}
             planData={currentTenant?.data}
+            iconStyle={iconStyle}
           />
         )}
         {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId} servicesOffered={currentTenant?.data?.servicesOffered||[]} currentUserName={currentUserName}/>}
