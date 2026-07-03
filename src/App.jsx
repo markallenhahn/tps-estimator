@@ -1396,7 +1396,10 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             )}
             {managerCanReview && (
               <div style={{display:"flex", gap:8}}>
-                <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"sent", readyForReview:false, statusChangedAt: new Date().toISOString()}))}>📤 Send Estimate</button>
+                <button style={S.btnPrimary} onClick={() => {
+                  if (!confirm("Did you actually send the estimate to the client?\n\nClick OK to confirm and move this job to Sent status, or Cancel to go back.")) return;
+                  updateJob(j => ({...j, status:"sent", readyForReview:false, statusChangedAt: new Date().toISOString(), estimateSentDate: j.estimateSentDate || new Date().toISOString().slice(0,10)}));
+                }}>📤 Send Estimate</button>
                 <button style={S.btnSecondary} onClick={() => setShowKickBack(true)}>↩ Kick Back</button>
               </div>
             )}
