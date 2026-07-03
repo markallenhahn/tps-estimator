@@ -7260,7 +7260,7 @@ function JobContextBar({ currentJob, updateJob, setView, view, permissions, user
 }
 
 // ─── Jobs Pipeline (the main Jobs tab — kanban on desktop, stage pager on mobile) ─
-const PIPELINE_STATUSES = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid"];
+const PIPELINE_STATUSES = ["estimate","draft","sent","signed","scheduled","completed","paid"];
 const pipelineStatusLabel = (s) => s==="estimate" ? "Estimate" : s==="pending_review" ? "Pending Review" : s.charAt(0).toUpperCase()+s.slice(1);
 // Reuse the exact same badge colors already used everywhere else in the app
 // (S.status_*) so the pipeline's column accents match the rest of the UI.
@@ -7523,7 +7523,8 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
   const setStatus = (job, status) => updateJobById(job.id, j => ({...j, status, statusChangedAt: new Date().toISOString()}));
 
   const columns = PIPELINE_STATUSES.map(status => {
-    const jobsInStatus = visibleJobs.filter(j => j.status === status);
+    // pending_review jobs show in the Estimate column (highlighted, not a separate column)
+    const jobsInStatus = visibleJobs.filter(j => j.status === status || (status === "estimate" && (j.status === "pending_review" || j.readyForReview)));
     const total = jobsInStatus.reduce((s,j) => s + calcJobFinancials(j, allRates).revenue, 0);
     return { status, jobs: jobsInStatus, total };
   });
@@ -9097,15 +9098,60 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
 // ─── Referral View (owner only) ─────────────────────────────────────────────
 function EstimateRequestLinkView({ setView, currentTenantId }) {
   const requestUrl = window.location.origin + "/?request=" + currentTenantId;
-  // Use Google Charts QR API — reliable and doesn't require CORS
-  const qrUrl = "https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=" + encodeURIComponent(requestUrl) + "&choe=UTF-8";
-  const [copied, setCopied] = useState(false);
+  const [copied,   setCopied]   = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const canvasRef = useRef(null);
+
+  // Generate QR code using qrcode.js loaded from CDN
+  useEffect(() => {
+    const generate = async () => {
+      try {
+        // Dynamically load qrcode library if not already present
+        if (!window.QRCode) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+        }
+        // Render into a temp div then grab the canvas data URL
+        const div = document.createElement("div");
+        document.body.appendChild(div);
+        new window.QRCode(div, {
+          text: requestUrl, width: 256, height: 256,
+          colorDark: "#000000", colorLight: "#ffffff",
+          correctLevel: window.QRCode.CorrectLevel.M,
+        });
+        // QRCode renders a canvas or img — get the data URL
+        setTimeout(() => {
+          const canvas = div.querySelector("canvas");
+          const img    = div.querySelector("img");
+          if (canvas) setQrDataUrl(canvas.toDataURL("image/png"));
+          else if (img) setQrDataUrl(img.src);
+          document.body.removeChild(div);
+        }, 100);
+      } catch(e) {
+        console.error("QR generation failed:", e);
+      }
+    };
+    generate();
+  }, [requestUrl]);
 
   const copy = () => {
     navigator.clipboard.writeText(requestUrl).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const downloadQR = () => {
+    if (!qrDataUrl) return;
+    const a = document.createElement("a");
+    a.href = qrDataUrl;
+    a.download = "blacktopiq-request-qr.png";
+    a.click();
   };
 
   return (
@@ -9131,13 +9177,16 @@ function EstimateRequestLinkView({ setView, currentTenantId }) {
         <h2 style={S.h2}>QR Code</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>Print this and leave it at job sites, on your truck, or hand it to potential customers.</p>
         <div style={{textAlign:"center"}}>
-          <img src={qrUrl} alt="QR Code" style={{width:200, height:200, borderRadius:8, border:`1px solid ${C.border}`}}/>
+          {qrDataUrl
+            ? <img src={qrDataUrl} alt="QR Code" style={{width:200, height:200, borderRadius:8, border:`1px solid ${C.border}`}}/>
+            : <div style={{width:200, height:200, background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto", fontSize:12, color:C.textMuted}}>Generating...</div>
+          }
         </div>
         <div style={{textAlign:"center", marginTop:12}}>
-          <a href={qrUrl} target="_blank" rel="noreferrer"
-            style={{...S.btnSecondary, display:"inline-block", textDecoration:"none", fontSize:13}}>
+          <button onClick={downloadQR} disabled={!qrDataUrl}
+            style={{...S.btnSecondary, fontSize:13, opacity: qrDataUrl ? 1 : 0.4}}>
             ⬇ Download QR Code
-          </a>
+          </button>
         </div>
       </section>
 
