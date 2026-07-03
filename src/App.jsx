@@ -4775,7 +4775,7 @@ async function geocodeAddressOnce(addressStr, homeBase) {
   // the Census API itself doesn't send CORS headers — calling it directly
   // from browser JS fails with a generic network error every time.
   try {
-    const res3 = await fetch("/api/geocode-census?address=" + encodeURIComponent(addressStr));
+    const res3 = await fetch("/api/public?action=geocode-census&address=" + encodeURIComponent(addressStr));
     if (!res3.ok) {
       status = status + "/census-http-" + res3.status;
     } else {
@@ -6361,7 +6361,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   const generateInvite = async () => {
     setGenerating(true); setInviteError("");
     try {
-      const res = await fetch("/api/create-tenant-invite", {
+      const res = await fetch("/api/admin?action=create-tenant-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
       });
@@ -6629,7 +6629,7 @@ function TeamView({ accessToken, userRole, tFetch, tenantId }) {
     if (editingRolesDraft.length === 0) { alert("Select at least one role."); return; }
     setSavingRoles(true);
     try {
-      const res = await fetch("/api/update-user-roles", {
+      const res = await fetch("/api/admin?action=update-user-roles", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
         body: JSON.stringify({ userId, roles: editingRolesDraft }),
@@ -6647,7 +6647,7 @@ function TeamView({ accessToken, userRole, tFetch, tenantId }) {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/list-users?tenantId=" + tenantId);
+      const res = await fetch("/api/admin?action=list-users&tenantId=" + tenantId);
       const data = await res.json();
       if (res.ok) setUsers(data.users || []);
     } catch(e) { console.error(e); }
@@ -6662,7 +6662,7 @@ function TeamView({ accessToken, userRole, tFetch, tenantId }) {
     const safeRole = isManager ? "crew" : role;
     setError(""); setMessage(""); setInviting(true);
     try {
-      const res = await fetch("/api/invite", {
+      const res = await fetch("/api/team?action=invite", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -6684,7 +6684,7 @@ function TeamView({ accessToken, userRole, tFetch, tenantId }) {
   const removeUser = async (userId, userEmail) => {
     if (!confirm(`Remove ${userEmail}? They will lose access immediately.`)) return;
     try {
-      const res = await fetch("/api/remove-user", {
+      const res = await fetch("/api/admin?action=remove-user", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -8200,7 +8200,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
       const subject = "Your Estimate from " + (CS_NAME||"Us") + " — " + (currentJob.address||currentJob.clientName||"Your Property");
       const body = buildEmailBody();
 
-      const res = await fetch("/api/send-estimate-email", {
+      const res = await fetch("/api/public?action=send-estimate-email", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
         body: JSON.stringify({
@@ -9042,7 +9042,7 @@ function EstimateRequestForm({ tenantId }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch("/api/tenant-public?id=" + tenantId);
+        const res = await fetch("/api/public?action=tenant-public&id=" + tenantId);
         if (res.ok) {
           const data = await res.json();
           setTenantInfo(data);
@@ -9078,7 +9078,7 @@ function EstimateRequestForm({ tenantId }) {
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/submit-request", {
+      const res = await fetch("/api/public?action=submit-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -9270,7 +9270,7 @@ function JoinCompanyView({ token, onSuccess }) {
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     setSaving(true);
     try {
-      const res = await fetch("/api/redeem-tenant-invite", {
+      const res = await fetch("/api/team?action=redeem-tenant-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, email: email.trim(), password, companyName: companyName.trim(), phone: phone.trim() }),
@@ -10218,7 +10218,7 @@ export default function App() {
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const fetchIsPlatformAdmin = async (accessToken) => {
     try {
-      const res = await fetch("/api/check-platform-admin", {
+      const res = await fetch("/api/admin?action=check-platform-admin", {
         headers: { "Authorization": "Bearer " + accessToken },
       });
       const data = await res.json();
@@ -10511,7 +10511,7 @@ export default function App() {
         if (Array.isArray(pd) && pd.length > 0) setPermissions(pd[0].data);
 
         try {
-          const tr = await fetch("/api/list-users?tenantId=" + currentTenantId);
+          const tr = await fetch("/api/admin?action=list-users&tenantId=" + currentTenantId);
           const td = await tr.json();
           if (tr.ok && Array.isArray(td.users)) setTeamUsers(td.users);
         } catch(e) { console.error("load team users error:", e); }
