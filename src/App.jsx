@@ -7448,6 +7448,7 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
           ))}
         </section>
       ) : (
+      <>
       <p style={S.subhead}>What needs your attention right now.</p>
 
       <div style={{display: isDesktopLayout ? "grid" : "block", gridTemplateColumns: isDesktopLayout ? "1fr 1fr" : undefined, gap: isDesktopLayout ? 20 : 0}}>
@@ -7557,6 +7558,7 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
           </>
         )}
       </section>
+      </>
       )} {/* end homeTab ternary */}
     </div>
   );
