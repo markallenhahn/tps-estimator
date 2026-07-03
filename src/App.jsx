@@ -7790,6 +7790,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   const setMargin   = val => { if (isLocked) return; updateJob(j => ({...j, margin:   Number(val)})); };
   const setDiscount = val => { if (isLocked) return; updateJob(j => ({...j, discount: Number(val)})); };
 
+  if (!Array.isArray(currentJob.areas)) return <div className="tps-page" style={S.page}><p style={S.noJob}>Loading job data...</p></div>;
   const subtotal    = currentJob.areas.reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
   const marginAmt   = subtotal * (margin/100);
   const discountAmt = (subtotal + marginAmt) * (discount/100);
