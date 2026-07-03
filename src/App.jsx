@@ -1366,8 +1366,11 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             value={currentJob.assignedTo || ""}
             onChange={e => {
               const newId = e.target.value || null;
-              if (newId && canSeeAllJobs) {
-                // Open appointment modal for owner/manager
+              if (!newId) {
+                // Clearing assignment — just remove it
+                updateJob(j => ({...j, assignedTo: null}));
+              } else if (canSeeAllJobs) {
+                // Owner/manager — open appointment modal
                 setApptAssignId(newId);
                 setApptDate(currentJob.estimatorAppointment?.date || "");
                 setApptTime(currentJob.estimatorAppointment?.time || "");
@@ -1375,6 +1378,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 setApptConflicts([]);
                 setShowApptModal(true);
               } else {
+                // Other roles — assign directly without modal
                 updateJob(j => ({...j, assignedTo: newId}));
               }
             }}
@@ -1711,36 +1715,6 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             placeholder="General condition, access notes, special instructions..."/>
         </label>
       </section>
-
-      {/* ── AUDIT LOG ── */}
-      {canSeeAllJobs && Array.isArray(currentJob.auditLog) && currentJob.auditLog.length > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Audit Log</h2>
-          <div style={{fontSize:12, color:C.textMuted, marginBottom:8}}>Key changes made to this job.</div>
-          {[...currentJob.auditLog].reverse().map((entry, i) => {
-            const actionLabels = {
-              status_change:    "Status changed",
-              line_item_added:  "Line item added",
-              line_item_removed:"Line item removed",
-              price_override:   "Price override",
-              markup_changed:   "Markup changed",
-              discount_changed: "Discount changed",
-            };
-            return (
-              <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"7px 0", borderBottom:`1px solid ${C.border}`, gap:8}}>
-                <div>
-                  <div style={{fontSize:13, fontWeight:600}}>{actionLabels[entry.action] || entry.action}</div>
-                  <div style={{fontSize:11, color:C.textMuted}}>{entry.detail}</div>
-                  <div style={{fontSize:11, color:C.textMuted}}>{entry.userName || "Unknown"}</div>
-                </div>
-                <div style={{fontSize:11, color:C.textMuted, flexShrink:0, textAlign:"right"}}>
-                  {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : ""}
-                </div>
-              </div>
-            );
-          })}
-        </section>
-      )}
 
       {/* ── COMPANY SIGNATURE ── */}
       <section style={S.section}>
@@ -7443,6 +7417,35 @@ function JobContextBar({ currentJob, updateJob, setView, view, permissions, user
           </button>
         ))}
       </div>
+      {/* ── AUDIT LOG ── */}
+      {canSeeAllJobs && Array.isArray(currentJob.auditLog) && currentJob.auditLog.length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Audit Log</h2>
+          <div style={{fontSize:12, color:C.textMuted, marginBottom:8}}>Key changes made to this job.</div>
+          {[...currentJob.auditLog].reverse().map((entry, i) => {
+            const actionLabels = {
+              status_change:    "Status changed",
+              line_item_added:  "Line item added",
+              line_item_removed:"Line item removed",
+              price_override:   "Price override",
+              markup_changed:   "Markup changed",
+              discount_changed: "Discount changed",
+            };
+            return (
+              <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"7px 0", borderBottom:`1px solid ${C.border}`, gap:8}}>
+                <div>
+                  <div style={{fontSize:13, fontWeight:600}}>{actionLabels[entry.action] || entry.action}</div>
+                  <div style={{fontSize:11, color:C.textMuted}}>{entry.detail}</div>
+                  <div style={{fontSize:11, color:C.textMuted}}>{entry.userName || "Unknown"}</div>
+                </div>
+                <div style={{fontSize:11, color:C.textMuted, flexShrink:0, textAlign:"right"}}>
+                  {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : ""}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
     </div>
   );
 }
