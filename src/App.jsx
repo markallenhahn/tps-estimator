@@ -7787,8 +7787,9 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   const CS_GOOGLE_REVIEW_URL = companySettings?.googleReviewUrl || "";
   const brand = getBrand(companySettings);
 
-  const [sent,       setSent]       = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(false);
+  const [sent,            setSent]           = useState(false);
+  const [pdfLoading,      setPdfLoading]     = useState(false);
+  const [showSentConfirm, setShowSentConfirm] = useState(false);
   const clientSigRef  = useRef(null);
   const clientDrawing = useRef(false);
 
@@ -7933,7 +7934,8 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
     const body    = encodeURIComponent(buildEmailBody());
     const to      = currentJob.clientEmail ? encodeURIComponent(currentJob.clientEmail) : "";
     window.location.href = "mailto:" + to + "?subject=" + subject + "&body=" + body;
-    updateJob(j => ({...j, status:"sent", statusChangedAt:new Date().toISOString()})); setSent(true);
+    // Show confirmation modal after opening email client
+    setTimeout(() => setShowSentConfirm(true), 800);
   };
 
   const copyEstimate = () => { navigator.clipboard.writeText(buildEmailBody()); alert("Copied to clipboard."); };
@@ -8412,6 +8414,31 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
             ))}
           </div>
         </section>
+      )}
+
+      {/* Sent confirmation modal */}
+      {showSentConfirm && (
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+            <h2 style={{...S.h2, marginTop:0}}>✉️ Did you send the estimate?</h2>
+            <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
+              Confirming will move this job to <strong>Sent</strong> status and record today as the sent date.
+            </p>
+            <div style={{display:"flex", gap:8}}>
+              <button style={{...S.btnPrimary, flex:1}} onClick={() => {
+                updateJob(j => ({
+                  ...j,
+                  status: "sent",
+                  statusChangedAt: new Date().toISOString(),
+                  estimateSentDate: j.estimateSentDate || new Date().toISOString().slice(0,10),
+                }));
+                setSent(true);
+                setShowSentConfirm(false);
+              }}>Yes, I sent it</button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowSentConfirm(false)}>No, not yet</button>
+            </div>
+          </div>
+        </div>
       )}
 
       <section style={S.section}>
