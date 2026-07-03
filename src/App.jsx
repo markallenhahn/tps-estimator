@@ -9859,7 +9859,7 @@ export default function App() {
   // user by email; this one is a custom token (tenant_invites) for someone
   // who doesn't have an account yet and is about to create a whole new company. ──
   const [joinToken,        setJoinToken]        = useState(null);
-  const [requestTenantId,  setRequestTenantId]  = useState(null);
+  const [requestTenantId,  setRequestTenantId]  = useState(() => new URLSearchParams(window.location.search).get("request") || null);
 
   // ── Restore session on mount ──
   useEffect(() => {
@@ -10611,6 +10611,9 @@ export default function App() {
       return next;
     });
   };
+
+  // Public routes — render before any auth check
+  if (requestTenantId) return <EstimateRequestForm tenantId={requestTenantId}/>;
 
   if (!authChecked) return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
