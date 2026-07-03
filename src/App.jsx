@@ -2089,20 +2089,26 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             })()}
             <div style={{display:"flex", flexDirection:"column", gap:10}}>
               <label style={S.formLabel}>Appointment Date *
-                <input type="date" value={apptDate} onChange={e => {
-                  setApptDate(e.target.value);
-                  if (e.target.value) {
-                    const conflicts = jobs.filter(j =>
-                      j.id !== currentJob.id &&
-                      j.assignedTo === apptAssignId &&
-                      j.estimatorAppointment?.date === e.target.value
-                    );
-                    setApptConflicts(conflicts);
-                  } else { setApptConflicts([]); }
-                }} style={{...S.input, height:42, boxSizing:"border-box"}}/>
+                <input type="date" value={apptDate}
+                  min={new Date().toISOString().slice(0,10)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val && val < new Date().toISOString().slice(0,10)) return; // block past dates
+                    setApptDate(val);
+                    if (val) {
+                      const conflicts = jobs.filter(j =>
+                        j.id !== currentJob.id &&
+                        j.assignedTo === apptAssignId &&
+                        j.estimatorAppointment?.date === val
+                      );
+                      setApptConflicts(conflicts);
+                    } else { setApptConflicts([]); }
+                  }} style={{...S.input, height:42, boxSizing:"border-box"}}/>
               </label>
               <label style={S.formLabel}>Appointment Time (optional)
-                <input type="time" value={apptTime} onChange={e => setApptTime(e.target.value)}
+                <input type="time" value={apptTime}
+                  step="60"
+                  onChange={e => setApptTime(e.target.value)}
                   style={{...S.input, height:42, boxSizing:"border-box"}}/>
               </label>
               <label style={S.formLabel}>Notes for Estimator (optional)
