@@ -7279,7 +7279,7 @@ function daysSince(isoOrDateStr) {
 // Default aging thresholds — adjustable later, not exposed as settings yet.
 const AGING = { estimateStuckDays: 7, sentNoResponseDays: 3, unpaidInvoiceDays: 14 };
 
-function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView, rates, tFetch, setJobs }) {
+function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView, rates, tFetch, setJobs, updateJobById }) {
   const isDesktopLayout = useIsDesktop();
   const roles = userRoles || [userRole];
   const isEstimator = hasRole(roles, "estimator");
@@ -7319,7 +7319,8 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
   // Jobs that came in via the estimate request form
   const requestJobs = canSeeAllJobs
     ? [...visibleJobs, ...jobs.filter(j => j.source === "request_form" && !visibleJobs.find(v => v.id === j.id))]
-        .filter(j => j.source === "request_form" && ["estimate","draft"].includes(j.status))
+        .filter(j => j.source === "request_form" && ["estimate","draft"].includes(j.status)
+          && !(j.assignedTo && j.clientContacted))
     : [];
 
   // ── Action Needed ──
@@ -7464,6 +7465,21 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
                   <div style={{fontSize:11, color:C.textMuted}}>{j.date}</div>
                   <span style={{fontSize:12, color:C.accent, fontWeight:600}}>Open →</span>
                 </div>
+              </div>
+              <div style={{display:"flex", gap:8, marginTop:10, flexWrap:"wrap"}} onClick={e => e.stopPropagation()}>
+                <div style={{fontSize:11, color: j.assignedTo ? "#15803d" : C.textMuted}}>
+                  {j.assignedTo ? "✓ Estimator assigned" : "⚠ No estimator assigned"}
+                </div>
+                {!j.clientContacted ? (
+                  <button
+                    style={{fontSize:11, fontWeight:600, padding:"3px 10px", borderRadius:6, border:"none",
+                      background:"#dcfce7", color:"#15803d", cursor:"pointer", marginLeft:"auto"}}
+                    onClick={e => { e.stopPropagation(); updateJobById(j.id, jj => ({...jj, clientContacted:true})); }}>
+                    ✓ Mark Client Contacted
+                  </button>
+                ) : (
+                  <span style={{fontSize:11, color:"#15803d", marginLeft:"auto"}}>✓ Client contacted</span>
+                )}
               </div>
             </div>
           ))}
@@ -10785,7 +10801,7 @@ export default function App() {
             <button onClick={goBack} style={S.btnSecondary}>← Back</button>
           </div>
         )}
-        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} tFetch={tFetch} setJobs={setJobs}/></div>}
+        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} tFetch={tFetch} setJobs={setJobs} updateJobById={updateJobById}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
