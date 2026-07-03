@@ -1293,6 +1293,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     setEditingId(null); setEditArea(null);
   };
 
+  if (!currentJob || !Array.isArray(currentJob.areas)) return null;
   const totalBySvc = currentJob.areas.reduce((acc, a) => {
     if (a.serviceType === "other") {
       acc["other"] = (acc["other"]||0) + Number(a.measurement||0);
