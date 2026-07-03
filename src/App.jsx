@@ -7870,16 +7870,21 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 
   const PipelineCard = ({ job, draggable }) => {
     const isPendingReview = job.readyForReview || job.status === "pending_review";
+    const isKickedBack = !!job.revisionNote && !isPendingReview;
+    const noEstimator = !job.assignedTo && ["estimate","draft"].includes(job.status);
     // Pending review cards are not draggable — they must be reviewed first
     const isDraggable = draggable && !isPendingReview;
+    const bg    = isPendingReview ? "#fefce8" : isKickedBack ? "#fef2f2" : C.surface;
+    const bdr   = isPendingReview ? "#fde68a" : isKickedBack ? "#fecaca" : C.border;
+    const bdrL  = isPendingReview ? "3px solid #f59e0b" : isKickedBack ? "3px solid #ef4444" : noEstimator ? `3px solid ${C.border}` : "none";
     return (
     <div
       draggable={isDraggable}
       onDragStart={isDraggable ? (e => { e.dataTransfer.setData("text/plain", String(job.id)); }) : undefined}
       style={{
-        background: isPendingReview ? "#fefce8" : C.surface,
-        borderBottom:`1px solid ${isPendingReview ? "#fde68a" : C.border}`,
-        borderLeft: isPendingReview ? "3px solid #f59e0b" : "none",
+        background: bg,
+        borderBottom:`1px solid ${bdr}`,
+        borderLeft: bdrL,
         padding:10, boxSizing:"border-box",
         display:"flex", flexDirection:"column", gap:6,
       }}>
@@ -7889,9 +7894,13 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
             {job.clientName||"Unnamed Client"}
           </div>
           {isPendingReview && (
-            <div style={{fontSize:9, fontWeight:700, color:"#92400e", background:"#fef3c7", borderRadius:4, padding:"1px 5px", flexShrink:0}}>
-              ⏳
-            </div>
+            <div style={{fontSize:9, fontWeight:700, color:"#92400e", background:"#fef3c7", borderRadius:4, padding:"1px 5px", flexShrink:0}}>⏳</div>
+          )}
+          {job.revisionNote && !isPendingReview && (
+            <div style={{fontSize:9, fontWeight:700, color:"#b91c1c", background:"#fee2e2", borderRadius:4, padding:"1px 5px", flexShrink:0}}>↩</div>
+          )}
+          {!job.assignedTo && ["estimate","draft"].includes(job.status) && (
+            <div style={{fontSize:9, fontWeight:700, color:"#6b7280", background:"#f3f4f6", borderRadius:4, padding:"1px 5px", flexShrink:0}}>!</div>
           )}
         </div>
         <div style={{fontSize:11, color:C.textMuted, textTransform:"capitalize", marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
