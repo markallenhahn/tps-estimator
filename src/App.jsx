@@ -10860,7 +10860,7 @@ export default function App() {
           (hasRole(userRoles||[userRole], "estimator") && !(hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager")) &&
             (currentJob?.readyForReview || !["estimate","draft"].includes(currentJob?.status)))
         }
-          canSeeMoney={canSeeAllJobsGlobal}
+          canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session}/>}
