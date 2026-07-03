@@ -525,7 +525,7 @@ const DEFAULT_PERMISSIONS = {
   invoice:  { estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", owner:"edit" },
   labor:    { estimator:"hidden", crew:"edit",   crewlead:"edit", manager:"edit", owner:"edit" },
   materials:{ estimator:"hidden", crew:"hidden", crewlead:"view", manager:"edit", owner:"edit" },
-  crm:      { estimator:"edit",   crew:"hidden", crewlead:"view", manager:"edit", owner:"edit" },
+  crm:      { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
   reports:  { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
   expenses: { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"view", owner:"edit" },
   rates:    { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
@@ -7173,12 +7173,14 @@ function JobContextBar({ currentJob, updateJob, setView, view, permissions, user
   });
 
   // Which job tabs are visible for this role
+  const isEstimatorRole = hasRole(roles, "estimator") && !canSeeAllJobs;
   const jobTabs = [
     { key: "jobdetail", label: "Job",      icon: "📋" },
-    { key: "estimate",  label: "Estimate", icon: "$",  permKey: "estimate" },
+    { key: "estimate",  label: "Estimate", icon: "$",  permKey: "estimate", hideForEstimator: true },
     { key: "invoice",   label: "Invoice",  icon: "🧾", permKey: "invoice" },
     { key: "costs",     label: "Costs",    icon: "📊", permKey: "costs",   plan: true },
   ].filter(t => {
+    if (t.hideForEstimator && isEstimatorRole) return false;
     if (!t.permKey) return true;
     if (getAccessLevel(permissions, t.permKey, userRoles) === "hidden") return false;
     if (t.plan && !planAllowsTab(planData, t.permKey)) return false;
@@ -7780,7 +7782,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 }
 
 // ─── Estimate View ────────────────────────────────────────────────────────────
-function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOverridePrice, companySettings={}, accessToken, tenantId }) {
+function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOverridePrice, canSeeMoney=true, companySettings={}, accessToken, tenantId }) {
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
@@ -8297,16 +8299,16 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
                         {a.notes && <div style={{fontSize:11, color:C.textDim, fontStyle:"italic", marginTop:2}}>{a.notes}</div>}
                       </div>
                       <div style={{textAlign:"right", flexShrink:0}}>
-                        <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(amt)}</div>
+                        {canSeeMoney && <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(amt)}</div>}
                         <div style={{fontSize:11, color:C.textMuted, marginTop:1}}>{qty} {unit}{tons!==null ? " / " + tons.toFixed(2) + " tons" : ""}</div>
                       </div>
                     </div>
                   </div>
                 );
               })}
-            </div>
+            </div>}
 
-            <div style={S.adjustRow}>
+            {canSeeMoney && <div style={S.adjustRow}>
               <label style={S.adjustLabel}>Markup %
                 <input type="number" value={margin} min="0" max="100" disabled={isLocked}
                   onChange={e => setMargin(Number(e.target.value))} style={{...S.adjustInput, ...(isLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
@@ -8315,14 +8317,14 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
                 <input type="number" value={discount} min="0" max="100" disabled={isLocked}
                   onChange={e => setDiscount(Number(e.target.value))} style={{...S.adjustInput, ...(isLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
               </label>
-            </div>
+            </div>}
 
-            <div style={S.totalsBox}>
+            {canSeeMoney && <div style={S.totalsBox}>
               <div style={S.totalLine}><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
               {discount>0 && <div style={{...S.totalLine, color:C.danger, fontWeight:700}}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
               <div style={{...S.totalLineBold, color:brand.accent}}><span>TOTAL</span><span>{formatCurrency(finalTotal)}</span></div>
               {/* Price override — admin/manager only */}
-              {canOverridePrice && (
+              {canSeeMoney && canOverridePrice && (
               <div style={{marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}`}}>
                 <div style={{fontSize:12, color:C.textMuted, marginBottom:6}}>
                   Override Total {hasOverride && <span style={{color:brand.accent, fontWeight:700}}>· Active</span>}
@@ -10858,6 +10860,7 @@ export default function App() {
           (hasRole(userRoles||[userRole], "estimator") && !(hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager")) &&
             (currentJob?.readyForReview || !["estimate","draft"].includes(currentJob?.status)))
         }
+          canSeeMoney={canSeeAllJobsGlobal}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session}/>}
