@@ -289,9 +289,11 @@ const S = {
   status_sent:{      background:"#ede9fe", color:"#6d28d9" },
   status_signed:{    background:"#dcfce7", color:"#15803d" },
   status_scheduled:{ background:"#dbeafe", color:"#1d4ed8" },
+  status_pending_review:{ background:"#fef3c7", color:"#92400e" },
   status_completed:{ background:"#dcfce7", color:"#15803d" },
   status_paid:{      background:"#dcfce7", color:"#15803d" },
   status_lost:{      background:"#ffedd5", color:"#b91c1c" },
+  status_pending_review:{ background:"#fef3c7", color:"#92400e" },
   areaList:{ display:"flex", flexDirection:"column", gap:8 },
   areaRow:{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 12px", display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 },
   areaRowMain:{ flex:1 }, areaName:{ fontWeight:600, fontSize:14 },
@@ -1011,7 +1013,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
 }
 
 // ─── Media View ───────────────────────────────────────────────────────────────
-function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userRoles, userId, jobs, companySettings={}, accessToken, tenantId, servicesOffered=[] }) {
+function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userRoles, userId, jobs, companySettings={}, accessToken, tenantId, servicesOffered=[], currentUserName="" }) {
   const CS_NAME = companySettings?.name || "";
   const isDesktop = useIsDesktop();
   // ── Photo capture ──
@@ -1034,13 +1036,21 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   // ── Jobs workflow: recommendations + kick-back note ──
   const [estimatorRec, setEstimatorRec] = useState(null);
   const [crewRec, setCrewRec] = useState(null);
-  const [showKickBack, setShowKickBack] = useState(false);
-  const [kickBackNote, setKickBackNote] = useState("");
+  const [showKickBack,    setShowKickBack]    = useState(false);
+  const [kickBackNote,    setKickBackNote]    = useState("");
+  const [showPayModal,    setShowPayModal]    = useState(false);
+  const [payModalDate,    setPayModalDate]    = useState("");
+  const [payModalMethod,  setPayModalMethod]  = useState("Check");
 
   const roles = userRoles || [userRole];
-  const isEstimator = hasRole(roles, "estimator");
+  const isEstimator   = hasRole(roles, "estimator");
   const canSeeAllJobs = hasRole(roles, "owner") || hasRole(roles, "manager");
-  const isCrewLead = hasRole(roles, "crewlead");
+  const isCrewLead    = hasRole(roles, "crewlead");
+  const isCrew        = hasRole(roles, "crew") && !isCrewLead && !canSeeAllJobs && !isEstimator;
+  // Financial visibility: crew and estimators cannot see dollar amounts
+  const canSeeMoney   = !isCrew && !isEstimator || canSeeAllJobs;
+  // Edit permissions: crew is read-only on job details
+  const isReadOnly    = isCrew;
   // An estimator who ISN'T also an admin/manager gets the restricted view —
   // someone with both roles keeps full access (blended = most permissive
   // role wins, same philosophy as everywhere else this app checks roles).
@@ -1383,23 +1393,29 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             {waitingOnReview && (
               <p style={{fontSize:12, color:C.textMuted, margin:0}}>✓ Submitted — waiting on manager/admin review.</p>
             )}
-            {managerCanReview && !showKickBack && (
+            {managerCanReview && (
               <div style={{display:"flex", gap:8}}>
                 <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"sent", readyForReview:false, statusChangedAt: new Date().toISOString()}))}>📤 Send Estimate</button>
                 <button style={S.btnSecondary} onClick={() => setShowKickBack(true)}>↩ Kick Back</button>
               </div>
             )}
-            {managerCanReview && showKickBack && (
-              <div>
-                <textarea value={kickBackNote} onChange={e => setKickBackNote(e.target.value)}
-                  placeholder="What needs to change? (visible to the estimator)"
-                  style={{...S.input, minHeight:70, marginBottom:8}}/>
-                <div style={{display:"flex", gap:8}}>
-                  <button style={S.btnPrimary} onClick={() => {
-                    updateJob(j => ({...j, status:"estimate", readyForReview:false, revisionNote:kickBackNote.trim(), revisionRequestedAt:new Date().toISOString(), statusChangedAt: new Date().toISOString()}));
-                    setShowKickBack(false); setKickBackNote("");
-                  }}>Send Back to Estimator</button>
-                  <button style={S.btnSecondary} onClick={() => { setShowKickBack(false); setKickBackNote(""); }}>Cancel</button>
+            {/* Kick back modal */}
+            {showKickBack && (
+              <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+                <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+                  <h2 style={{...S.h2, marginTop:0}}>↩ Kick Back to Estimator</h2>
+                  <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>Enter the reason for revision. This will be shown to the estimator.</p>
+                  <textarea value={kickBackNote} onChange={e => setKickBackNote(e.target.value)}
+                    placeholder="What needs to change?"
+                    style={{...S.input, minHeight:90, marginBottom:12}}/>
+                  <div style={{display:"flex", gap:8}}>
+                    <button style={{...S.btnPrimary, flex:1}} disabled={!kickBackNote.trim()} onClick={() => {
+                      if (!kickBackNote.trim()) return;
+                      updateJob(j => ({...j, status:"estimate", readyForReview:false, revisionNote:kickBackNote.trim(), revisionRequestedAt:new Date().toISOString(), statusChangedAt: new Date().toISOString()}));
+                      setShowKickBack(false); setKickBackNote("");
+                    }}>Send Back</button>
+                    <button style={{...S.btnSecondary, flex:1}} onClick={() => { setShowKickBack(false); setKickBackNote(""); }}>Cancel</button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1407,7 +1423,40 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"completed", statusChangedAt: new Date().toISOString()}))}>✓ Mark Completed</button>
             )}
             {canMarkPaid && (
-              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"paid", statusChangedAt: new Date().toISOString()}))}>💲 Mark Paid</button>
+              <button style={S.btnPrimary} onClick={() => {
+                setPayModalDate(currentJob.paymentDate || new Date().toISOString().slice(0,10));
+                setPayModalMethod(currentJob.paymentMethod || "Check");
+                setShowPayModal(true);
+              }}>💲 Mark Paid</button>
+            )}
+            {/* Payment modal */}
+            {showPayModal && (
+              <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+                <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+                  <h2 style={{...S.h2, marginTop:0}}>💲 Mark as Paid</h2>
+                  <div style={{display:"flex", flexDirection:"column", gap:12}}>
+                    <label style={S.formLabel}>Payment Date
+                      <input type="date" value={payModalDate}
+                        onChange={e => setPayModalDate(e.target.value)}
+                        style={{...S.input, height:42, boxSizing:"border-box"}}/>
+                    </label>
+                    <label style={S.formLabel}>Payment Method
+                      <select value={payModalMethod} onChange={e => setPayModalMethod(e.target.value)} style={S.input}>
+                        {["Check","Cash","Credit Card","ACH/Transfer","Zelle","Venmo","Other"].map(m =>
+                          <option key={m} value={m}>{m}</option>
+                        )}
+                      </select>
+                    </label>
+                  </div>
+                  <div style={{display:"flex", gap:8, marginTop:16}}>
+                    <button style={{...S.btnPrimary, flex:1}} onClick={() => {
+                      updateJob(j => ({...j, status:"paid", paymentDate: payModalDate, paymentMethod: payModalMethod, statusChangedAt: new Date().toISOString()}));
+                      setShowPayModal(false);
+                    }}>Confirm Payment</button>
+                    <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowPayModal(false)}>Cancel</button>
+                  </div>
+                </div>
+              </div>
             )}
           </section>
         );
@@ -1529,6 +1578,36 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             placeholder="General condition, access notes, special instructions..."/>
         </label>
       </section>
+
+      {/* ── AUDIT LOG ── */}
+      {canSeeAllJobs && Array.isArray(currentJob.auditLog) && currentJob.auditLog.length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Audit Log</h2>
+          <div style={{fontSize:12, color:C.textMuted, marginBottom:8}}>Key changes made to this job.</div>
+          {[...currentJob.auditLog].reverse().map((entry, i) => {
+            const actionLabels = {
+              status_change:    "Status changed",
+              line_item_added:  "Line item added",
+              line_item_removed:"Line item removed",
+              price_override:   "Price override",
+              markup_changed:   "Markup changed",
+              discount_changed: "Discount changed",
+            };
+            return (
+              <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"7px 0", borderBottom:`1px solid ${C.border}`, gap:8}}>
+                <div>
+                  <div style={{fontSize:13, fontWeight:600}}>{actionLabels[entry.action] || entry.action}</div>
+                  <div style={{fontSize:11, color:C.textMuted}}>{entry.detail}</div>
+                  <div style={{fontSize:11, color:C.textMuted}}>{entry.userName || "Unknown"}</div>
+                </div>
+                <div style={{fontSize:11, color:C.textMuted, flexShrink:0, textAlign:"right"}}>
+                  {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : ""}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       {/* ── COMPANY SIGNATURE ── */}
       <section style={S.section}>
@@ -1755,7 +1834,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               const svcRate = rates[newArea.serviceType]?.rate || 0;
               return (
                 <span style={{color:"#4338ca"}}>
-                  {Number(newArea.measurement).toLocaleString()} sq ft → <strong>{tons.toFixed(2)} tons</strong> → <strong>{formatCurrency(tons * svcRate)}</strong>
+                  {Number(newArea.measurement).toLocaleString()} sq ft → <strong>{tons.toFixed(2)} tons</strong>{canSeeMoney ? <> → <strong>{formatCurrency(tons * svcRate)}</strong></> : ""}
                 </span>
               );
             })()}
@@ -1797,7 +1876,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                     {svc==="other" ? formatCurrency(qty) : qty.toLocaleString() + " " + (svc==="patch"?"sq ft":rates[svc]?.unit||"")}
                     {isTonMode(svc,rates) && <span style={S.totalTons}> = {calcTons(qty, svcDepth, svcDensity, svcFormula).toFixed(2)} tons</span>}
                   </div>
-                  <div style={S.totalAmt}>{svc==="other" ? "" : formatCurrency(amt)}</div>
+                  {canSeeMoney && <div style={S.totalAmt}>{svc==="other" ? "" : formatCurrency(amt)}</div>}
                 </div>
               );
             })}
@@ -1856,7 +1935,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                             const r = editArea.density ?? (rates[editArea.serviceType]?.density ?? DEFAULT_ASPHALT_DENSITY);
                             const fml = editArea.tonsFormula ?? (rates[editArea.serviceType]?.tonsFormula ?? DEFAULT_TONS_FORMULA);
                             const t = calcTons(editArea.measurement, d, r, fml);
-                            return <span style={{fontSize:12, color:"#4338ca", alignSelf:"flex-end", paddingBottom:6}}>{t.toFixed(2)} tons → {formatCurrency(t*(rates[editArea.serviceType]?.rate||0))}</span>;
+                            return <span style={{fontSize:12, color:"#4338ca", alignSelf:"flex-end", paddingBottom:6}}>{t.toFixed(2)} tons{canSeeMoney ? ` → ${formatCurrency(t*(rates[editArea.serviceType]?.rate||0))}` : ""}</span>;
                           })()}
                         </div>
                       )}
@@ -1899,7 +1978,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                     <div style={S.areaMeta}>
                       {svc?.label}
                       {a.serviceType==="other"
-                        ? " · " + formatCurrency(Number(a.measurement||0))
+                        ? (canSeeMoney ? " · " + formatCurrency(Number(a.measurement||0)) : "")
                         : " · " + Number(a.measurement).toLocaleString() + " " + (svc?.unit==="linft"?"lin ft":"sq ft")}
                       {isTonMode(a.serviceType,rates) && ` → ${calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)).toFixed(2)} tons`}
                     </div>
@@ -1908,9 +1987,9 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                   </div>
                   <div style={S.areaRowRight}>
                     {!isOther(a.serviceType) && <span style={{...S.condBadge,...S[`cond_${a.condition}`]}}>{a.condition}</span>}
-                    <div style={{...S.areaAmt, ...(hasLineOverride ? {color:C.accent} : {})}}>{formatCurrency(amt)}</div>
-                    {!measurementsLocked && <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(a)}>✎</button>}
-                    {!measurementsLocked && <button style={S.btnSmallDanger} onClick={() => removeArea(a.id)}>✕</button>}
+                    {canSeeMoney && <div style={{...S.areaAmt, ...(hasLineOverride ? {color:C.accent} : {})}}>{formatCurrency(amt)}</div>}
+                    {!measurementsLocked && !isReadOnly && <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(a)}>✎</button>}
+                    {!measurementsLocked && !isReadOnly && <button style={S.btnSmallDanger} onClick={() => removeArea(a.id)}>✕</button>}
                   </div>
                 </div>
               );
@@ -1998,8 +2077,8 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
   const [pdfLoading,  setPdfLoading]  = useState(false);
   const [sent,        setSent]        = useState(false);
   const [invoiceNum,  setInvoiceNum]  = useState("");
-  const [paymentDate, setPaymentDate] = useState(new Date().toLocaleDateString());
-  const [paymentMethod, setPaymentMethod] = useState("Check");
+  const [paymentDate,   setPaymentDate]   = useState(currentJob?.paymentDate   ? new Date(currentJob.paymentDate+"T12:00:00").toLocaleDateString() : new Date().toLocaleDateString());
+  const [paymentMethod, setPaymentMethod] = useState(currentJob?.paymentMethod || "Check");
 
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
@@ -2368,7 +2447,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
 
         {isPaid && (
           <div style={S.paidBanner}>
-            ✓ PAID — {paymentDate} via {paymentMethod}
+            ✓ PAID — {currentJob.paymentDate ? new Date(currentJob.paymentDate+"T12:00:00").toLocaleDateString() : paymentDate} via {currentJob.paymentMethod || paymentMethod}
           </div>
         )}
 
@@ -2571,6 +2650,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
         id: Date.now(),
         date: activeClock.date,
         name: activeClock.name,
+        userId: currentUserId,
         hours: Math.round(hoursWorked * 4) / 4, // round to nearest 15 min
         clockInTime: activeClock.clockInTime,
         clockInLat: activeClock.clockInLat, clockInLng: activeClock.clockInLng, clockInAddress: activeClock.clockInAddress,
@@ -2617,8 +2697,10 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
     weekDates.push(d.toISOString().slice(0,10));
   }
 
-  const weekEntries  = laborEntries.filter(e => e.date >= weekStart && e.date <= weekEnd);
-  const dayEntries   = laborEntries.filter(e => e.date === selectedDate)
+  const isCrew = userRole === "crew";
+  const visibleEntries = isCrew ? laborEntries.filter(e => e.userId === currentUserId) : laborEntries;
+  const weekEntries  = visibleEntries.filter(e => e.date >= weekStart && e.date <= weekEnd);
+  const dayEntries   = visibleEntries.filter(e => e.date === selectedDate)
     .sort((a,b) => a.name.localeCompare(b.name));
   const dayTotal     = dayEntries.reduce((s,e) => s+e.hours, 0);
 
@@ -2632,7 +2714,19 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
   const addEntry = () => {
     if (!newName.trim()) { alert("Please enter a name."); return; }
     if (!newHours || isNaN(Number(newHours)) || Number(newHours) <= 0) { alert("Please enter valid hours."); return; }
-    addLaborEntry({ id: Date.now(), date: selectedDate, name: newName.trim(), hours: Number(newHours) });
+    // Try to match entered name to a team member profile for userId tagging
+    const nameLower = newName.trim().toLowerCase();
+    const matched = (teamUsers||[]).find(u => {
+      const full = [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase();
+      return full === nameLower;
+    });
+    addLaborEntry({
+      id: Date.now(), date: selectedDate,
+      name: newName.trim(),
+      hours: Number(newHours),
+      userId: matched?.id || null,
+      linked: !!matched,
+    });
     setNewName(""); setNewHours("");
   };
 
@@ -2640,9 +2734,13 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
   const cancelEdit = () => { setEditingId(null); setEditName(""); setEditHours(""); };
   const saveEdit = (entry) => {
     if (!editName.trim() || !editHours || isNaN(Number(editHours))) return;
-    // Delete old, add updated
+    const nameLower = editName.trim().toLowerCase();
+    const matched = (teamUsers||[]).find(u => {
+      const full = [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase();
+      return full === nameLower;
+    });
     deleteLaborEntry(entry.id);
-    addLaborEntry({ id: Date.now(), date: entry.date, name: editName.trim(), hours: Number(editHours) });
+    addLaborEntry({ id: Date.now(), date: entry.date, name: editName.trim(), hours: Number(editHours), userId: matched?.id || entry.userId || null, linked: !!matched || !!entry.userId });
     cancelEdit();
   };
 
@@ -2839,10 +2937,18 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                 ) : (
                   <div>
                     <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-                      <span style={{fontWeight:600, fontSize:14}}>{e.name}</span>
+                      <div>
+                        <span style={{fontWeight:600, fontSize:14}}>{e.name}</span>
+                        {e.userId && !e.linked && (
+                          <span style={{fontSize:10, color:"#b45309", background:"#fef3c7", borderRadius:4, padding:"1px 5px", marginLeft:6}}>unlinked</span>
+                        )}
+                        {!e.userId && !e.clockInTime && (
+                          <span style={{fontSize:10, color:"#6b7280", background:C.surface, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 5px", marginLeft:6}}>unlinked</span>
+                        )}
+                      </div>
                       <div style={{display:"flex", alignItems:"center", gap:8}}>
                         <span style={{fontSize:14, fontWeight:700, color:C.accent}}>{e.hours} hr{e.hours!==1?"s":""}</span>
-                        {canManualEntry && (
+                        {(canManualEntry && (!isCrew || e.userId === currentUserId)) && (
                           <>
                             <button style={{...S.btnSmall, fontSize:11, padding:"3px 8px"}} onClick={() => startEdit(e)}>✎</button>
                             <button style={S.btnSmallDanger} onClick={() => deleteLaborEntry(e.id)}>✕</button>
@@ -5878,7 +5984,8 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle }) {
     { key:"permissions", icon:"🔐", title:"Permissions", desc:"View what each role can see. Contact BlacktopIQ support to change." },
     { key:"homebase",    icon:"🏠", title:"Home Base", desc:"The start/end address used for route optimization in Smart Routing." },
     { key:"export",      icon:"📦", title:"Data Export", desc:"Download full CSV exports of jobs, costs, and labor." },
-    { key:"referral",    icon:"🔗", title:"Referral Link", desc:"Share your unique link and earn rewards when contractors sign up." },
+    { key:"referral",    icon:"🔗", title:"Referral Link",    desc:"Share your unique link and earn rewards when contractors sign up." },
+    { key:"request-form", icon:"📝", title:"Estimate Request Form", desc:"Share a link or QR code so clients can submit estimate requests directly to you." },
   ];
   const openCard = (key) => setView(key);
   return (
@@ -6910,7 +7017,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
       "Margin %","Discount %","Price Override","Revenue Total",
       "Areas Count","Area Details","Notes",
       "Client Signed","Client Signed At","Client Print Name",
-      "Signed",
+      "Signed","Payment Date","Payment Method",
     ];
     const rows = [headers];
 
@@ -6937,6 +7044,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
         (j.areas||[]).length, areaDetails, j.notes||"",
         j.clientSignature ? "Yes" : "No", j.clientSignedAt||"", j.clientPrintName||"",
         j.signature ? "Yes" : "No",
+        j.paymentDate||"", j.paymentMethod||"",
       ]);
     });
 
@@ -7039,9 +7147,121 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
   );
 }
 
+// ─── Job Context Bar ──────────────────────────────────────────────────────────
+// Persistent bar shown at the top of every job-scoped view (job detail,
+// estimate, invoice, costs, labor). Shows client name, address, status
+// changer, and quick-jump tabs between job screens.
+function JobContextBar({ currentJob, updateJob, setView, view, permissions, userRoles, userRole, planData }) {
+  if (!currentJob) return null;
+
+  const roles = userRoles || [userRole];
+  const canEdit = hasRole(roles, "owner") || hasRole(roles, "manager") || hasRole(roles, "crewlead");
+  const isCrewLead = hasRole(roles, "crewlead");
+  const canSeeAllJobs = hasRole(roles, "owner") || hasRole(roles, "manager");
+
+  // Status options based on role
+  const ALL_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
+  const statusOpts = ALL_STATUS_OPTS.filter(s => {
+    if (s === "completed") return canEdit; // crew lead and above
+    if (s === "pending_review") return false; // set by estimator only via Mark Complete
+    if (s === "lost") return canSeeAllJobs;
+    return canEdit;
+  });
+
+  // Which job tabs are visible for this role
+  const jobTabs = [
+    { key: "jobdetail", label: "Job",      icon: "📋" },
+    { key: "estimate",  label: "Estimate", icon: "$",  permKey: "estimate" },
+    { key: "invoice",   label: "Invoice",  icon: "🧾", permKey: "invoice" },
+    { key: "costs",     label: "Costs",    icon: "📊", permKey: "costs",   plan: true },
+    { key: "labor",     label: "Labor",    icon: "👷", permKey: "labor",   plan: true },
+  ].filter(t => {
+    if (!t.permKey) return true;
+    if (getAccessLevel(permissions, t.permKey, userRoles) === "hidden") return false;
+    if (t.plan && !planAllowsTab(planData, t.permKey)) return false;
+    return true;
+  });
+
+  const statusColor = (S[`status_${currentJob.status}`] || S.status_estimate);
+
+  return (
+    <div style={{
+      background: C.surface,
+      borderBottom: `1px solid ${C.border}`,
+      padding: "8px 16px",
+      position: "sticky",
+      top: 0,
+      zIndex: 40,
+    }}>
+      {/* Client + back to jobs */}
+      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontWeight:700, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+            {currentJob.clientName || "Unnamed"}
+          </div>
+          <div style={{fontSize:11, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+            {currentJob.address || "No address"}
+          </div>
+        </div>
+        {/* Status badge / changer */}
+        {canEdit ? (
+          <select
+            value={currentJob.status || "estimate"}
+            onChange={e => {
+              const newStatus = e.target.value;
+              if (newStatus === "lost" && !confirm(`Mark ${currentJob.clientName||"this job"} as Lost?`)) return;
+              updateJob(j => ({...j, status: newStatus, statusChangedAt: new Date().toISOString()}));
+            }}
+            style={{
+              fontSize:11, fontWeight:700,
+              background: statusColor.background,
+              color: statusColor.color,
+              border: "none", borderRadius:6,
+              padding:"4px 8px", cursor:"pointer",
+              flexShrink:0, marginLeft:8,
+            }}>
+            {statusOpts.map(s => (
+              <option key={s} value={s}>{pipelineStatusLabel(s)}</option>
+            ))}
+            {currentJob.status === "pending_review" && (
+              <option value="pending_review" disabled>⏳ Pending Review</option>
+            )}
+          </select>
+        ) : (
+          <span style={{
+            fontSize:11, fontWeight:700,
+            background: statusColor.background,
+            color: statusColor.color,
+            borderRadius:6, padding:"4px 8px", flexShrink:0, marginLeft:8,
+          }}>
+            {pipelineStatusLabel(currentJob.status || "estimate")}
+          </span>
+        )}
+      </div>
+
+      {/* Job tab quick-jump */}
+      <div style={{display:"flex", gap:4, overflowX:"auto", WebkitOverflowScrolling:"touch"}}>
+        {jobTabs.map(t => (
+          <button key={t.key}
+            onClick={() => setView(t.key)}
+            style={{
+              fontSize:11, fontWeight:600, whiteSpace:"nowrap",
+              padding:"5px 10px", borderRadius:6, border:"none", cursor:"pointer",
+              background: view === t.key ? C.accent : C.surface2,
+              color: view === t.key ? "#000" : C.textMuted,
+              flexShrink:0,
+            }}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Jobs Pipeline (the main Jobs tab — kanban on desktop, stage pager on mobile) ─
-const PIPELINE_STATUSES = ["estimate","draft","sent","signed","scheduled","completed","paid"];
-const pipelineStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
+const PIPELINE_STATUSES = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid"];
+const pipelineStatusLabel = (s) => s==="estimate" ? "Estimate" : s==="pending_review" ? "Pending Review" : s.charAt(0).toUpperCase()+s.slice(1);
 // Reuse the exact same badge colors already used everywhere else in the app
 // (S.status_*) so the pipeline's column accents match the rest of the UI.
 const pipelineStatusColor = (s) => (S[`status_${s}`] || S.status_estimate).color;
@@ -7081,8 +7301,8 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
     if (isEstimator && j.assignedTo === userId && ["estimate","draft"].includes(j.status) && !j.readyForReview) {
       actionItems.push({ job:j, label: j.revisionNote ? "Revision requested — finish & resubmit" : "Finish this estimate", urgent: !!j.revisionNote });
     }
-    if (canSeeAllJobs && j.readyForReview) {
-      actionItems.push({ job:j, label: "Review & send estimate" });
+    if (canSeeAllJobs && (j.readyForReview || j.status === "pending_review")) {
+      actionItems.push({ job:j, label: "⏳ Pending review — approve or kick back", urgent: true });
     }
     if (canSeeAllJobs && !j.assignedTo && ["estimate","draft"].includes(j.status)) {
       actionItems.push({ job:j, label: "Needs an estimator assigned" });
@@ -7315,30 +7535,40 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
     setDragOverStatus(null);
   };
 
-  const PipelineCard = ({ job, draggable }) => (
+  const PipelineCard = ({ job, draggable }) => {
+    const isPendingReview = job.readyForReview || job.status === "pending_review";
+    return (
     <div
       draggable={draggable}
       onDragStart={draggable ? (e => { e.dataTransfer.setData("text/plain", String(job.id)); }) : undefined}
       style={{
-        background:C.surface, borderBottom:`1px solid ${C.border}`,
-        padding:10, height:92, boxSizing:"border-box",
+        background: isPendingReview ? "#fefce8" : C.surface,
+        borderBottom:`1px solid ${isPendingReview ? "#fde68a" : C.border}`,
+        borderLeft: isPendingReview ? "3px solid #f59e0b" : "none",
+        padding:10, height:isPendingReview ? 108 : 92, boxSizing:"border-box",
         display:"flex", flexDirection:"column", justifyContent:"space-between",
       }}>
       <div onClick={() => open(job)} style={{cursor:"pointer", overflow:"hidden"}}>
         <div style={{fontWeight:700, fontSize:13, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
           {job.clientName||"Unnamed Client"}
         </div>
+        {isPendingReview && (
+          <div style={{fontSize:10, fontWeight:700, color:"#92400e", background:"#fef3c7", borderRadius:4, padding:"1px 6px", display:"inline-block", marginBottom:4}}>
+            ⏳ Pending Review
+          </div>
+        )}
         <div style={{fontSize:11, color:C.textMuted, textTransform:"capitalize", marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
           {(job.areas||[]).map(ar=>ar.serviceType).filter((v,i,arr)=>arr.indexOf(v)===i).join(", ") || "—"}
         </div>
-        <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</div>
+        {canSeeAllJobs && <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</div>}
       </div>
       <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark ${job.clientName||"this job"} as Lost? It'll drop off the pipeline.`)) setStatus(job, "lost"); }}
         style={{fontSize:10, color:C.textMuted, background:"none", border:"none", cursor:"pointer", padding:0, textAlign:"left"}}>
         Mark Lost
       </button>
     </div>
-  );
+    );
+  };
 
   const myJobsCount = jobs.filter(j => j.assignedTo === userId).length;
   const title = mineOnly ? "My Jobs" : "Jobs Pipeline";
@@ -7379,7 +7609,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
         </div>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:12}}>
           <span style={{fontSize:16, fontWeight:700}}>{pipelineStatusLabel(col.status)}</span>
-          <span style={{fontSize:12, color:C.textMuted}}>{col.jobs.length} job{col.jobs.length!==1?"s":""} · {formatCurrency(col.total)}</span>
+          <span style={{fontSize:12, color:C.textMuted}}>{col.jobs.length} job{col.jobs.length!==1?"s":""}{canSeeAllJobs ? " · " + formatCurrency(col.total) : ""}</span>
         </div>
         {col.jobs.length === 0 ? (
           <p style={{fontSize:12, color:C.textMuted}}>No jobs in this stage.</p>
@@ -7390,7 +7620,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
                 <div style={{fontWeight:700, fontSize:14, marginBottom:2}}>{j.clientName||"Unnamed Client"}</div>
                 <div style={{fontSize:12, color:C.textMuted}}>{j.address||"No address"}</div>
               </div>
-              <span style={{fontWeight:700, fontSize:15}}>{formatCurrency(calcJobFinancials(j, allRates).revenue)}</span>
+              {canSeeAllJobs && <span style={{fontWeight:700, fontSize:15}}>{formatCurrency(calcJobFinancials(j, allRates).revenue)}</span>}
             </div>
             <div style={{display:"flex", gap:8}}>
               <button style={{...S.btnSmall, flex:1}} onClick={() => open(j)}>Open</button>
@@ -7429,7 +7659,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
             }}>
               <span style={{fontSize:13, fontWeight:700, color:pipelineStatusColor(c.status), overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{pipelineStatusLabel(c.status)}</span>
             </div>
-            <div style={{fontSize:11, color:C.textMuted, padding:"6px 10px", textAlign:"center", borderBottom:`1px solid ${C.border}`}}>{c.jobs.length} · {formatCurrency(c.total)}</div>
+            <div style={{fontSize:11, color:C.textMuted, padding:"6px 10px", textAlign:"center", borderBottom:`1px solid ${C.border}`}}>{c.jobs.length}{canSeeAllJobs ? " · " + formatCurrency(c.total) : ""}</div>
             <div style={{minHeight:40}}>
               {c.jobs.map(j => <PipelineCard key={j.id} job={j} draggable/>)}
             </div>
@@ -8306,6 +8536,248 @@ function SetPasswordView({ inviteToken, onSuccess }) {
 // already knows about (invited by email into an existing company). This is
 // for someone who doesn't have an account yet at all, arriving via a custom
 // tenant_invites token, about to create their OWN company from scratch.
+
+// ─── Public Estimate Request Form ─────────────────────────────────────────────
+// Accessed via ?request=TENANT_ID — no auth required.
+// Fetches tenant branding, collects client info, uploads photos to Supabase
+// Storage, then POSTs to /api/submit-request.
+
+const ESTIMATE_REQUEST_SERVICES = [
+  "Sealcoating","Crack Fill","Patching","Line Striping",
+  "Paving","Milling","Overlay","Mill & Overlay",
+  "Infrared Patching","Parking Lot","Other",
+];
+
+function EstimateRequestForm({ tenantId }) {
+  const [tenantInfo,   setTenantInfo]   = useState(null);
+  const [loadingInfo,  setLoadingInfo]  = useState(true);
+  const [submitted,    setSubmitted]    = useState(false);
+  const [submitting,   setSubmitting]   = useState(false);
+  const [error,        setError]        = useState("");
+
+  // Form fields
+  const [name,         setName]         = useState("");
+  const [phone,        setPhone]        = useState("");
+  const [email,        setEmail]        = useState("");
+  const [address,      setAddress]      = useState("");
+  const [city,         setCity]         = useState("");
+  const [state,        setState_]       = useState("");
+  const [zip,          setZip]          = useState("");
+  const [services,     setServices]     = useState([]);
+  const [notes,        setNotes]        = useState("");
+  const [photos,       setPhotos]       = useState([]); // [{name, dataUrl}]
+  const [captcha,      setCaptcha]      = useState(false);
+  const [uploading,    setUploading]    = useState(false);
+
+  // Load tenant branding
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("/api/tenant-public?id=" + tenantId);
+        if (res.ok) {
+          const data = await res.json();
+          setTenantInfo(data);
+        }
+      } catch(e) {}
+      setLoadingInfo(false);
+    };
+    load();
+  }, [tenantId]);
+
+  const toggleService = (s) =>
+    setServices(prev => prev.includes(s) ? prev.filter(x=>x!==s) : [...prev, s]);
+
+  const handlePhotos = (files) => {
+    Array.from(files).slice(0, 5).forEach(file => {
+      if (file.size > 10*1024*1024) return;
+      const reader = new FileReader();
+      reader.onload = e => setPhotos(prev => [...prev.slice(0,4), {name:file.name, dataUrl:e.target.result}]);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleSubmit = async () => {
+    setError("");
+    if (!name.trim()) { setError("Please enter your name."); return; }
+    if (!phone.trim() && !email.trim()) { setError("Please enter a phone number or email address."); return; }
+    if (!address.trim()) { setError("Please enter a street address."); return; }
+    if (services.length === 0) { setError("Please select at least one service."); return; }
+    if (!captcha) { setError("Please check the box to confirm you\'re not a robot."); return; }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/submit-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId, name: name.trim(), phone: phone.trim(), email: email.trim(),
+          address: address.trim(), city: city.trim(), state: state_.trim(), zip: zip.trim(),
+          services, notes: notes.trim(), photos,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Submission failed. Please try again."); setSubmitting(false); return; }
+      setSubmitted(true);
+    } catch(e) {
+      setError("Network error. Please try again.");
+      setSubmitting(false);
+    }
+  };
+
+  const brand = {
+    accent: tenantInfo?.accentColor || "#f0ab2e",
+    name:   tenantInfo?.companyName || "Us",
+    logo:   tenantInfo?.logoB64     || null,
+  };
+
+  if (loadingInfo) return (
+    <div style={{minHeight:"100svh", display:"flex", alignItems:"center", justifyContent:"center", background:"#f3f4f6"}}>
+      <div style={{fontSize:14, color:"#6b7280"}}>Loading...</div>
+    </div>
+  );
+
+  if (submitted) return (
+    <div style={{minHeight:"100svh", display:"flex", alignItems:"center", justifyContent:"center", background:"#f3f4f6", padding:24}}>
+      <div style={{background:"#fff", borderRadius:16, padding:40, maxWidth:480, width:"100%", textAlign:"center", boxShadow:"0 4px 24px rgba(0,0,0,0.08)"}}>
+        {brand.logo && <img src={"data:image/png;base64,"+brand.logo} alt={brand.name} style={{maxWidth:200, maxHeight:70, objectFit:"contain", margin:"0 auto 24px", display:"block"}}/>}
+        <div style={{fontSize:48, marginBottom:16}}>✅</div>
+        <h2 style={{fontSize:22, fontWeight:700, marginBottom:12}}>Request Received!</h2>
+        <p style={{fontSize:14, color:"#6b7280", lineHeight:1.6}}>
+          Thank you, <strong>{name}</strong>. We\'ve received your estimate request and will be in touch soon.
+        </p>
+        <p style={{fontSize:13, color:"#9ca3af", marginTop:16}}>— {brand.name}</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{minHeight:"100svh", background:"#f3f4f6", padding:"24px 16px"}}>
+      <div style={{maxWidth:560, margin:"0 auto"}}>
+
+        {/* Header */}
+        <div style={{textAlign:"center", marginBottom:24}}>
+          {brand.logo
+            ? <img src={"data:image/png;base64,"+brand.logo} alt={brand.name} style={{maxWidth:220, maxHeight:80, objectFit:"contain", margin:"0 auto 12px", display:"block"}}/>
+            : <div style={{fontSize:22, fontWeight:700, marginBottom:12}}>{brand.name}</div>
+          }
+          <h1 style={{fontSize:20, fontWeight:700, margin:"0 0 4px"}}>Request a Free Estimate</h1>
+          <p style={{fontSize:13, color:"#6b7280", margin:0}}>Fill out the form below and we\'ll get back to you shortly.</p>
+        </div>
+
+        <div style={{background:"#fff", borderRadius:12, padding:24, boxShadow:"0 2px 12px rgba(0,0,0,0.06)", display:"flex", flexDirection:"column", gap:16}}>
+
+          {/* Contact info */}
+          <div>
+            <div style={{fontSize:12, fontWeight:700, color:"#6b7280", letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:10}}>Your Info</div>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
+              <label style={{display:"flex", flexDirection:"column", gap:4, fontSize:13, color:"#374151", gridColumn:"1/-1"}}>
+                Full Name *
+                <input value={name} onChange={e=>setName(e.target.value)} placeholder="Jane Smith"
+                  style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
+              </label>
+              <label style={{display:"flex", flexDirection:"column", gap:4, fontSize:13, color:"#374151"}}>
+                Phone
+                <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="(555) 555-5555" type="tel"
+                  style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
+              </label>
+              <label style={{display:"flex", flexDirection:"column", gap:4, fontSize:13, color:"#374151"}}>
+                Email
+                <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="jane@example.com" type="email"
+                  style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
+              </label>
+              <div style={{gridColumn:"1/-1", fontSize:11, color:"#9ca3af"}}>* Phone or email required</div>
+            </div>
+          </div>
+
+          {/* Address */}
+          <div>
+            <div style={{fontSize:12, fontWeight:700, color:"#6b7280", letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:10}}>Service Address</div>
+            <div style={{display:"flex", flexDirection:"column", gap:8}}>
+              <input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Street Address *"
+                style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
+              <div style={{display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:8}}>
+                <input value={city} onChange={e=>setCity(e.target.value)} placeholder="City"
+                  style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
+                <input value={state_} onChange={e=>setState_(e.target.value)} placeholder="State" maxLength={2}
+                  style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
+                <input value={zip} onChange={e=>setZip(e.target.value)} placeholder="ZIP"
+                  style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box"}}/>
+              </div>
+            </div>
+          </div>
+
+          {/* Services */}
+          <div>
+            <div style={{fontSize:12, fontWeight:700, color:"#6b7280", letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:10}}>Services Needed *</div>
+            <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
+              {ESTIMATE_REQUEST_SERVICES.map(s => (
+                <button key={s}
+                  onClick={() => toggleService(s)}
+                  style={{
+                    fontSize:13, padding:"6px 14px", borderRadius:20, cursor:"pointer", border:"none",
+                    background: services.includes(s) ? brand.accent : "#f3f4f6",
+                    color: services.includes(s) ? "#000" : "#374151",
+                    fontWeight: services.includes(s) ? 700 : 400,
+                  }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <div style={{fontSize:12, fontWeight:700, color:"#6b7280", letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:10}}>Description / Notes</div>
+            <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+              placeholder="Describe what you need, approximate size, any special considerations..."
+              style={{border:"1px solid #e5e7eb", borderRadius:6, padding:"9px 10px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box", minHeight:90, resize:"vertical"}}/>
+          </div>
+
+          {/* Photos */}
+          <div>
+            <div style={{fontSize:12, fontWeight:700, color:"#6b7280", letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:10}}>Photos (optional, up to 5)</div>
+            <label style={{display:"block", border:"2px dashed #e5e7eb", borderRadius:8, padding:"16px", textAlign:"center", cursor:"pointer", fontSize:13, color:"#6b7280"}}>
+              📸 Tap to add photos
+              <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>handlePhotos(e.target.files)}/>
+            </label>
+            {photos.length > 0 && (
+              <div style={{display:"flex", gap:8, flexWrap:"wrap", marginTop:10}}>
+                {photos.map((p,i) => (
+                  <div key={i} style={{position:"relative"}}>
+                    <img src={p.dataUrl} alt={p.name} style={{width:72, height:72, objectFit:"cover", borderRadius:6, border:"1px solid #e5e7eb"}}/>
+                    <button onClick={() => setPhotos(prev => prev.filter((_,j)=>j!==i))}
+                      style={{position:"absolute", top:-6, right:-6, background:"#ef4444", color:"#fff", border:"none", borderRadius:"50%", width:18, height:18, fontSize:10, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Captcha */}
+          <label style={{display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontSize:13, color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"12px 14px"}}>
+            <div onClick={() => setCaptcha(v=>!v)}
+              style={{width:22, height:22, borderRadius:4, border:`2px solid ${captcha ? brand.accent : "#d1d5db"}`, background: captcha ? brand.accent : "#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer"}}>
+              {captcha && <span style={{color:"#000", fontSize:14, fontWeight:700}}>✓</span>}
+            </div>
+            I\'m not a robot
+          </label>
+
+          {/* Error */}
+          {error && <div style={{fontSize:13, color:"#ef4444", background:"#fef2f2", borderRadius:6, padding:"10px 14px"}}>{error}</div>}
+
+          {/* Submit */}
+          <button onClick={handleSubmit} disabled={submitting}
+            style={{background: brand.accent, color:"#000", fontWeight:700, fontSize:15, border:"none", borderRadius:10, padding:"14px", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.6 : 1}}>
+            {submitting ? "Submitting..." : "Submit Estimate Request"}
+          </button>
+        </div>
+
+        <p style={{textAlign:"center", fontSize:11, color:"#9ca3af", marginTop:16}}>Powered by BlacktopIQ</p>
+      </div>
+    </div>
+  );
+}
+
 function JoinCompanyView({ token, onSuccess }) {
   const [companyName, setCompanyName] = useState("");
   const [phone,        setPhone]        = useState("");
@@ -8620,6 +9092,71 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
 }
 
 // ─── Referral View (owner only) ─────────────────────────────────────────────
+function EstimateRequestLinkView({ setView, currentTenantId }) {
+  const requestUrl = window.location.origin + "/?request=" + currentTenantId;
+  const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(requestUrl);
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    navigator.clipboard.writeText(requestUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="tps-page" style={S.page}>
+      <h1 style={S.h1}>📝 Estimate Request Form</h1>
+      <p style={S.subhead}>Share this link or QR code with clients so they can submit an estimate request directly to you — no account needed.</p>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>Your Request Form Link</h2>
+        <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
+          <input readOnly value={requestUrl}
+            style={{...S.input, flex:1, minWidth:0, fontSize:12, background:C.surface2, color:C.textMuted}}/>
+          <button style={{...S.btnPrimary, flexShrink:0}} onClick={copy}>
+            {copied ? "✓ Copied!" : "📋 Copy Link"}
+          </button>
+        </div>
+        <div style={{fontSize:12, color:C.textMuted, marginTop:8}}>
+          Add this link to your website, email signature, Google Business profile, or social media.
+        </div>
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>QR Code</h2>
+        <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>Print this and leave it at job sites, on your truck, or hand it to potential customers.</p>
+        <div style={{textAlign:"center"}}>
+          <img src={qrUrl} alt="QR Code" style={{width:200, height:200, borderRadius:8, border:`1px solid ${C.border}`}}/>
+        </div>
+        <div style={{textAlign:"center", marginTop:12}}>
+          <a href={qrUrl} download="blacktopiq-request-qr.png"
+            style={{...S.btnSecondary, display:"inline-block", textDecoration:"none", fontSize:13}}>
+            ⬇ Download QR Code
+          </a>
+        </div>
+      </section>
+
+      <section style={S.section}>
+        <h2 style={S.h2}>How It Works</h2>
+        <div style={{display:"flex", flexDirection:"column", gap:10, fontSize:13, color:C.text}}>
+          {[
+            ["1️⃣", "Client scans the QR code or visits your link"],
+            ["2️⃣", "They fill out their name, address, services needed, and can add photos"],
+            ["3️⃣", "Their request appears as a new job in your Jobs pipeline with status "Estimate""],
+            ["4️⃣", "You review, add measurements, and send them an estimate"],
+          ].map(([num, text]) => (
+            <div key={num} style={{display:"flex", gap:10, alignItems:"flex-start"}}>
+              <span style={{fontSize:18, flexShrink:0}}>{num}</span>
+              <span>{text}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ReferralView({ setView, userId }) {
   const referralCode = "BIQ-" + (userId||"").slice(0,8).toUpperCase();
   const referralUrl  = "https://blacktopiq.com/join?ref=" + referralCode;
@@ -9140,6 +9677,7 @@ export default function App() {
   const [customers,         setCustomers]         = useState([]);
   const [expenses,          setExpenses]          = useState([]);
   const [vendors,           setVendors]           = useState([]);
+  const [currentUserName,   setCurrentUserName]   = useState("");
   const isDesktopLayout = useIsDesktop();
 
   // ── Auth state ──
@@ -9250,6 +9788,8 @@ export default function App() {
         const profile = data[0];
         if (profile.role) setUserRole(profile.role);
         setUserRoles(Array.isArray(profile.roles) && profile.roles.length ? profile.roles : (profile.role ? [profile.role] : ["crew"]));
+        const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(" ");
+        if (fullName) setCurrentUserName(fullName);
         // Owners get their own company setup flow — only gate
         // estimator/crew/crewlead/manager on the basic profile wizard.
         const isOwner = profile.role === "owner";
@@ -9265,11 +9805,19 @@ export default function App() {
   // entirely from the above: that one is Supabase inviting an existing-style
   // user by email; this one is a custom token (tenant_invites) for someone
   // who doesn't have an account yet and is about to create a whole new company. ──
-  const [joinToken, setJoinToken] = useState(null);
+  const [joinToken,        setJoinToken]        = useState(null);
+  const [requestTenantId,  setRequestTenantId]  = useState(null);
 
   // ── Restore session on mount ──
   useEffect(() => {
-    const joinParam = new URLSearchParams(window.location.search).get("join");
+    const joinParam    = new URLSearchParams(window.location.search).get("join");
+    const requestParam = new URLSearchParams(window.location.search).get("request");
+    if (requestParam) {
+      setRequestTenantId(requestParam);
+      setAuthChecked(true);
+      window.history.replaceState(null, "", window.location.pathname);
+      return;
+    }
     if (joinParam) {
       setJoinToken(joinParam);
       setAuthChecked(true);
@@ -9384,7 +9932,7 @@ export default function App() {
   useEffect(() => {
     const isOwner = userRole === "owner" || (userRoles||[]).includes("owner");
     const isManager = isOwner || userRole === "manager" || (userRoles||[]).includes("manager");
-    const alwaysOwnerOnly = ["export","permissions","owner-hub","homebase","company-settings","referral"];
+    const alwaysOwnerOnly = ["export","permissions","owner-hub","homebase","company-settings","referral","request-form"];
     if (alwaysOwnerOnly.includes(view) && !isOwner) { setViewRaw("jobs"); return; }
     if (view === "team" && !isManager) { setViewRaw("jobs"); return; }
     if (ALL_TABS.some(t => t.key === view)) {
@@ -9915,11 +10463,47 @@ export default function App() {
     return result;
   };
 
+  // ── Audit log helper ───────────────────────────────────────────────────────
+  const appendAuditLog = (job, entry) => {
+    const log = Array.isArray(job.auditLog) ? job.auditLog : [];
+    return { ...job, auditLog: [...log, { ...entry, timestamp: new Date().toISOString(), userId: session?.user?.id || "", userName: currentUserName || "Unknown" }] };
+  };
+
+  // Detect key changes for audit log
+  const auditDiff = (prev, next) => {
+    const entries = [];
+    // Status change
+    if (prev.status !== next.status) {
+      entries.push({ action: "status_change", detail: `${prev.status} → ${next.status}` });
+    }
+    // Line items added
+    const prevAreaIds = new Set((prev.areas||[]).map(a => a.id));
+    (next.areas||[]).forEach(a => {
+      if (!prevAreaIds.has(a.id)) entries.push({ action: "line_item_added", detail: `${a.name||"Area"}: ${a.serviceType} ${a.measurement||0} sq ft` });
+    });
+    // Line items removed
+    const nextAreaIds = new Set((next.areas||[]).map(a => a.id));
+    (prev.areas||[]).forEach(a => {
+      if (!nextAreaIds.has(a.id)) entries.push({ action: "line_item_removed", detail: `${a.name||"Area"}: ${a.serviceType}` });
+    });
+    // Price override
+    if (prev.totalOverride !== next.totalOverride && next.totalOverride) {
+      entries.push({ action: "price_override", detail: `Override set to $${next.totalOverride}` });
+    }
+    // Markup/discount
+    if (prev.markup !== next.markup && next.markup) entries.push({ action: "markup_changed", detail: `Markup set to ${next.markup}%` });
+    if (prev.discount !== next.discount && next.discount) entries.push({ action: "discount_changed", detail: `Discount set to ${next.discount}%` });
+    return entries;
+  };
+
   const updateJob = fn => {
     setJobs(prev => {
       const next = prev.map(j => {
         if (j.id !== currentJobId) return j;
-        return withStatusStamp(j, fn);
+        const updated = withStatusStamp(j, fn);
+        // Append audit entries for key changes
+        const diffs = auditDiff(j, updated);
+        return diffs.length > 0 ? diffs.reduce((acc, entry) => appendAuditLog(acc, entry), updated) : updated;
       });
       // Find updated job and schedule debounced sync
       const updated = next.find(j => j.id === currentJobId);
@@ -9988,6 +10572,7 @@ export default function App() {
   );
 
   if (inviteToken) return <SetPasswordView inviteToken={inviteToken} onSuccess={handleInvitePasswordSet}/>;
+  if (requestTenantId) return <EstimateRequestForm tenantId={requestTenantId}/>;
   if (joinToken) return <JoinCompanyView token={joinToken} onSuccess={handleJoinSuccess}/>;
 
   if (!session) return <LoginView onSuccess={handleLoginSuccess}/>;
@@ -10023,7 +10608,7 @@ export default function App() {
   }
 
   if (loading) return (
-    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+    <div style={{...S.app, height:"100svh", minHeight:"100svh", alignItems:"center", justifyContent:"center"}}>
       <div style={{textAlign:"center", padding:"0 40px"}}>
         <img
           src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64}
@@ -10049,7 +10634,7 @@ export default function App() {
           }}>{syncStatus}</div>
         )}
         <div style={S.content}>
-        {viewHistory.length > 0 && (
+        {viewHistory.length > 0 && !["jobdetail","estimate","invoice","costs","labor"].includes(view) && (
           <div style={{display:"flex", justifyContent:"flex-end", padding:"16px 24px 0", boxSizing:"border-box"}}>
             <button onClick={goBack} style={S.btnSecondary}>← Back</button>
           </div>
@@ -10059,7 +10644,20 @@ export default function App() {
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"zones") && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
-        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId} servicesOffered={currentTenant?.data?.servicesOffered||[]}/>}
+        {/* ── Job context bar — shared across all job-scoped views ── */}
+        {["jobdetail","estimate","invoice","costs","labor"].includes(view) && currentJob && (
+          <JobContextBar
+            currentJob={currentJob}
+            updateJob={updateJob}
+            setView={navigateTo}
+            view={view}
+            permissions={permissions}
+            userRoles={userRoles}
+            userRole={userRole}
+            planData={currentTenant?.data}
+          />
+        )}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId} servicesOffered={currentTenant?.data?.servicesOffered||[]} currentUserName={currentUserName}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}
           canOverridePrice={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager")}
           readOnly={
@@ -10081,7 +10679,8 @@ export default function App() {
         }}/>}
         {view==="homebase" && userRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
         {view==="company-settings" && userRole==="owner" && <CompanySettingsView setView={navigateTo} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
-        {view==="referral" && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
+        {view==="referral"      && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
+        {view==="request-form"  && userRole==="owner" && <EstimateRequestLinkView setView={navigateTo} currentTenantId={currentTenantId}/>}
         {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data}/>}
         {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
         {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token} permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions}/>}
