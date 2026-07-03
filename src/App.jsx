@@ -8693,7 +8693,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         </div>
       )}
 
-      <section style={S.section}>
+      {canSeeMoney && <section style={S.section}>
         <div style={S.actionBtns}>
           <button style={{...S.btnPrimary, opacity:pdfLoading?0.5:1}}
             onClick={() => {
@@ -8712,7 +8712,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         <div style={{marginTop:8, fontSize:11, color:C.textMuted}}>
           PDF includes your company logo, all line items, totals, and a client signature/acceptance block.
         </div>
-      </section>
+      </section>}
     </div>
   );
 }
