@@ -8352,7 +8352,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
                 )}
               </div>
               )}
-            </div>
+            </div>}
           </>
         )}
 
