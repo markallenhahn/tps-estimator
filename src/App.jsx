@@ -8569,7 +8569,7 @@ function EstimateRequestForm({ tenantId }) {
   const [captcha,      setCaptcha]      = useState(false);
   const [uploading,    setUploading]    = useState(false);
 
-  // Load tenant branding
+  // Load tenant branding — always show form even if fetch fails
   useEffect(() => {
     const load = async () => {
       try {
@@ -8578,10 +8578,13 @@ function EstimateRequestForm({ tenantId }) {
           const data = await res.json();
           setTenantInfo(data);
         }
+        // If fetch fails (404, network error) — just show form with defaults
       } catch(e) {}
-      setLoadingInfo(false);
+      finally { setLoadingInfo(false); }
     };
-    load();
+    // Short timeout so form appears even if API is slow
+    const t = setTimeout(() => setLoadingInfo(false), 3000);
+    load().finally(() => clearTimeout(t));
   }, [tenantId]);
 
   const toggleService = (s) =>
@@ -9094,7 +9097,8 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
 // ─── Referral View (owner only) ─────────────────────────────────────────────
 function EstimateRequestLinkView({ setView, currentTenantId }) {
   const requestUrl = window.location.origin + "/?request=" + currentTenantId;
-  const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(requestUrl);
+  // Use Google Charts QR API — reliable and doesn't require CORS
+  const qrUrl = "https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=" + encodeURIComponent(requestUrl) + "&choe=UTF-8";
   const [copied, setCopied] = useState(false);
 
   const copy = () => {
@@ -9130,7 +9134,7 @@ function EstimateRequestLinkView({ setView, currentTenantId }) {
           <img src={qrUrl} alt="QR Code" style={{width:200, height:200, borderRadius:8, border:`1px solid ${C.border}`}}/>
         </div>
         <div style={{textAlign:"center", marginTop:12}}>
-          <a href={qrUrl} download="blacktopiq-request-qr.png"
+          <a href={qrUrl} target="_blank" rel="noreferrer"
             style={{...S.btnSecondary, display:"inline-block", textDecoration:"none", fontSize:13}}>
             ⬇ Download QR Code
           </a>
