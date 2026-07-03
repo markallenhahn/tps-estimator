@@ -4515,15 +4515,31 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
               return sum+(isTonMode(a.serviceType,jRates)?tons*(svc?.rate||0):a.serviceType==="other"?qty:qty*(svc?.rate||0));
             },0);
             return (
-              <div key={j.id} style={S.schedJobCard}>
+              <div key={j.id+(j.isEstimateVisit?"_visit":"")} style={{
+                ...S.schedJobCard,
+                borderLeft: j.isEstimateVisit ? "3px solid #7c3aed" : `1px solid ${C.border}`,
+                background: j.isEstimateVisit ? "#f5f3ff" : C.surface2,
+              }}>
                 <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
                   <div style={{flex:1, minWidth:0, marginRight:8}}>
-                    <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
-                    <div style={S.schedJobAddr}>{j.address||""}{j.city?", "+j.city:""}</div>
-                    <div style={S.schedJobMeta}>
-                      {(j.areas||[]).length} area{(j.areas||[]).length!==1?"s":""}{total>0?" · $"+total.toFixed(0):""}
+                    <div style={{display:"flex", alignItems:"center", gap:6}}>
+                      <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                      {j.isEstimateVisit && (
+                        <span style={{fontSize:10, fontWeight:700, background:"#ede9fe", color:"#7c3aed", borderRadius:4, padding:"2px 6px"}}>📋 Estimate Visit</span>
+                      )}
                     </div>
-                    {j.notes && <div style={S.schedJobNotes}>{j.notes}</div>}
+                    <div style={S.schedJobAddr}>{j.address||""}{j.city?", "+j.city:""}</div>
+                    {j.isEstimateVisit ? (
+                      <div style={{...S.schedJobMeta, color:"#7c3aed", fontWeight:600, marginTop:3}}>
+                        {j.estimatorAppointment?.time ? formatTime12(j.estimatorAppointment.time) : ""}
+                        {j.estimatorAppointment?.notes ? ` — ${j.estimatorAppointment.notes}` : ""}
+                      </div>
+                    ) : (
+                      <div style={S.schedJobMeta}>
+                        {(j.areas||[]).length} area{(j.areas||[]).length!==1?"s":""}{total>0?" · $"+total.toFixed(0):""}
+                      </div>
+                    )}
+                    {!j.isEstimateVisit && j.notes && <div style={S.schedJobNotes}>{j.notes}</div>}
                   </div>
                   <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
                 </div>
