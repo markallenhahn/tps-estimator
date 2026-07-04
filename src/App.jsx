@@ -6353,6 +6353,7 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle }) {
 
 // ─── Platform Admin — BlacktopIQ operator only, fully separate from any company's UI ───
 function PlatformAdminView({ setView, accessToken, permissions, setPermissions, syncPermissions }) {
+  const isDesktopLayout = useIsDesktop();
   const [invites,      setInvites]      = useState([]);
   const [generating,   setGenerating]   = useState(false);
   const [inviteError,  setInviteError]  = useState("");
