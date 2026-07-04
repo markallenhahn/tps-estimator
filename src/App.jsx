@@ -5995,7 +5995,7 @@ function CostsView({ currentJob, updateJob, rates, expenses }) {
 }
 
 // ─── User Settings View (any logged-in user) ───────────────────────────────────
-function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, userRole }) {
+function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, userRole, teamUsers=[] }) {
   const [firstName, setFirstName] = useState("");
   const [lastName,  setLastName]  = useState("");
   const [phone,     setPhone]     = useState("");
@@ -6083,6 +6083,9 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
       {userRole === "owner" && (() => {
         const plan = getTenantPlan(tenantData);
         const isTrialing = tenantData?.trialEndsAt && !tenantData?.subscriptionStatus;
+        const effectiveCap = tenantData?.userCap || plan.userCap;
+        const activeUsers = (teamUsers||[]).length;
+        const overLimit = activeUsers > effectiveCap;
         const trialDaysLeft = isTrialing
           ? Math.max(0, Math.ceil((new Date(tenantData.trialEndsAt) - new Date()) / (1000*60*60*24)))
           : null;
@@ -6091,6 +6094,20 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
         return (
           <section style={S.section}>
             <h2 style={S.h2}>Subscription</h2>
+            {overLimit && (
+              <div style={{background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"12px 16px", marginBottom:14}}>
+                <div style={{fontWeight:700, fontSize:13, color:"#b91c1c", marginBottom:4}}>
+                  ⚠️ Over user limit — action required
+                </div>
+                <div style={{fontSize:12, color:"#b91c1c", marginBottom:10}}>
+                  Your current plan allows {effectiveCap} user{effectiveCap!==1?"s":""} but you have {activeUsers} active team members.
+                  Please remove {activeUsers - effectiveCap} team member{activeUsers-effectiveCap!==1?"s":""} to comply with your plan.
+                </div>
+                <button style={{...S.btnPrimary, background:"#ef4444", fontSize:12}} onClick={() => setView("team")}>
+                  Manage Team Members →
+                </button>
+              </div>
+            )}
             <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12}}>
               <div>
                 <div style={{fontWeight:700, fontSize:16}}>
@@ -6676,7 +6693,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
 }
 
 // ─── Team View (owner/manager only) ────────────────────────────────────────────────────
-function TeamView({ accessToken, userRole, tFetch, tenantId }) {
+function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
   const isManager = userRole === "manager";
   const [users,     setUsers]     = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -6774,10 +6791,23 @@ function TeamView({ accessToken, userRole, tFetch, tenantId }) {
     }
   };
 
+  const effectiveCap = tenantData?.userCap || 1;
+  const overLimit = !loading && users.length > effectiveCap;
+
   return (
     <div className="tps-page" style={S.page}>
       <h1 style={S.h1}>Team</h1>
       <p style={S.subhead}>{isManager ? "Invite crew members" : "Invite crew members and manage your team"}</p>
+      {overLimit && (
+        <div style={{background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"12px 16px", marginBottom:16}}>
+          <div style={{fontWeight:700, fontSize:13, color:"#b91c1c", marginBottom:4}}>
+            ⚠️ You have {users.length} team members but your plan allows {effectiveCap}.
+          </div>
+          <div style={{fontSize:12, color:"#b91c1c"}}>
+            Please remove {users.length - effectiveCap} member{users.length-effectiveCap!==1?"s":""} below to comply with your plan.
+          </div>
+        </div>
+      )}
 
       <section style={S.section}>
         <h2 style={S.h2}>Invite Team Member</h2>
@@ -11297,7 +11327,7 @@ export default function App() {
         {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token} permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions}/>}
         {view==="global-permissions" && isPlatformAdmin && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={false}/>}
         {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
-        {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout} tenantData={currentTenant?.data} userRole={userRole}/>}
+        {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout} tenantData={currentTenant?.data} userRole={userRole} teamUsers={teamUsers}/>}
         {view==="export"   && userRole==="owner" && planAllowsTab(currentTenant?.data,"export") && <ExportView  jobs={jobs} laborEntries={laborEntries} rates={rates} setView={navigateTo} companySettings={companySettings}/>}
         </div>
       </div>

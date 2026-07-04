@@ -25,7 +25,8 @@
 //   2. Vercel env vars: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY
 //   3. Stripe Dashboard → Webhooks → Add endpoint:
 //        URL: https://<your-domain>/api/stripe-webhook
-//        Events: customer.subscription.created, customer.subscription.updated,
+//        Events: checkout.session.completed,
+//                customer.subscription.created, customer.subscription.updated,
 //                customer.subscription.deleted, customer.subscription.paused,
 //                customer.subscription.resumed, invoice.payment_succeeded,
 //                invoice.payment_failed
@@ -166,6 +167,48 @@ export default async function handler(req, res) {
 
   try {
     switch (event.type) {
+
+      // ── Checkout session completed (new subscriber via in-app checkout) ───────
+      // This fires when a customer completes checkout. We use metadata.tenant_id
+      // to find the tenant since stripeCustomerId may not be stored yet.
+      case "checkout.session.completed": {
+        const session = event.data.object;
+        const tenantId = session.metadata?.tenant_id;
+        const stripeCustomerId = session.customer;
+        log(`checkout.session.completed: tenant=${tenantId} customer=${stripeCustomerId}`);
+
+        if (!tenantId) { log("WARN: no tenant_id in checkout session metadata"); break; }
+
+        // Fetch subscription to get plan amount
+        let plan = null, userCap = 1;
+        try {
+          const sub = await stripe.subscriptions.retrieve(session.subscription);
+          const amountCents = (sub.items?.data || []).reduce((s, i) => s + (i.price?.unit_amount || 0) * (i.quantity || 1), 0);
+          const derived = derivePlanFromAmount(amountCents);
+          plan = derived.plan; userCap = derived.userCap;
+        } catch(e) { log("WARN: could not retrieve subscription: " + e.message); }
+
+        // Find tenant by ID directly (more reliable than customer lookup for new signups)
+        const tenantRes = await fetch(SUPABASE_URL + "/rest/v1/tenants?id=eq." + tenantId + "&select=id,data", {
+          headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey },
+        });
+        const tenantRows = await tenantRes.json();
+        if (!Array.isArray(tenantRows) || tenantRows.length === 0) {
+          log("WARN: tenant not found for id=" + tenantId); break;
+        }
+
+        const patch = {
+          stripeCustomerId,
+          subscriptionStatus: "active",
+          trialEndsAt: null,
+          pausedAt: null,
+        };
+        if (plan) { patch.plan = plan; patch.userCap = userCap; }
+
+        await updateTenantData(tenantRows[0].id, patch, serviceKey);
+        log(`checkout complete: tenant=${tenantId} → plan=${plan} userCap=${userCap}`);
+        break;
+      }
 
       // ── New subscription created or payment succeeded ───────────────────────
       case "customer.subscription.created":
