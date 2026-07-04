@@ -499,6 +499,7 @@ const TAB_ICONS = {
   crm:         { emoji: "📇", lucide: "Contact" },
   reports:     { emoji: "📊", lucide: "BarChart3" },
   rates:       { emoji: "⚙️", lucide: "Settings" },
+  help:        { emoji: "❓", lucide: "HelpCircle" },
   team:        { emoji: "👥", lucide: "Users" },
   owner:       { emoji: "🛠",  lucide: "ShieldCheck" },
   account:     { emoji: "👤", lucide: "User" },
@@ -10013,7 +10014,25 @@ function HelpView({ tFetch, currentTenantId, session, userRole }) {
           Chat with us directly using the chat bubble in the bottom-right corner of the screen.
           Available during business hours — we'll respond as quickly as possible.
         </p>
-        <button style={S.btnPrimary} onClick={() => window.Tawk_API?.maximize?.()}>
+        <button style={S.btnPrimary} onClick={() => {
+          if (window.Tawk_API?.isChatMinimized?.()) {
+            window.Tawk_API.maximize();
+          } else if (window.Tawk_API?.maximize) {
+            window.Tawk_API.maximize();
+          } else {
+            // Widget not loaded yet — load and open
+            window.Tawk_API = window.Tawk_API || {};
+            window.Tawk_API.onLoad = function() { window.Tawk_API.maximize(); };
+            if (!document.querySelector('script[src*="tawk.to"]')) {
+              const s = document.createElement("script");
+              s.async = true;
+              s.src = `https://embed.tawk.to/${TAWK_PROPERTY_ID}/${TAWK_WIDGET_ID}`;
+              s.charset = "UTF-8";
+              s.setAttribute("crossorigin","*");
+              document.head.appendChild(s);
+            }
+          }
+        }}>
           💬 Open Live Chat
         </button>
       </section>
