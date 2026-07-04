@@ -534,6 +534,7 @@ const ALL_TABS  = [
   {key:"reports",  label:"Reports"},
   {key:"rates",    label:"Rates"},
   {key:"team",     label:"Team"},
+  {key:"help",     label:"Help"},
 ];
 const ROLE_LABELS = { estimator:"Estimator", crew:"Crew", crewlead:"Crew Lead", manager:"Manager", owner:"Owner" };
 
@@ -550,6 +551,7 @@ const DEFAULT_PERMISSIONS = {
   crm:      { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
   reports:  { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
   expenses: { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"view", owner:"edit" },
+  help:     { estimator:"edit",   crew:"edit",   crewlead:"edit",   manager:"edit", owner:"edit" },
   rates:    { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
   team:     { estimator:"hidden", crew:"hidden", crewlead:"hidden", manager:"edit", owner:"edit" },
 };
@@ -6357,6 +6359,9 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   const [companies,    setCompanies]    = useState([]);
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [companiesError,   setCompaniesError]   = useState("");
+  const [feedback,     setFeedback]     = useState([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
+  const [feedbackFilter,  setFeedbackFilter]  = useState("all");
 
   useEffect(() => {
     (async () => {
@@ -6447,6 +6452,29 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
     if (!dateStr) return null;
     const d = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
     return d;
+  };
+
+  // Load feedback submissions
+  useEffect(() => {
+    (async () => {
+      setFeedbackLoading(true);
+      try {
+        const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
+        const res = await sbFetch("feedback?select=id,tenant_id,type,title,body,status,created_at&order=created_at.desc&limit=100", {}, accessToken);
+        const data = await res.json();
+        if (Array.isArray(data)) setFeedback(data);
+      } catch(e) { console.error("load feedback error:", e); }
+      setFeedbackLoading(false);
+    })();
+  }, []);
+
+  const updateFeedbackStatus = async (id, status) => {
+    await sbFetch("feedback?id=eq." + id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    }, accessToken);
+    setFeedback(prev => prev.map(f => f.id === id ? {...f, status} : f));
   };
 
   const generateInvite = async () => {
@@ -6586,6 +6614,60 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
         <button style={S.btnPrimary} onClick={() => setView("global-permissions")}>
           🔐 Edit Global Permissions
         </button>
+      </section>
+
+      {/* ── Feedback ── */}
+      <section style={S.section}>
+        <h2 style={S.h2}>📝 Feedback ({feedback.length})</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
+          Bug reports and feature requests submitted by tenants.
+        </p>
+        {/* Filter */}
+        <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:12}}>
+          {["all","new","in_progress","resolved","closed"].map(f => (
+            <button key={f} onClick={() => setFeedbackFilter(f)}
+              style={{fontSize:11, fontWeight:600, padding:"4px 10px", borderRadius:6, border:"none", cursor:"pointer",
+                background: feedbackFilter===f ? C.accent : C.surface2,
+                color: feedbackFilter===f ? "#000" : C.textMuted}}>
+              {f === "all" ? "All" : f === "in_progress" ? "In Progress" : f.charAt(0).toUpperCase()+f.slice(1)}
+              {f === "new" ? ` (${feedback.filter(x=>x.status==="new").length})` : ""}
+            </button>
+          ))}
+        </div>
+        {feedbackLoading ? (
+          <p style={{fontSize:13, color:C.textMuted}}>Loading...</p>
+        ) : feedback.filter(f => feedbackFilter==="all" || f.status===feedbackFilter).length === 0 ? (
+          <p style={{fontSize:13, color:C.textMuted}}>No feedback yet.</p>
+        ) : feedback.filter(f => feedbackFilter==="all" || f.status===feedbackFilter).map(f => {
+          const typeColors = { bug:"#fef2f2", feature:"#eff6ff", question:"#f0fdf4", billing:"#fefce8" };
+          const typeIcons  = { bug:"🐛", feature:"💡", question:"❓", billing:"💳" };
+          return (
+            <div key={f.id} style={{padding:"12px 0", borderBottom:`1px solid ${C.border}`}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, flexWrap:"wrap"}}>
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:4}}>
+                    <span style={{fontSize:11, fontWeight:700, background:typeColors[f.type]||C.surface2, borderRadius:4, padding:"1px 6px"}}>
+                      {typeIcons[f.type]} {f.type}
+                    </span>
+                    <span style={{fontSize:11, color:C.textMuted}}>
+                      {new Date(f.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div style={{fontWeight:700, fontSize:14, marginBottom:4}}>{f.title}</div>
+                  <div style={{fontSize:12, color:C.textMuted, whiteSpace:"pre-wrap"}}>{f.body}</div>
+                </div>
+                <select value={f.status}
+                  onChange={e => updateFeedbackStatus(f.id, e.target.value)}
+                  style={{fontSize:11, padding:"4px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:"pointer", flexShrink:0}}>
+                  <option value="new">New</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+            </div>
+          );
+        })}
       </section>
     </div>
   );
@@ -9787,6 +9869,162 @@ function EstimateRequestLinkView({ setView, currentTenantId }) {
   );
 }
 
+
+// ─── Help View ─────────────────────────────────────────────────────────────────
+const TAWK_PROPERTY_ID = "6a4875464b956a1d4cbbcae5";
+const TAWK_WIDGET_ID   = "1jslgk70r";
+
+function HelpView({ tFetch, currentTenantId, session, userRole }) {
+  const [formType,     setFormType]     = useState("bug");
+  const [formTitle,    setFormTitle]    = useState("");
+  const [formBody,     setFormBody]     = useState("");
+  const [submitting,   setSubmitting]   = useState(false);
+  const [submitted,    setSubmitted]    = useState(false);
+  const [formError,    setFormError]    = useState("");
+
+  // Load Tawk.to chat widget
+  useEffect(() => {
+    if (window.Tawk_API) {
+      window.Tawk_API.showWidget?.();
+      return;
+    }
+    window.Tawk_API = window.Tawk_API || {};
+    window.Tawk_LoadStart = new Date();
+    const s1 = document.createElement("script");
+    s1.async = true;
+    s1.src = `https://embed.tawk.to/${TAWK_PROPERTY_ID}/${TAWK_WIDGET_ID}`;
+    s1.charset = "UTF-8";
+    s1.setAttribute("crossorigin", "*");
+    document.head.appendChild(s1);
+
+    return () => {
+      // Hide widget when leaving Help tab
+      window.Tawk_API?.hideWidget?.();
+    };
+  }, []);
+
+  const submitFeedback = async () => {
+    if (!formTitle.trim()) { setFormError("Please enter a title."); return; }
+    if (!formBody.trim())  { setFormError("Please describe the issue or request."); return; }
+    setSubmitting(true); setFormError("");
+    try {
+      const res = await tFetch("feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id:        Date.now(),
+          tenant_id: currentTenantId,
+          user_id:   session?.user?.id,
+          type:      formType,
+          title:     formTitle.trim(),
+          body:      formBody.trim(),
+          status:    "new",
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to submit.");
+      setSubmitted(true);
+      setFormTitle(""); setFormBody("");
+    } catch(e) {
+      setFormError("Submission failed. Please try again.");
+    }
+    setSubmitting(false);
+  };
+
+  const TYPES = [
+    { key:"bug",     label:"🐛 Bug Report",      desc:"Something isn't working correctly" },
+    { key:"feature", label:"💡 Feature Request",  desc:"An idea or improvement" },
+    { key:"question",label:"❓ General Question", desc:"How do I...?" },
+    { key:"billing", label:"💳 Billing Issue",    desc:"Subscription or payment question" },
+  ];
+
+  return (
+    <div className="tps-page" style={S.page}>
+      <h1 style={S.h1}>Help & Support</h1>
+      <p style={S.subhead}>Get help, report a bug, or suggest a new feature.</p>
+
+      {/* Live Chat */}
+      <section style={S.section}>
+        <h2 style={S.h2}>💬 Live Chat</h2>
+        <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>
+          Chat with us directly using the chat bubble in the bottom-right corner of the screen.
+          Available during business hours — we'll respond as quickly as possible.
+        </p>
+        <button style={S.btnPrimary} onClick={() => window.Tawk_API?.maximize?.()}>
+          💬 Open Live Chat
+        </button>
+      </section>
+
+      {/* Phone */}
+      <section style={S.section}>
+        <h2 style={S.h2}>📞 Phone Support</h2>
+        <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>
+          Prefer to talk? Give us a call during business hours.
+        </p>
+        <a href="tel:+15706563311"
+          style={{...S.btnSecondary, display:"inline-flex", alignItems:"center", gap:8, textDecoration:"none", fontSize:14, fontWeight:700}}>
+          📞 (570) 656-3311
+        </a>
+      </section>
+
+      {/* Bug / Feature Form */}
+      <section style={S.section}>
+        <h2 style={S.h2}>📝 Submit Feedback</h2>
+        <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
+          Report a bug or suggest a feature. We review every submission.
+        </p>
+
+        {submitted ? (
+          <div style={{background:"#dcfce7", border:"1px solid #86efac", borderRadius:8, padding:"14px 16px"}}>
+            <div style={{fontWeight:700, fontSize:14, color:"#15803d", marginBottom:4}}>✅ Submitted — thanks!</div>
+            <div style={{fontSize:13, color:"#15803d"}}>We've received your feedback and will review it shortly.</div>
+            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={() => setSubmitted(false)}>Submit another</button>
+          </div>
+        ) : (
+          <div style={{display:"flex", flexDirection:"column", gap:12}}>
+            {/* Type selector */}
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+              {TYPES.map(t => (
+                <button key={t.key} onClick={() => setFormType(t.key)}
+                  style={{padding:"10px 12px", borderRadius:8, border:`2px solid ${formType===t.key ? C.accent : C.border}`,
+                    background: formType===t.key ? "#fffbeb" : C.surface2,
+                    cursor:"pointer", textAlign:"left", fontSize:12, fontWeight: formType===t.key ? 700 : 400}}>
+                  <div>{t.label}</div>
+                  <div style={{fontSize:11, color:C.textMuted, marginTop:2, fontWeight:400}}>{t.desc}</div>
+                </button>
+              ))}
+            </div>
+
+            <label style={S.formLabel}>Title *
+              <input value={formTitle} onChange={e => setFormTitle(e.target.value)}
+                placeholder={formType==="bug" ? "e.g. Invoice PDF not generating" : "e.g. Add dark mode"}
+                style={S.input}/>
+            </label>
+
+            <label style={S.formLabel}>Description *
+              <textarea value={formBody} onChange={e => setFormBody(e.target.value)}
+                placeholder={formType==="bug"
+                  ? "Steps to reproduce, what you expected vs what happened..."
+                  : "Describe your idea or question in detail..."}
+                style={{...S.input, minHeight:100, resize:"vertical"}}/>
+            </label>
+
+            {formError && (
+              <div style={{fontSize:12, color:C.danger, background:"#fef2f2", borderRadius:6, padding:"8px 12px"}}>
+                {formError}
+              </div>
+            )}
+
+            <button style={{...S.btnPrimary, opacity: submitting ? 0.6 : 1}}
+              disabled={submitting} onClick={submitFeedback}>
+              {submitting ? "⏳ Submitting..." : "Submit Feedback"}
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function ReferralView({ setView, userId }) {
   const referralCode = "BIQ-" + (userId||"").slice(0,8).toUpperCase();
   const referralUrl  = "https://blacktopiq.com/join?ref=" + referralCode;
@@ -11321,6 +11559,7 @@ export default function App() {
         {view==="homebase" && userRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
         {view==="company-settings" && userRole==="owner" && <CompanySettingsView setView={navigateTo} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
         {view==="referral"      && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
+        {view==="help" && getAccessLevel(permissions,"help",userRoles)!=="hidden" && <HelpView tFetch={tFetch} currentTenantId={currentTenantId} session={session} userRole={userRole}/>}
         {view==="request-form"  && userRole==="owner" && <EstimateRequestLinkView setView={navigateTo} currentTenantId={currentTenantId}/>}
         {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data}/>}
         {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
