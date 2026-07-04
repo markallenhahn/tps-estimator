@@ -8206,8 +8206,13 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         body: JSON.stringify({
           toEmail: emailTo.trim(),
           toName: currentJob.clientName || "",
-          subject, body, pdfBase64, pdfFilename: filename,
-          fromName: CS_NAME || "BlacktopIQ",
+          subject,
+          pdfBase64,
+          pdfFilename: filename,
+          fromName:   CS_NAME  || "BlacktopIQ",
+          fromPhone:  companySettings?.phone  || "",
+          fromEmail:  companySettings?.email  || companySettings?.officeEmail || "",
+          ownerName:  companySettings?.ownerName || CS_NAME || "",
         }),
       });
       const data = await res.json();

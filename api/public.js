@@ -126,9 +126,26 @@ export default async function handler(req, res) {
     const userRes = await fetch(SUPABASE_URL + "/auth/v1/user", { headers: { "apikey": serviceKey, "Authorization": "Bearer " + token } });
     if (!userRes.ok) return res.status(401).json({ error: "Session expired." });
 
-    const { toEmail, toName, subject, body, pdfBase64, pdfFilename, fromName } = req.body || {};
+    const { toEmail, toName, subject, pdfBase64, pdfFilename, fromName, fromPhone, fromEmail, ownerName } = req.body || {};
     if (!toEmail) return res.status(400).json({ error: "Client email is required." });
     if (!pdfBase64) return res.status(400).json({ error: "PDF data is required." });
+
+    const greeting   = toName ? `${toName},` : "Hello,";
+    const company    = fromName || "Us";
+    const phone      = fromPhone || "";
+    const email      = fromEmail || "";
+    const owner      = ownerName || fromName || "";
+    const phoneLine  = phone ? `by phone at ${phone}` : "";
+    const emailLine  = email ? `by email at ${email}` : "";
+    const contactStr = [phoneLine, emailLine].filter(Boolean).join(" or ");
+
+    const emailBody = `${greeting}
+
+Please see attached for your estimate from ${company}.${contactStr ? ` Please let us know if you have any questions. We can be reached ${contactStr}.` : ""}
+
+Thanks,
+
+${owner}${phone ? "\n" + phone : ""}${email ? "\n" + email : ""}`;
 
     const from = `${fromName || "BlacktopIQ"} <estimates@blacktopiq.com>`;
     try {
@@ -139,7 +156,7 @@ export default async function handler(req, res) {
           from,
           to: [toName ? `${toName} <${toEmail}>` : toEmail],
           subject: subject || `Your Estimate from ${fromName || "Us"}`,
-          text: body || `Please find your estimate attached.\n\nThank you!\n— ${fromName || ""}`,
+          text: emailBody,
           attachments: [{ filename: pdfFilename || "Estimate.pdf", content: pdfBase64 }],
         }),
       });
