@@ -133,5 +133,40 @@ export default async function handler(req, res) {
     } catch(e) { return res.status(500).json({ error: e.message }); }
   }
 
+  // ── GET list-feedback (platform admin only) ──────────────────────────────
+  if (action === "list-feedback") {
+    const token = (req.headers.authorization || "").replace("Bearer ", "");
+    const callerId = await getCallerId(serviceKey, token);
+    if (!callerId) return res.status(401).json({ error: "Missing auth." });
+    if (!await isPlatformAdmin(serviceKey, callerId)) return res.status(403).json({ error: "Platform admins only." });
+    try {
+      const r = await fetch(SUPABASE_URL + "/rest/v1/feedback?select=id,tenant_id,user_id,type,title,body,status,created_at&order=created_at.desc&limit=200", {
+        headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey },
+      });
+      const data = await r.json();
+      return res.status(200).json({ feedback: Array.isArray(data) ? data : [] });
+    } catch(e) { return res.status(500).json({ error: e.message }); }
+  }
+
+  // ── POST update-feedback (platform admin only) ────────────────────────────
+  if (action === "update-feedback") {
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    const token = (req.headers.authorization || "").replace("Bearer ", "");
+    const callerId = await getCallerId(serviceKey, token);
+    if (!callerId) return res.status(401).json({ error: "Missing auth." });
+    if (!await isPlatformAdmin(serviceKey, callerId)) return res.status(403).json({ error: "Platform admins only." });
+    const id = req.query.id;
+    const { status } = req.body || {};
+    if (!id || !status) return res.status(400).json({ error: "id and status required." });
+    try {
+      await fetch(SUPABASE_URL + "/rest/v1/feedback?id=eq." + id, {
+        method: "PATCH",
+        headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      return res.status(200).json({ success: true });
+    } catch(e) { return res.status(500).json({ error: e.message }); }
+  }
+
   return res.status(400).json({ error: "Unknown action: " + action });
 }

@@ -6465,20 +6465,23 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
       setFeedbackLoading(true);
       try {
         const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
-        const res = await sbFetch("feedback?select=id,tenant_id,type,title,body,status,created_at&order=created_at.desc&limit=100", {}, accessToken);
+        // Use direct Supabase call with service-level access via admin API
+        const res = await fetch("/api/admin?action=list-feedback", {
+          headers: { "Authorization": "Bearer " + accessToken },
+        });
         const data = await res.json();
-        if (Array.isArray(data)) setFeedback(data);
+        if (Array.isArray(data?.feedback)) setFeedback(data.feedback);
       } catch(e) { console.error("load feedback error:", e); }
       setFeedbackLoading(false);
     })();
   }, []);
 
   const updateFeedbackStatus = async (id, status) => {
-    await sbFetch("feedback?id=eq." + id, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+    await fetch("/api/admin?action=update-feedback&id=" + id, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
       body: JSON.stringify({ status }),
-    }, accessToken);
+    });
     setFeedback(prev => prev.map(f => f.id === id ? {...f, status} : f));
   };
 

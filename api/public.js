@@ -171,6 +171,9 @@ ${owner}${phone ? "\n" + phone : ""}${email ? "\n" + email : ""}`;
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
     const resendKey = process.env.RESEND_API_KEY;
     if (!resendKey) return res.status(500).json({ error: "RESEND_API_KEY not configured." });
+    if (!serviceKey) return res.status(500).json({ error: "Missing SUPABASE_SERVICE_KEY." });
+
+    const replysbH = { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey };
 
     const token = (req.headers.authorization || "").replace("Bearer ", "");
     if (!token) return res.status(401).json({ error: "Missing auth token." });
@@ -183,7 +186,7 @@ ${owner}${phone ? "\n" + phone : ""}${email ? "\n" + email : ""}`;
     const callerId = userData?.id;
 
     // Verify platform admin
-    const adminRes = await fetch(SUPABASE_URL + "/rest/v1/platform_admins?user_id=eq." + callerId + "&select=user_id", { headers: sbH });
+    const adminRes = await fetch(SUPABASE_URL + "/rest/v1/platform_admins?user_id=eq." + callerId + "&select=user_id", { headers: replysbH });
     const adminData = await adminRes.json();
     if (!Array.isArray(adminData) || adminData.length === 0) return res.status(403).json({ error: "Platform admins only." });
 
