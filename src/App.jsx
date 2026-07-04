@@ -6010,6 +6010,8 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
   const [profileMsg,  setProfileMsg]  = useState("");
   const [profileErr,  setProfileErr]  = useState("");
   const [passwordMsg, setPasswordMsg] = useState("");
+  const [planInterval,   setPlanInterval]   = useState("monthly");
+  const [checkingOut,    setCheckingOut]    = useState("");
   const [passwordErr, setPasswordErr] = useState("");
 
   // Load existing profile fields
@@ -6126,6 +6128,78 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
                 💳 Manage Subscription
               </button>
             </div>
+
+            {/* Plan selection — show when on trial or no active subscription */}
+            {(isTrialing || !tenantData?.subscriptionStatus || isCanceled) && (() => {
+              const PLANS = [
+                { key:"solo",      label:"Solo",      price:{monthly:40,  yearly:400},  users:"1 user",  features:["Core estimating","Jobs pipeline","PDF estimates","Schedule"] },
+                { key:"solo_plus", label:"Solo+",     price:{monthly:75,  yearly:750},  users:"1 user",  features:["Everything in Solo","Reports","Materials","Expenses","Smart Routing"] },
+                { key:"crew",      label:"Crew",      price:{monthly:120, yearly:1200}, users:"5 users", features:["Everything in Solo","Labor tracking","Team management","Export"] },
+                { key:"crew_plus", label:"Crew+",     price:{monthly:165, yearly:1650}, users:"5 users", features:["Everything in Crew","Reports","Materials","Expenses","Smart Routing"] },
+                { key:"pro",       label:"Pro",       price:{monthly:250, yearly:2500}, users:"25 users",features:["Everything in Crew+","25 users","Add-on seats available"] },
+              ];
+              const startCheckout = async (planKey) => {
+                setCheckingOut(planKey);
+                try {
+                  const res = await fetch("/api/stripe-checkout", {
+                    method:"POST",
+                    headers:{"Content-Type":"application/json","Authorization":"Bearer "+accessToken},
+                    body: JSON.stringify({ plan: planKey, interval: planInterval }),
+                  });
+                  const data = await res.json();
+                  if (data.url) window.location.href = data.url;
+                  else alert(data.error || "Could not start checkout.");
+                } catch(e) { alert("Checkout failed. Try again."); }
+                setCheckingOut("");
+              };
+              return (
+                <div style={{marginTop:20}}>
+                  <h2 style={{...S.h2, marginBottom:8}}>Choose a Plan</h2>
+                  {/* Interval toggle */}
+                  <div style={{display:"flex", gap:0, marginBottom:16, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden", alignSelf:"flex-start", width:"fit-content"}}>
+                    {["monthly","yearly"].map(i => (
+                      <button key={i} onClick={() => setPlanInterval(i)}
+                        style={{padding:"7px 18px", fontSize:13, fontWeight:600, border:"none", cursor:"pointer",
+                          background: planInterval===i ? C.accent : C.surface2,
+                          color: planInterval===i ? "#000" : C.textMuted}}>
+                        {i === "monthly" ? "Monthly" : "Yearly"}
+                        {i === "yearly" && <span style={{marginLeft:5, fontSize:10, background:"#dcfce7", color:"#15803d", borderRadius:4, padding:"1px 5px", fontWeight:700}}>2 months free</span>}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Plan cards */}
+                  <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12}}>
+                    {PLANS.map(p => {
+                      const price = p.price[planInterval];
+                      const perMo = planInterval === "yearly" ? (price/12).toFixed(2) : null;
+                      const isCurrent = tenantData?.plan === p.key;
+                      return (
+                        <div key={p.key} style={{border:`2px solid ${isCurrent ? C.accent : C.border}`, borderRadius:10, padding:16, background: isCurrent ? "#fffbeb" : C.surface}}>
+                          <div style={{fontWeight:700, fontSize:15, marginBottom:4}}>{p.label}</div>
+                          <div style={{fontSize:11, color:C.textMuted, marginBottom:8}}>{p.users}</div>
+                          <div style={{fontWeight:700, fontSize:22, color:C.accent, marginBottom:2}}>
+                            ${planInterval === "yearly" ? perMo : price}
+                            <span style={{fontSize:12, fontWeight:400, color:C.textMuted}}>/mo</span>
+                          </div>
+                          {planInterval === "yearly" && (
+                            <div style={{fontSize:11, color:C.textMuted, marginBottom:8}}>${price}/year billed annually</div>
+                          )}
+                          <ul style={{margin:"8px 0", padding:"0 0 0 16px", fontSize:12, color:C.textMuted}}>
+                            {p.features.map(f => <li key={f} style={{marginBottom:3}}>{f}</li>)}
+                          </ul>
+                          <button
+                            style={{...S.btnPrimary, width:"100%", fontSize:12, marginTop:8, opacity: checkingOut===p.key ? 0.6 : 1}}
+                            disabled={!!checkingOut || isCurrent}
+                            onClick={() => startCheckout(p.key)}>
+                            {checkingOut===p.key ? "⏳ Loading..." : isCurrent ? "Current Plan" : "Subscribe"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </section>
         );
       })()}
@@ -10337,7 +10411,13 @@ export default function App() {
   // ── Restore session on mount ──
   useEffect(() => {
     const joinParam    = new URLSearchParams(window.location.search).get("join");
-    const requestParam = new URLSearchParams(window.location.search).get("request");
+    const requestParam   = new URLSearchParams(window.location.search).get("request");
+    const subscribedParam = new URLSearchParams(window.location.search).get("subscribed");
+    if (subscribedParam) {
+      window.history.replaceState(null, "", window.location.pathname);
+      // Will show success banner once app loads — store in sessionStorage
+      sessionStorage.setItem("justSubscribed", "1");
+    }
     if (requestParam) {
       setRequestTenantId(requestParam);
       setAuthChecked(true);

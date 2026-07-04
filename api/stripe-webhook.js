@@ -39,12 +39,21 @@ const SUPABASE_URL  = "https://elzymtqlcceouftwhcdk.supabase.co";
 export const config = { api: { bodyParser: false } };
 
 // ── Plan config (mirrors PLAN_CONFIG in App.jsx) ──────────────────────────────
+// Monthly prices in cents
 const PLAN_PRICE_CENTS = {
   solo:      4000,
   solo_plus: 7500,
   crew:      12000,
   crew_plus: 16500,
   pro:       25000,
+};
+// Annual prices in cents (10 months = 2 months free)
+const PLAN_PRICE_CENTS_YEARLY = {
+  solo:      40000,
+  solo_plus: 75000,
+  crew:      120000,
+  crew_plus: 165000,
+  pro:       250000,
 };
 const PLAN_USER_CAPS = {
   solo:      1,
@@ -53,24 +62,35 @@ const PLAN_USER_CAPS = {
   crew_plus: 5,
   pro:       25, // base; add-ons calculated below
 };
-const ADDON_SEAT_PRICE_CENTS = 2000; // $20/mo per extra seat (Pro only)
+const ADDON_SEAT_PRICE_CENTS = 2000;        // $20/mo per extra seat (Pro only)
+const ADDON_SEAT_PRICE_CENTS_YEARLY = 20000; // $200/yr per extra seat
 
 // Map the subscription's total amount to a plan key + userCap.
-// For Pro, any amount above the base price adds seats at $20 each.
+// Handles both monthly and annual billing amounts.
 function derivePlanFromAmount(amountCents) {
-  // Sort descending so highest plan matches first
-  const entries = Object.entries(PLAN_PRICE_CENTS).sort((a, b) => b[1] - a[1]);
+  // Check annual prices first (they're larger, avoids false monthly matches)
+  const yearlyEntries = Object.entries(PLAN_PRICE_CENTS_YEARLY).sort((a,b) => b[1]-a[1]);
+  for (const [plan, price] of yearlyEntries) {
+    if (amountCents >= price) {
+      let userCap = PLAN_USER_CAPS[plan];
+      if (plan === "pro" && amountCents > price) {
+        userCap += Math.floor((amountCents - price) / ADDON_SEAT_PRICE_CENTS_YEARLY);
+      }
+      return { plan, userCap, interval: "yearly" };
+    }
+  }
+  // Then monthly
+  const entries = Object.entries(PLAN_PRICE_CENTS).sort((a,b) => b[1]-a[1]);
   for (const [plan, price] of entries) {
     if (amountCents >= price) {
       let userCap = PLAN_USER_CAPS[plan];
       if (plan === "pro" && amountCents > price) {
-        const extraCents = amountCents - price;
-        userCap += Math.floor(extraCents / ADDON_SEAT_PRICE_CENTS);
+        userCap += Math.floor((amountCents - price) / ADDON_SEAT_PRICE_CENTS);
       }
-      return { plan, userCap };
+      return { plan, userCap, interval: "monthly" };
     }
   }
-  return { plan: null, userCap: 1 }; // unrecognized amount
+  return { plan: null, userCap: 1, interval: "monthly" };
 }
 
 // ── Supabase helpers ───────────────────────────────────────────────────────────
