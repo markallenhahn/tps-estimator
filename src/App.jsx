@@ -6492,6 +6492,15 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   };
   const updateFeedbackStatus = async (id, status) => updateFeedbackField(id, { status });
 
+  const deleteFeedback = async (id) => {
+    await fetch("/api/admin?action=delete-feedback&id=" + id, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + accessToken },
+    });
+    setFeedback(prev => prev.filter(f => f.id !== id));
+    if (selectedFeedback?.id === id) setSelectedFeedback(null);
+  };
+
   const addInternalNote = async (id, text, type="internal") => {
     const item = feedback.find(f => f.id === id);
     const notes = [...(item?.internal_notes || []), { text, type, timestamp: new Date().toISOString() }];
@@ -6751,7 +6760,13 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                           {TYPE_ICONS[f.type]} {f.type} · {new Date(f.created_at).toLocaleDateString()}
                         </div>
                       </div>
-                      <button style={{...S.btnSmall, flexShrink:0}} onClick={() => setSelectedFeedback(null)}>✕ Close</button>
+                      <div style={{display:"flex", gap:6, flexShrink:0}}>
+                        <button style={{...S.btnSmall, color:C.danger, flexShrink:0}}
+                          onClick={() => { if (confirm("Delete this feedback item? This cannot be undone.")) deleteFeedback(f.id); }}>
+                          🗑 Delete
+                        </button>
+                        <button style={{...S.btnSmall, flexShrink:0}} onClick={() => setSelectedFeedback(null)}>✕ Close</button>
+                      </div>
                     </div>
 
                     <div style={{padding:"16px 20px", display:"flex", flexDirection:"column", gap:16}}>
