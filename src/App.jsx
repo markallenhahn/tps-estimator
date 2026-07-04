@@ -6362,6 +6362,10 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   const [feedback,     setFeedback]     = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(true);
   const [feedbackFilter,  setFeedbackFilter]  = useState("all");
+  const [replyModal,      setReplyModal]      = useState(null); // { feedback item }
+  const [replyBody,       setReplyBody]       = useState("");
+  const [replySending,    setReplySending]    = useState(false);
+  const [replyError,      setReplyError]      = useState("");
 
   useEffect(() => {
     (async () => {
@@ -6656,18 +6660,78 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                   <div style={{fontWeight:700, fontSize:14, marginBottom:4}}>{f.title}</div>
                   <div style={{fontSize:12, color:C.textMuted, whiteSpace:"pre-wrap"}}>{f.body}</div>
                 </div>
-                <select value={f.status}
-                  onChange={e => updateFeedbackStatus(f.id, e.target.value)}
-                  style={{fontSize:11, padding:"4px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:"pointer", flexShrink:0}}>
-                  <option value="new">New</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="resolved">Resolved</option>
-                  <option value="closed">Closed</option>
-                </select>
+                <div style={{display:"flex", gap:6, flexShrink:0}}>
+                  <button style={{...S.btnSmall, fontSize:11}} onClick={() => { setReplyModal(f); setReplyBody(""); setReplyError(""); }}>
+                    ✉️ Reply
+                  </button>
+                  <select value={f.status}
+                    onChange={e => updateFeedbackStatus(f.id, e.target.value)}
+                    style={{fontSize:11, padding:"4px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:"pointer"}}>
+                    <option value="new">New</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
               </div>
             </div>
           );
         })}
+
+        {/* Reply modal */}
+        {replyModal && (
+          <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+            <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:520, boxShadow:"0 8px 32px rgba(0,0,0,0.18)", maxHeight:"90vh", overflowY:"auto"}}>
+              <h2 style={{...S.h2, marginTop:0}}>✉️ Reply to Feedback</h2>
+              <div style={{background:C.surface2, borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:12, color:C.textMuted}}>
+                <div style={{fontWeight:700, color:C.text, marginBottom:4}}>{replyModal.title}</div>
+                <div style={{whiteSpace:"pre-wrap"}}>{replyModal.body}</div>
+              </div>
+              <label style={S.formLabel}>Your Reply *
+                <textarea value={replyBody} onChange={e => setReplyBody(e.target.value)}
+                  placeholder="Type your response here..."
+                  style={{...S.input, minHeight:120, resize:"vertical"}}/>
+              </label>
+              <div style={{fontSize:11, color:C.textMuted, marginTop:4, marginBottom:12}}>
+                Will be sent from <strong>help@blacktopiq.com</strong> with the original message quoted.
+              </div>
+              {replyError && (
+                <div style={{fontSize:12, color:C.danger, background:"#fef2f2", borderRadius:6, padding:"8px 12px", marginBottom:12}}>{replyError}</div>
+              )}
+              <div style={{display:"flex", gap:8}}>
+                <button style={{...S.btnPrimary, flex:1, opacity: replySending ? 0.6 : 1}}
+                  disabled={replySending || !replyBody.trim()}
+                  onClick={async () => {
+                    setReplySending(true); setReplyError("");
+                    try {
+                      const res = await fetch("/api/public?action=send-feedback-reply", {
+                        method:"POST",
+                        headers:{"Content-Type":"application/json","Authorization":"Bearer "+accessToken},
+                        body: JSON.stringify({
+                          feedbackId: replyModal.id,
+                          userId:     replyModal.user_id,
+                          replyBody,
+                          feedbackType:  replyModal.type,
+                          feedbackTitle: replyModal.title,
+                          feedbackBody:  replyModal.body,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) { setReplyError(data.error || "Failed to send."); }
+                      else {
+                        setFeedback(prev => prev.map(f => f.id===replyModal.id ? {...f, status:"in_progress"} : f));
+                        setReplyModal(null);
+                      }
+                    } catch(e) { setReplyError(e.message); }
+                    setReplySending(false);
+                  }}>
+                  {replySending ? "⏳ Sending..." : "Send Reply"}
+                </button>
+                <button style={{...S.btnSecondary, flex:1}} onClick={() => setReplyModal(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

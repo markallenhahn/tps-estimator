@@ -166,5 +166,77 @@ ${owner}${phone ? "\n" + phone : ""}${email ? "\n" + email : ""}`;
     } catch(e) { return res.status(500).json({ error: e.message }); }
   }
 
+  // ── POST send-feedback-reply (platform admin only) ───────────────────────
+  if (action === "send-feedback-reply") {
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) return res.status(500).json({ error: "RESEND_API_KEY not configured." });
+
+    const token = (req.headers.authorization || "").replace("Bearer ", "");
+    if (!token) return res.status(401).json({ error: "Missing auth token." });
+
+    const userRes = await fetch(SUPABASE_URL + "/auth/v1/user", {
+      headers: { "apikey": serviceKey, "Authorization": "Bearer " + token },
+    });
+    if (!userRes.ok) return res.status(401).json({ error: "Session expired." });
+    const userData = await userRes.json();
+    const callerId = userData?.id;
+
+    // Verify platform admin
+    const adminRes = await fetch(SUPABASE_URL + "/rest/v1/platform_admins?user_id=eq." + callerId + "&select=user_id", { headers: sbH });
+    const adminData = await adminRes.json();
+    if (!Array.isArray(adminData) || adminData.length === 0) return res.status(403).json({ error: "Platform admins only." });
+
+    const { feedbackId, userId, replyBody, feedbackType, feedbackTitle, feedbackBody } = req.body || {};
+    if (!userId || !replyBody) return res.status(400).json({ error: "userId and replyBody required." });
+
+    const profileRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + userId + "&select=email,first_name,last_name", { headers: sbH });
+    const profileData = await profileRes.json();
+    const profile = Array.isArray(profileData) && profileData[0];
+    if (!profile?.email) return res.status(400).json({ error: "Could not find user email." });
+
+    const userName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || profile.email;
+    const typeLabels = { bug:"Bug Report", feature:"Feature Request", question:"General Question", billing:"Billing Issue" };
+    const emailBody = `Hi ${userName},
+
+${replyBody}
+
+---
+Your original ${typeLabels[feedbackType]||"Feedback"}:
+
+Subject: ${feedbackTitle}
+
+${feedbackBody}
+
+---
+BlacktopIQ Support
+help@blacktopiq.com`;
+
+    try {
+      const emailRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + resendKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from:    "BlacktopIQ Support <help@blacktopiq.com>",
+          to:      [`${userName} <${profile.email}>`],
+          subject: `Re: ${feedbackTitle}`,
+          text:    emailBody,
+        }),
+      });
+      const emailData = await emailRes.json();
+      if (!emailRes.ok) return res.status(500).json({ error: emailData.message || "Failed to send." });
+
+      // Auto-update status to in_progress
+      if (feedbackId) {
+        await fetch(SUPABASE_URL + "/rest/v1/feedback?id=eq." + feedbackId, {
+          method: "PATCH",
+          headers: { ...sbH, "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "in_progress" }),
+        });
+      }
+      return res.status(200).json({ success: true });
+    } catch(e) { return res.status(500).json({ error: e.message }); }
+  }
+
   return res.status(400).json({ error: "Unknown action: " + action });
 }
