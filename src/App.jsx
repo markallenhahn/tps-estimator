@@ -10139,10 +10139,23 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
     if (!formBody.trim())  { setFormError("Please describe the issue or request."); return; }
     setSubmitting(true); setFormError("");
     try {
-      // Use props — already available, no extra fetch needed
-      const submitterName  = currentUserName || session?.user?.email || "";
-      const submitterEmail = session?.user?.email || "";
-      const companyName    = currentTenant?.data?.companyName || "";
+      // Get submitter info — fetch profile directly as guaranteed source
+      let submitterName  = currentUserName || "";
+      let submitterEmail = session?.user?.email || "";
+      const companyName  = currentTenant?.data?.companyName || "";
+      if (!submitterName) {
+        try {
+          const pRes = await fetch("https://elzymtqlcceouftwhcdk.supabase.co/rest/v1/profiles?id=eq." + session?.user?.id + "&select=first_name,last_name,email", {
+            headers: { "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A", "Authorization": "Bearer " + (accessToken||"") }
+          });
+          const pData = await pRes.json();
+          const p = Array.isArray(pData) && pData[0];
+          if (p) {
+            submitterName  = [p.first_name, p.last_name].filter(Boolean).join(" ") || p.email || "";
+            submitterEmail = p.email || submitterEmail;
+          }
+        } catch(e) { /* use fallbacks */ }
+      }
 
       const res = await tFetch("feedback", {
         method: "POST",

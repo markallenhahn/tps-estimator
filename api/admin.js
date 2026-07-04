@@ -140,7 +140,7 @@ export default async function handler(req, res) {
     if (!callerId) return res.status(401).json({ error: "Missing auth." });
     if (!await isPlatformAdmin(serviceKey, callerId)) return res.status(403).json({ error: "Platform admins only." });
     try {
-      const r = await fetch(SUPABASE_URL + "/rest/v1/feedback?select=id,tenant_id,user_id,type,title,body,status,created_at&order=created_at.desc&limit=200", {
+      const r = await fetch(SUPABASE_URL + "/rest/v1/feedback?select=id,tenant_id,user_id,type,title,body,status,priority,internal_notes,submitter_name,submitter_email,company_name,created_at&order=created_at.desc&limit=200", {
         headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey },
       });
       const data = await r.json();
@@ -160,9 +160,9 @@ export default async function handler(req, res) {
     // Allow patching any subset of allowed fields
     const { status, priority, internal_notes } = req.body || {};
     const patch = {};
-    if (status)         patch.status         = status;
-    if (priority)       patch.priority       = priority;
-    if (internal_notes) patch.internal_notes = internal_notes;
+    if (status !== undefined)         patch.status         = status;
+    if (priority !== undefined)       patch.priority       = priority;
+    if (internal_notes !== undefined) patch.internal_notes = internal_notes;
     if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Nothing to update." });
     try {
       await fetch(SUPABASE_URL + "/rest/v1/feedback?id=eq." + id, {
