@@ -6168,13 +6168,13 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
                     ))}
                   </div>
                   {/* Plan cards */}
-                  <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12}}>
+                  <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12, alignItems:"stretch"}}>
                     {PLANS.map(p => {
                       const price = p.price[planInterval];
                       const perMo = planInterval === "yearly" ? (price/12).toFixed(2) : null;
                       const isCurrent = tenantData?.plan === p.key;
                       return (
-                        <div key={p.key} style={{border:`2px solid ${isCurrent ? C.accent : C.border}`, borderRadius:10, padding:16, background: isCurrent ? "#fffbeb" : C.surface}}>
+                        <div key={p.key} style={{border:`2px solid ${isCurrent ? C.accent : C.border}`, borderRadius:10, padding:16, background: isCurrent ? "#fffbeb" : C.surface, display:"flex", flexDirection:"column"}}>
                           <div style={{fontWeight:700, fontSize:15, marginBottom:4}}>{p.label}</div>
                           <div style={{fontSize:11, color:C.textMuted, marginBottom:8}}>{p.users}</div>
                           <div style={{fontWeight:700, fontSize:22, color:C.accent, marginBottom:2}}>
@@ -6188,7 +6188,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
                             {p.features.map(f => <li key={f} style={{marginBottom:3}}>{f}</li>)}
                           </ul>
                           <button
-                            style={{...S.btnPrimary, width:"100%", fontSize:12, marginTop:8, opacity: checkingOut===p.key ? 0.6 : 1}}
+                            style={{...S.btnPrimary, width:"100%", fontSize:12, marginTop:"auto", paddingTop:8, opacity: checkingOut===p.key ? 0.6 : 1}}
                             disabled={!!checkingOut || isCurrent}
                             onClick={() => startCheckout(p.key)}>
                             {checkingOut===p.key ? "⏳ Loading..." : isCurrent ? "Current Plan" : "Subscribe"}
