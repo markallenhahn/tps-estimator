@@ -193,7 +193,7 @@ ${owner}${phone ? "\n" + phone : ""}${email ? "\n" + email : ""}`;
     const { feedbackId, userId, replyBody, feedbackType, feedbackTitle, feedbackBody } = req.body || {};
     if (!userId || !replyBody) return res.status(400).json({ error: "userId and replyBody required." });
 
-    const profileRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + userId + "&select=email,first_name,last_name", { headers: sbH });
+    const profileRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + userId + "&select=email,first_name,last_name", { headers: replysbH });
     const profileData = await profileRes.json();
     const profile = Array.isArray(profileData) && profileData[0];
     if (!profile?.email) return res.status(400).json({ error: "Could not find user email." });
@@ -233,7 +233,7 @@ help@blacktopiq.com`;
       if (feedbackId) {
         await fetch(SUPABASE_URL + "/rest/v1/feedback?id=eq." + feedbackId, {
           method: "PATCH",
-          headers: { ...sbH, "Content-Type": "application/json" },
+          headers: { ...replysbH, "Content-Type": "application/json" },
           body: JSON.stringify({ status: "in_progress" }),
         });
       }
