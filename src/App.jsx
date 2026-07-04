@@ -10082,7 +10082,7 @@ function EstimateRequestLinkView({ setView, currentTenantId }) {
 const TAWK_PROPERTY_ID = "6a4875464b956a1d4cbbcae5";
 const TAWK_WIDGET_ID   = "1jslgk70r";
 
-function HelpView({ tFetch, currentTenantId, session, userRole }) {
+function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, currentUserName, currentTenant }) {
   const [formType,     setFormType]     = useState("bug");
   const [formTitle,    setFormTitle]    = useState("");
   const [formBody,     setFormBody]     = useState("");
@@ -10116,17 +10116,10 @@ function HelpView({ tFetch, currentTenantId, session, userRole }) {
     if (!formBody.trim())  { setFormError("Please describe the issue or request."); return; }
     setSubmitting(true); setFormError("");
     try {
-      // Get submitter info from session/profile
-      const profileRes = await tFetch("profiles?id=eq." + session?.user?.id + "&select=first_name,last_name,email");
-      const profileData = await profileRes.json();
-      const profile = Array.isArray(profileData) && profileData[0];
-      const submitterName  = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.email || "";
-      const submitterEmail = profile?.email || session?.user?.email || "";
-
-      // Get company name
-      const tenantRes = await tFetch("tenants?id=eq." + currentTenantId + "&select=data");
-      const tenantData2 = await tenantRes.json();
-      const companyName = tenantData2?.[0]?.data?.companyName || "";
+      // Use props — already available, no extra fetch needed
+      const submitterName  = currentUserName || session?.user?.email || "";
+      const submitterEmail = session?.user?.email || "";
+      const companyName    = currentTenant?.data?.companyName || "";
 
       const res = await tFetch("feedback", {
         method: "POST",
@@ -11802,7 +11795,7 @@ export default function App() {
         {view==="homebase" && userRole==="owner" && <HomeBaseView homeBase={homeBase} setHomeBase={setHomeBase} syncHomeBase={syncHomeBase} setView={navigateTo}/>}
         {view==="company-settings" && userRole==="owner" && <CompanySettingsView setView={navigateTo} companySettings={companySettings} syncCompanySettings={syncCompanySettings}/>}
         {view==="referral"      && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
-        {view==="help" && getAccessLevel(permissions,"help",userRoles)!=="hidden" && <HelpView tFetch={tFetch} currentTenantId={currentTenantId} session={session} userRole={userRole}/>}
+        {view==="help" && getAccessLevel(permissions,"help",userRoles)!=="hidden" && <HelpView tFetch={tFetch} currentTenantId={currentTenantId} session={session} userRole={userRole} accessToken={session?.access_token} currentUserName={currentUserName} currentTenant={currentTenant}/>}
         {view==="request-form"  && userRole==="owner" && <EstimateRequestLinkView setView={navigateTo} currentTenantId={currentTenantId}/>}
         {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data}/>}
         {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
