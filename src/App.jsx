@@ -6371,6 +6371,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   const [replyError,      setReplyError]      = useState("");
   const [newNote,         setNewNote]         = useState("");
   const [savingNote,      setSavingNote]      = useState(false);
+  const [noteType,        setNoteType]        = useState("internal");
 
   useEffect(() => {
     (async () => {
@@ -6491,9 +6492,9 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   };
   const updateFeedbackStatus = async (id, status) => updateFeedbackField(id, { status });
 
-  const addInternalNote = async (id, text) => {
+  const addInternalNote = async (id, text, type="internal") => {
     const item = feedback.find(f => f.id === id);
-    const notes = [...(item?.internal_notes || []), { text, timestamp: new Date().toISOString() }];
+    const notes = [...(item?.internal_notes || []), { text, type, timestamp: new Date().toISOString() }];
     await updateFeedbackField(id, { internal_notes: notes });
   };
 
@@ -6795,21 +6796,43 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                         ) : (
                           <div style={{marginBottom:10}}>
                             {[...(f.internal_notes||[])].reverse().map((note, i) => (
-                              <div key={i} style={{background:C.surface2, borderRadius:6, padding:"8px 12px", marginBottom:6}}>
+                              <div key={i} style={{
+                                background: note.type==="customer" ? "#eff6ff" : C.surface2,
+                                border: note.type==="customer" ? "1px solid #bfdbfe" : `1px solid ${C.border}`,
+                                borderRadius:6, padding:"8px 12px", marginBottom:6}}>
+                                <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:4}}>
+                                  <span style={{fontSize:10, fontWeight:700, color: note.type==="customer" ? "#1d4ed8" : C.textMuted}}>
+                                    {note.type==="customer" ? "📎 Customer Response" : "🔒 Internal Note"}
+                                  </span>
+                                  <span style={{fontSize:10, color:C.textDim}}>{new Date(note.timestamp).toLocaleString()}</span>
+                                </div>
                                 <div style={{fontSize:12, whiteSpace:"pre-wrap"}}>{note.text}</div>
-                                <div style={{fontSize:10, color:C.textDim, marginTop:4}}>{new Date(note.timestamp).toLocaleString()}</div>
                               </div>
                             ))}
                           </div>
                         )}
+                        <div style={{display:"flex", gap:6, marginBottom:6}}>
+                          <button onClick={() => setNoteType("internal")}
+                            style={{fontSize:11, fontWeight:600, padding:"4px 10px", borderRadius:6, border:"none", cursor:"pointer",
+                              background: noteType==="internal" ? C.accent : C.surface2,
+                              color: noteType==="internal" ? "#000" : C.textMuted}}>
+                            🔒 Internal Note
+                          </button>
+                          <button onClick={() => setNoteType("customer")}
+                            style={{fontSize:11, fontWeight:600, padding:"4px 10px", borderRadius:6, border:"none", cursor:"pointer",
+                              background: noteType==="customer" ? "#dbeafe" : C.surface2,
+                              color: noteType==="customer" ? "#1d4ed8" : C.textMuted}}>
+                            📎 Customer Response
+                          </button>
+                        </div>
                         <div style={{display:"flex", gap:8}}>
                           <input value={newNote} onChange={e => setNewNote(e.target.value)}
-                            placeholder="Add a private note..."
+                            placeholder={noteType==="customer" ? "Paste customer's reply here..." : "Add a private note..."}
                             style={{...S.input, flex:1}}
-                            onKeyDown={e => { if (e.key==="Enter" && newNote.trim()) { addInternalNote(f.id, newNote.trim()); setNewNote(""); }}}/>
+                            onKeyDown={e => { if (e.key==="Enter" && newNote.trim()) { addInternalNote(f.id, newNote.trim(), noteType); setNewNote(""); }}}/>
                           <button style={{...S.btnSecondary, flexShrink:0}}
                             disabled={!newNote.trim() || savingNote}
-                            onClick={async () => { setSavingNote(true); await addInternalNote(f.id, newNote.trim()); setNewNote(""); setSavingNote(false); }}>
+                            onClick={async () => { setSavingNote(true); await addInternalNote(f.id, newNote.trim(), noteType); setNewNote(""); setSavingNote(false); }}>
                             Add
                           </button>
                         </div>
