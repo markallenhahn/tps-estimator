@@ -6362,11 +6362,14 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   const [companiesError,   setCompaniesError]   = useState("");
   const [feedback,     setFeedback]     = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(true);
-  const [feedbackFilter,  setFeedbackFilter]  = useState("all");
-  const [replyModal,      setReplyModal]      = useState(null); // { feedback item }
+  const [feedbackFilter,  setFeedbackFilter]  = useState("new");
+  const [selectedFeedback,setSelectedFeedback]= useState(null);
+  const [replyModal,      setReplyModal]      = useState(null);
   const [replyBody,       setReplyBody]       = useState("");
   const [replySending,    setReplySending]    = useState(false);
   const [replyError,      setReplyError]      = useState("");
+  const [newNote,         setNewNote]         = useState("");
+  const [savingNote,      setSavingNote]      = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -6476,13 +6479,21 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
     })();
   }, []);
 
-  const updateFeedbackStatus = async (id, status) => {
+  const updateFeedbackField = async (id, patch) => {
     await fetch("/api/admin?action=update-feedback&id=" + id, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(patch),
     });
-    setFeedback(prev => prev.map(f => f.id === id ? {...f, status} : f));
+    setFeedback(prev => prev.map(f => f.id === id ? {...f, ...patch} : f));
+    if (selectedFeedback?.id === id) setSelectedFeedback(prev => ({...prev, ...patch}));
+  };
+  const updateFeedbackStatus = async (id, status) => updateFeedbackField(id, { status });
+
+  const addInternalNote = async (id, text) => {
+    const item = feedback.find(f => f.id === id);
+    const notes = [...(item?.internal_notes || []), { text, timestamp: new Date().toISOString() }];
+    await updateFeedbackField(id, { internal_notes: notes });
   };
 
   const generateInvite = async () => {
@@ -6624,69 +6635,195 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
         </button>
       </section>
 
-      {/* ── Feedback ── */}
-      <section style={S.section}>
-        <h2 style={S.h2}>📝 Feedback ({feedback.length})</h2>
-        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
-          Bug reports and feature requests submitted by tenants.
-        </p>
-        {/* Filter */}
-        <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:12}}>
-          {["all","new","in_progress","resolved","closed"].map(f => (
-            <button key={f} onClick={() => setFeedbackFilter(f)}
-              style={{fontSize:11, fontWeight:600, padding:"4px 10px", borderRadius:6, border:"none", cursor:"pointer",
-                background: feedbackFilter===f ? C.accent : C.surface2,
-                color: feedbackFilter===f ? "#000" : C.textMuted}}>
-              {f === "all" ? "All" : f === "in_progress" ? "In Progress" : f.charAt(0).toUpperCase()+f.slice(1)}
-              {f === "new" ? ` (${feedback.filter(x=>x.status==="new").length})` : ""}
-            </button>
-          ))}
-        </div>
-        {feedbackLoading ? (
-          <p style={{fontSize:13, color:C.textMuted}}>Loading...</p>
-        ) : feedback.filter(f => feedbackFilter==="all" || f.status===feedbackFilter).length === 0 ? (
-          <p style={{fontSize:13, color:C.textMuted}}>No feedback yet.</p>
-        ) : feedback.filter(f => feedbackFilter==="all" || f.status===feedbackFilter).map(f => {
-          const typeColors = { bug:"#fef2f2", feature:"#eff6ff", question:"#f0fdf4", billing:"#fefce8" };
-          const typeIcons  = { bug:"🐛", feature:"💡", question:"❓", billing:"💳" };
-          return (
-            <div key={f.id} style={{padding:"12px 0", borderBottom:`1px solid ${C.border}`}}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, flexWrap:"wrap"}}>
-                <div style={{flex:1, minWidth:0}}>
-                  <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:4}}>
-                    <span style={{fontSize:11, fontWeight:700, background:typeColors[f.type]||C.surface2, borderRadius:4, padding:"1px 6px"}}>
-                      {typeIcons[f.type]} {f.type}
-                    </span>
-                    <span style={{fontSize:11, color:C.textMuted}}>
-                      {new Date(f.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div style={{fontWeight:700, fontSize:14, marginBottom:4}}>{f.title}</div>
-                  <div style={{fontSize:12, color:C.textMuted, whiteSpace:"pre-wrap"}}>{f.body}</div>
+      {/* ── Feedback Kanban ── */}
+      {(() => {
+        const STAGES = [
+          { key:"new",          label:"New",          color:"#3b82f6" },
+          { key:"acknowledged", label:"Acknowledged", color:"#8b5cf6" },
+          { key:"in_progress",  label:"In Progress",  color:"#f59e0b" },
+          { key:"resolved",     label:"Resolved",     color:"#10b981" },
+          { key:"closed",       label:"Closed",       color:"#6b7280" },
+        ];
+        const PRIORITIES = ["low","medium","high","urgent"];
+        const PRIORITY_COLORS = { low:"#6b7280", medium:"#3b82f6", high:"#f59e0b", urgent:"#ef4444" };
+        const TYPE_ICONS = { bug:"🐛", feature:"💡", question:"❓", billing:"💳" };
+
+        const openCount = feedback.filter(f => !["resolved","closed"].includes(f.status)).length;
+        const newCount  = feedback.filter(f => f.status === "new").length;
+        const urgentCount = feedback.filter(f => f.priority === "urgent" && !["resolved","closed"].includes(f.status)).length;
+
+        return (
+          <section style={S.section}>
+            <h2 style={S.h2}>📝 Feedback Pipeline</h2>
+
+            {/* Summary cards */}
+            <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(130px,1fr))", gap:10, marginBottom:20}}>
+              {[
+                { label:"Open",   value: openCount,   color:"#3b82f6" },
+                { label:"New",    value: newCount,     color:"#8b5cf6", badge: newCount > 0 },
+                { label:"Urgent", value: urgentCount,  color:"#ef4444", badge: urgentCount > 0 },
+                { label:"Total",  value: feedback.length, color:C.textMuted },
+              ].map(s => (
+                <div key={s.label} style={{background:C.surface2, borderRadius:8, padding:"10px 14px", border:`1px solid ${C.border}`, position:"relative"}}>
+                  {s.badge && <div style={{position:"absolute", top:6, right:6, width:8, height:8, borderRadius:"50%", background:"#ef4444"}}/>}
+                  <div style={{fontSize:22, fontWeight:800, color:s.color}}>{s.value}</div>
+                  <div style={{fontSize:11, color:C.textMuted}}>{s.label}</div>
                 </div>
-                <div style={{display:"flex", gap:6, flexShrink:0}}>
-                  <button style={{...S.btnSmall, fontSize:11}} onClick={() => { setReplyModal(f); setReplyBody(""); setReplyError(""); }}>
-                    ✉️ Reply
-                  </button>
-                  <select value={f.status}
-                    onChange={e => updateFeedbackStatus(f.id, e.target.value)}
-                    style={{fontSize:11, padding:"4px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:"pointer"}}>
-                    <option value="new">New</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                </div>
-              </div>
+              ))}
             </div>
-          );
-        })}
+
+            {feedbackLoading ? <p style={{fontSize:13, color:C.textMuted}}>Loading...</p> : (
+              isDesktopLayout ? (
+                /* ── Desktop kanban ── */
+                <div style={{display:"grid", gridTemplateColumns:`repeat(${STAGES.length}, minmax(0,1fr))`, gap:0, border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden"}}>
+                  {STAGES.map((stage, si) => {
+                    const cards = feedback.filter(f => f.status === stage.key);
+                    return (
+                      <div key={stage.key} style={{borderRight: si < STAGES.length-1 ? `1px solid ${C.border}` : "none", minWidth:0}}>
+                        <div style={{padding:"8px 10px", borderBottom:`1px solid ${C.border}`, background:C.surface2, textAlign:"center"}}>
+                          <span style={{fontSize:12, fontWeight:700, color:stage.color}}>{stage.label}</span>
+                          <div style={{fontSize:11, color:C.textMuted}}>{cards.length}</div>
+                        </div>
+                        {cards.map(f => (
+                          <div key={f.id} onClick={() => setSelectedFeedback(f)}
+                            style={{padding:"10px", borderBottom:`1px solid ${C.border}`, cursor:"pointer",
+                              background: selectedFeedback?.id===f.id ? "#fffbeb" : C.surface,
+                              borderLeft: f.priority==="urgent" ? "3px solid #ef4444" : f.priority==="high" ? "3px solid #f59e0b" : "none"}}>
+                            <div style={{display:"flex", alignItems:"center", gap:4, marginBottom:4, flexWrap:"wrap"}}>
+                              <span style={{fontSize:9}}>{TYPE_ICONS[f.type]}</span>
+                              <span style={{fontSize:9, fontWeight:700, color:PRIORITY_COLORS[f.priority||"medium"], background:C.surface2, borderRadius:3, padding:"1px 4px", textTransform:"uppercase"}}>{f.priority||"med"}</span>
+                            </div>
+                            <div style={{fontWeight:600, fontSize:12, marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.title}</div>
+                            <div style={{fontSize:11, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.submitter_name||"Unknown"}</div>
+                            <div style={{fontSize:10, color:C.textDim}}>{f.company_name||""}</div>
+                            <div style={{fontSize:10, color:C.textDim, marginTop:2}}>{new Date(f.created_at).toLocaleDateString()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* ── Mobile stage filter + list ── */
+                <div>
+                  <div style={{display:"flex", gap:6, overflowX:"auto", marginBottom:12, paddingBottom:4}}>
+                    {STAGES.map(s => (
+                      <button key={s.key} onClick={() => setFeedbackFilter(s.key)}
+                        style={{flexShrink:0, fontSize:11, fontWeight:600, padding:"5px 12px", borderRadius:20, border:"none", cursor:"pointer",
+                          background: feedbackFilter===s.key ? C.accent : C.surface2,
+                          color: feedbackFilter===s.key ? "#000" : C.textMuted}}>
+                        {s.label} ({feedback.filter(f=>f.status===s.key).length})
+                      </button>
+                    ))}
+                  </div>
+                  {feedback.filter(f=>f.status===feedbackFilter).map(f => (
+                    <div key={f.id} onClick={() => setSelectedFeedback(f)}
+                      style={{padding:"12px 14px", background:C.surface2, borderRadius:8, marginBottom:8,
+                        border:`1px solid ${C.border}`, cursor:"pointer",
+                        borderLeft: f.priority==="urgent" ? "3px solid #ef4444" : f.priority==="high" ? "3px solid #f59e0b" : `1px solid ${C.border}`}}>
+                      <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                        <div style={{flex:1, minWidth:0}}>
+                          <div style={{fontWeight:700, fontSize:13}}>{f.title}</div>
+                          <div style={{fontSize:11, color:C.textMuted}}>{f.submitter_name||"Unknown"} · {f.company_name||""}</div>
+                          <div style={{fontSize:11, color:C.textMuted}}>{new Date(f.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <span style={{fontSize:9, fontWeight:700, color:PRIORITY_COLORS[f.priority||"medium"], background:C.surface2, borderRadius:3, padding:"2px 6px", textTransform:"uppercase", flexShrink:0, marginLeft:8}}>{f.priority||"med"}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
+
+            {/* ── Detail panel ── */}
+            {selectedFeedback && (() => {
+              const f = selectedFeedback;
+              return createPortal(
+                <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+                  <div style={{background:C.surface, borderRadius:12, width:"100%", maxWidth:600, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+                    {/* Header */}
+                    <div style={{padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12}}>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontWeight:700, fontSize:16, marginBottom:4}}>{f.title}</div>
+                        <div style={{fontSize:12, color:C.textMuted}}>
+                          {TYPE_ICONS[f.type]} {f.type} · {new Date(f.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <button style={{...S.btnSmall, flexShrink:0}} onClick={() => setSelectedFeedback(null)}>✕ Close</button>
+                    </div>
+
+                    <div style={{padding:"16px 20px", display:"flex", flexDirection:"column", gap:16}}>
+                      {/* Submitter */}
+                      <div style={{background:C.surface2, borderRadius:8, padding:"10px 14px"}}>
+                        <div style={{fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6}}>Submitted By</div>
+                        <div style={{fontWeight:600, fontSize:14}}>{f.submitter_name || "Unknown"}</div>
+                        {f.submitter_email && <div style={{fontSize:12, color:C.accent}}>{f.submitter_email}</div>}
+                        {f.company_name && <div style={{fontSize:12, color:C.textMuted}}>{f.company_name}</div>}
+                      </div>
+
+                      {/* Description */}
+                      <div>
+                        <div style={{fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6}}>Description</div>
+                        <div style={{fontSize:13, whiteSpace:"pre-wrap", color:C.text}}>{f.body}</div>
+                      </div>
+
+                      {/* Priority + Stage */}
+                      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
+                        <label style={S.formLabel}>Priority
+                          <select value={f.priority||"medium"} onChange={e => updateFeedbackField(f.id, {priority:e.target.value})} style={S.input}>
+                            {PRIORITIES.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase()+p.slice(1)}</option>)}
+                          </select>
+                        </label>
+                        <label style={S.formLabel}>Stage
+                          <select value={f.status} onChange={e => updateFeedbackField(f.id, {status:e.target.value})} style={S.input}>
+                            {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                          </select>
+                        </label>
+                      </div>
+
+                      {/* Reply button */}
+                      <button style={S.btnPrimary} onClick={() => { setReplyModal(f); setReplyBody(""); setReplyError(""); }}>
+                        ✉️ Reply to {f.submitter_name||"User"}
+                      </button>
+
+                      {/* Internal notes */}
+                      <div>
+                        <div style={{fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8}}>Internal Notes</div>
+                        {(f.internal_notes||[]).length === 0 ? (
+                          <p style={{fontSize:12, color:C.textMuted, marginBottom:8}}>No notes yet.</p>
+                        ) : (
+                          <div style={{marginBottom:10}}>
+                            {[...(f.internal_notes||[])].reverse().map((note, i) => (
+                              <div key={i} style={{background:C.surface2, borderRadius:6, padding:"8px 12px", marginBottom:6}}>
+                                <div style={{fontSize:12, whiteSpace:"pre-wrap"}}>{note.text}</div>
+                                <div style={{fontSize:10, color:C.textDim, marginTop:4}}>{new Date(note.timestamp).toLocaleString()}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{display:"flex", gap:8}}>
+                          <input value={newNote} onChange={e => setNewNote(e.target.value)}
+                            placeholder="Add a private note..."
+                            style={{...S.input, flex:1}}
+                            onKeyDown={e => { if (e.key==="Enter" && newNote.trim()) { addInternalNote(f.id, newNote.trim()); setNewNote(""); }}}/>
+                          <button style={{...S.btnSecondary, flexShrink:0}}
+                            disabled={!newNote.trim() || savingNote}
+                            onClick={async () => { setSavingNote(true); await addInternalNote(f.id, newNote.trim()); setNewNote(""); setSavingNote(false); }}>
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>,
+              document.body);
+            })()}
 
         {/* Reply modal */}
-        {replyModal && (
+        {replyModal && createPortal(
           <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
             <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:520, boxShadow:"0 8px 32px rgba(0,0,0,0.18)", maxHeight:"90vh", overflowY:"auto"}}>
-              <h2 style={{...S.h2, marginTop:0}}>✉️ Reply to Feedback</h2>
+              <h2 style={{...S.h2, marginTop:0}}>✉️ Reply to {replyModal.submitter_name||"User"}</h2>
               <div style={{background:C.surface2, borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:12, color:C.textMuted}}>
                 <div style={{fontWeight:700, color:C.text, marginBottom:4}}>{replyModal.title}</div>
                 <div style={{whiteSpace:"pre-wrap"}}>{replyModal.body}</div>
@@ -6723,7 +6860,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                       const data = await res.json();
                       if (!res.ok) { setReplyError(data.error || "Failed to send."); }
                       else {
-                        setFeedback(prev => prev.map(f => f.id===replyModal.id ? {...f, status:"in_progress"} : f));
+                        updateFeedbackField(replyModal.id, {status:"acknowledged"});
                         setReplyModal(null);
                       }
                     } catch(e) { setReplyError(e.message); }
@@ -6735,8 +6872,10 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
               </div>
             </div>
           </div>
-        )}
-      </section>
+        , document.body)}
+          </section>
+        );
+      })()}
     </div>
   );
 }
@@ -9976,17 +10115,34 @@ function HelpView({ tFetch, currentTenantId, session, userRole }) {
     if (!formBody.trim())  { setFormError("Please describe the issue or request."); return; }
     setSubmitting(true); setFormError("");
     try {
+      // Get submitter info from session/profile
+      const profileRes = await tFetch("profiles?id=eq." + session?.user?.id + "&select=first_name,last_name,email");
+      const profileData = await profileRes.json();
+      const profile = Array.isArray(profileData) && profileData[0];
+      const submitterName  = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.email || "";
+      const submitterEmail = profile?.email || session?.user?.email || "";
+
+      // Get company name
+      const tenantRes = await tFetch("tenants?id=eq." + currentTenantId + "&select=data");
+      const tenantData2 = await tenantRes.json();
+      const companyName = tenantData2?.[0]?.data?.companyName || "";
+
       const res = await tFetch("feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id:        Date.now(),
-          tenant_id: currentTenantId,
-          user_id:   session?.user?.id,
-          type:      formType,
-          title:     formTitle.trim(),
-          body:      formBody.trim(),
-          status:    "new",
+          id:              Date.now(),
+          tenant_id:       currentTenantId,
+          user_id:         session?.user?.id,
+          type:            formType,
+          title:           formTitle.trim(),
+          body:            formBody.trim(),
+          status:          "new",
+          priority:        "medium",
+          internal_notes:  [],
+          submitter_name:  submitterName,
+          submitter_email: submitterEmail,
+          company_name:    companyName,
         }),
       });
       if (!res.ok) throw new Error("Failed to submit.");

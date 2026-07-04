@@ -156,13 +156,19 @@ export default async function handler(req, res) {
     if (!callerId) return res.status(401).json({ error: "Missing auth." });
     if (!await isPlatformAdmin(serviceKey, callerId)) return res.status(403).json({ error: "Platform admins only." });
     const id = req.query.id;
-    const { status } = req.body || {};
-    if (!id || !status) return res.status(400).json({ error: "id and status required." });
+    if (!id) return res.status(400).json({ error: "id required." });
+    // Allow patching any subset of allowed fields
+    const { status, priority, internal_notes } = req.body || {};
+    const patch = {};
+    if (status)         patch.status         = status;
+    if (priority)       patch.priority       = priority;
+    if (internal_notes) patch.internal_notes = internal_notes;
+    if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Nothing to update." });
     try {
       await fetch(SUPABASE_URL + "/rest/v1/feedback?id=eq." + id, {
         method: "PATCH",
         headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(patch),
       });
       return res.status(200).json({ success: true });
     } catch(e) { return res.status(500).json({ error: e.message }); }
