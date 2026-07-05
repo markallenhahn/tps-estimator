@@ -2354,7 +2354,7 @@ ${email}`:""}`;
   // ── PDF via jsPDF ────────────────────────────────────────────────────────
   const generatePDF = async (skipSave=false) => {
     if (!currentJob.areas || currentJob.areas.length === 0) { alert("No line items on this job yet."); return; }
-    setPdfLoading(true);
+    if (!skipSave) setPdfLoading(true);
     try {
       await new Promise((resolve, reject) => {
         if (window.jspdf) { resolve(); return; }
@@ -8847,7 +8847,7 @@ ${owner}${phone ? `\n${phone}` : ""}${email ? `\n${email}` : ""}`;
   // ── PDF via jsPDF (pure browser, no API) ──────────────────────────────────
   const generatePDF = async (clientSigOverride, signedAtOverride, printNameOverride, skipSave=false) => {
     if (currentJob.areas.length === 0) { alert("Add at least one line item before generating a PDF."); return; }
-    setPdfLoading(true);
+    if (!skipSave) setPdfLoading(true);
 
     try {
       // Dynamically load jsPDF from CDN
@@ -9118,7 +9118,7 @@ ${a}`.notes : "");
       alert("PDF generation failed: " + e.message);
       return null;
     } finally {
-      setPdfLoading(false);
+      if (!skipSave) setPdfLoading(false);
     }
   };
 
