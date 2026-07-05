@@ -8636,7 +8636,23 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
             </div>
             <div style={{fontSize:11, color:C.textMuted, padding:"6px 10px", textAlign:"center", borderBottom:`1px solid ${C.border}`}}>{c.jobs.length}{canSeeAllJobs ? " · " + formatCurrency(c.total) : ""}</div>
             <div style={{minHeight:40}}>
-              {c.jobs.map(j => <PipelineCard key={j.id} job={j} draggable={canSeeAllJobs || isCrewLead}/>)}
+              {(() => {
+                const isPaid = c.status === "paid";
+                const pagedJobs = isPaid ? c.jobs.slice(0, paidPage * PAID_PAGE_SIZE) : c.jobs;
+                return (<>
+                  {pagedJobs.map(j => <PipelineCard key={j.id} job={j} draggable={canSeeAllJobs || isCrewLead}/>)}
+                  {isPaid && c.jobs.length > paidPage * PAID_PAGE_SIZE && (
+                    <button style={{...S.btnSecondary, width:"100%", fontSize:11, margin:"4px 0"}}
+                      onClick={() => setPaidPage(p => p+1)}>
+                      ▾ {Math.min(PAID_PAGE_SIZE, c.jobs.length - paidPage * PAID_PAGE_SIZE)} more
+                    </button>
+                  )}
+                  {isPaid && paidPage > 1 && (
+                    <button style={{...S.btnSmall, width:"100%", fontSize:10, color:C.textMuted}}
+                      onClick={() => setPaidPage(1)}>▴ Collapse</button>
+                  )}
+                </>);
+              })()}
             </div>
           </div>
         ))}
