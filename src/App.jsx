@@ -8296,13 +8296,14 @@ ${pdfLink}` ;
       const MILESTONES = [3, 7, 14, 21, 30];
       const milestone = [...MILESTONES].reverse().find(m => daysPast >= m);
       if (milestone) {
-        // Check if reminder already sent at this milestone
-        const sentAt = j.lastReminderSentAt ? new Date(j.lastReminderSentAt) : null;
-        const sentDaysAgo = sentAt ? Math.floor((Date.now() - sentAt.getTime()) / 86400000) : null;
-        // Find next milestone after the one we sent at
-        const sentMilestone = sentAt ? [...MILESTONES].reverse().find(m => (daysPast - sentDaysAgo) >= m) : null;
-        const alreadySentForCurrent = sentMilestone !== null && sentMilestone >= milestone;
-        if (!alreadySentForCurrent) {
+        // Show if no reminder sent yet, OR reminder was sent before current milestone
+        const lastSentAt = j.lastReminderSentAt ? new Date(j.lastReminderSentAt) : null;
+        const daysPastWhenSent = lastSentAt
+          ? Math.floor((lastSentAt.getTime() - new Date(j.invoiceSentDate).getTime()) / 86400000)
+          : -1;
+        const milestoneWhenSent = [...MILESTONES].reverse().find(m => daysPastWhenSent >= m) || 0;
+        // Show card if current milestone is higher than the one when reminder was last sent
+        if (milestone > milestoneWhenSent) {
           actionItems.push({ job:j, label: `Invoice ${daysPast} days past due`, type:"overdue", daysPast, urgent: daysPast >= 14 });
         }
       }
