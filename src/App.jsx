@@ -2172,34 +2172,48 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       , document.body)}
 
       {/* ── AUDIT LOG ── */}
-      {canSeeAllJobs && Array.isArray(currentJob.auditLog) && currentJob.auditLog.length > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Audit Log</h2>
-          <div style={{fontSize:12, color:C.textMuted, marginBottom:8}}>Key changes made to this job.</div>
-          {[...currentJob.auditLog].reverse().map((entry, i) => {
-            const actionLabels = {
-              status_change:    "Status changed",
-              line_item_added:  "Line item added",
-              line_item_removed:"Line item removed",
-              price_override:   "Price override",
-              markup_changed:   "Markup changed",
-              discount_changed: "Discount changed",
-            };
-            return (
-              <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"7px 0", borderBottom:`1px solid ${C.border}`, gap:8}}>
-                <div>
-                  <div style={{fontSize:13, fontWeight:600}}>{actionLabels[entry.action] || entry.action}</div>
-                  <div style={{fontSize:11, color:C.textMuted}}>{entry.detail}</div>
-                  <div style={{fontSize:11, color:C.textMuted}}>{entry.userName || "Unknown"}</div>
-                </div>
-                <div style={{fontSize:11, color:C.textMuted, flexShrink:0, textAlign:"right"}}>
-                  {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : ""}
-                </div>
-              </div>
-            );
-          })}
-        </section>
-      )}
+      {canSeeAllJobs && Array.isArray(currentJob.auditLog) && currentJob.auditLog.length > 0 && (() => {
+        const actionLabels = {
+          status_change:    "Status changed",
+          line_item_added:  "Line item added",
+          line_item_removed:"Line item removed",
+          price_override:   "Price override",
+          markup_changed:   "Markup changed",
+          discount_changed: "Discount changed",
+        };
+        const sorted = [...currentJob.auditLog].reverse();
+        const latest = sorted[0];
+        const rest   = sorted.slice(1);
+        const AuditRow = ({entry, i}) => (
+          <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"7px 0", borderBottom:`1px solid ${C.border}`, gap:8}}>
+            <div>
+              <div style={{fontSize:13, fontWeight:600}}>{actionLabels[entry.action] || entry.action}</div>
+              <div style={{fontSize:11, color:C.textMuted}}>{entry.detail}</div>
+              <div style={{fontSize:11, color:C.textMuted}}>{entry.userName || "Unknown"}</div>
+            </div>
+            <div style={{fontSize:11, color:C.textMuted, flexShrink:0, textAlign:"right"}}>
+              {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : ""}
+            </div>
+          </div>
+        );
+        return (
+          <section style={S.section}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+              <h2 style={{...S.h2, margin:0}}>Audit Log</h2>
+              <span style={{fontSize:11, color:C.textMuted}}>{currentJob.auditLog.length} event{currentJob.auditLog.length!==1?"s":""}</span>
+            </div>
+            <AuditRow entry={latest} i={0}/>
+            {rest.length > 0 && (
+              <details style={{marginTop:4}}>
+                <summary style={{fontSize:12, color:C.accent, cursor:"pointer", padding:"4px 0", listStyle:"none", userSelect:"none"}}>
+                  ▸ Show {rest.length} older event{rest.length!==1?"s":""}
+                </summary>
+                {rest.map((entry, i) => <AuditRow key={i+1} entry={entry} i={i+1}/>)}
+              </details>
+            )}
+          </section>
+        );
+      })()}
 
       {lightbox && lightbox.type === 'photo' && (
         <div style={S.lightboxOverlay} onClick={() => setLightbox(null)}>
