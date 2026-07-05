@@ -2231,6 +2231,213 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   );
 }
 
+// ─── Standalone Invoice PDF Generator ────────────────────────────────────────
+// Used by both InvoiceView and HomeView (for text reminders)
+async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid=false, paymentDate="", paymentMethod="" }) {
+  const CS_NAME  = companySettings?.name  || "";
+  const CS_PHONE = formatPhone(companySettings?.phone || "");
+
+  await new Promise((resolve, reject) => {
+    if (window.jspdf) { resolve(); return; }
+    if (document.querySelector('script[src*="jspdf"]')) {
+      const wait = setInterval(() => { if (window.jspdf) { clearInterval(wait); resolve(); } }, 100);
+      setTimeout(() => { clearInterval(wait); reject(new Error("jsPDF load timeout")); }, 10000);
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("Failed to load jsPDF"));
+    const timeout = setTimeout(() => reject(new Error("jsPDF load timeout")), 10000);
+    s.addEventListener("load", () => clearTimeout(timeout));
+    document.head.appendChild(s);
+  });
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:"pt", format:"letter" });
+  const PW = 612; const ML = 45; const MR = 45;
+  let y = 36;
+  const usable = PW - ML - MR;
+  const _brand = getBrand(companySettings);
+  const GOLD   = _brand.accentRgb;
+  const BLACK  = [17,17,17];
+  const DGRAY  = [85,85,85];
+  const LGRAY  = [244,244,244];
+  const MGRAY  = [221,221,221];
+  const WHITE  = [255,255,255];
+  const HDRBLK = _brand.headerRgb;
+  const GREEN  = [34,197,94];
+
+  const LOGO_MAX_W = 260, LOGO_MAX_H = 90;
+  if (companySettings?.logoB64) {
+    try {
+      const logoDataUrl = "data:image/png;base64," + companySettings.logoB64;
+      await new Promise((res) => {
+        const im = new Image();
+        im.onload = () => {
+          const ratio = Math.min(LOGO_MAX_W / im.naturalWidth, LOGO_MAX_H / im.naturalHeight);
+          const logoW = im.naturalWidth * ratio;
+          const logoH = im.naturalHeight * ratio;
+          doc.addImage(im, "PNG", (PW - logoW) / 2, y, logoW, logoH);
+          y += logoH + 20;
+          res();
+        };
+        im.onerror = () => { y += LOGO_MAX_H + 20; res(); };
+        im.src = logoDataUrl;
+      });
+    } catch(e) { y += LOGO_MAX_H + 20; }
+  } else {
+    doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+    doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
+    y += LOGO_MAX_H + 20;
+  }
+
+  doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+  doc.text(CS_NAME + "  ·  " + CS_PHONE, PW/2, y, {align:"center"});
+  y += 20;
+  doc.setDrawColor(...GOLD); doc.setLineWidth(2);
+  doc.line(ML, y, PW-MR, y);
+  y += 16;
+
+  if (isPaid) {
+    doc.setFillColor(...GREEN);
+    doc.roundedRect(ML, y-2, usable, 28, 4, 4, "F");
+    doc.setFontSize(14); doc.setFont("helvetica","bold"); doc.setTextColor(255,255,255);
+    doc.text("** PAID IN FULL **", PW/2, y+17, {align:"center"});
+    y += 36;
+  }
+  y += 4;
+
+  const invNum = (job.estimateNum||job.id||"").toString().replace("EST-","INV-");
+  const cityLine = [job.city, job.state, job.zip].filter(Boolean).join(", ");
+  const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
+  const subtotal = (job.areas||[]).reduce((s,a) => s + calcLineAmt(a, allRates), 0);
+  const discount = Number(job.discount||0);
+  const discountAmt = subtotal * (discount/100);
+  const total = job.priceOverride !== undefined && job.priceOverride !== null && job.priceOverride !== ""
+    ? Number(job.priceOverride)
+    : subtotal - discountAmt;
+
+  const blockH = 84;
+  doc.setFillColor(...LGRAY); doc.setDrawColor(...MGRAY); doc.setLineWidth(0.5);
+  doc.roundedRect(ML, y, usable, blockH, 3, 3, "FD");
+  let cy = y + 13;
+  doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
+  doc.text("BILL TO", ML+10, cy); cy += 13;
+  doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+  doc.text(job.clientName || "—", ML+10, cy); cy += 13;
+  doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...BLACK);
+  if (job.address)    { doc.text(job.address,    ML+10, cy); cy += 12; }
+  if (cityLine)       { doc.text(cityLine,        ML+10, cy); cy += 12; }
+  if (job.clientPhone){ doc.text(job.clientPhone, ML+10, cy); }
+
+  const rx = PW-MR-10;
+  let ry = y + 13;
+  doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
+  doc.text("DATE", rx, ry, {align:"right"}); ry += 13;
+  doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+  doc.text(job.invoiceSentDate ? new Date(job.invoiceSentDate+"T12:00:00").toLocaleDateString() : job.date||"", rx, ry, {align:"right"}); ry += 20;
+  doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
+  doc.text("INVOICE #", rx, ry, {align:"right"}); ry += 13;
+  doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+  doc.text(invNum, rx, ry, {align:"right"});
+  if (isPaid && paymentDate) {
+    ry += 20;
+    doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
+    doc.text("PAYMENT DATE", rx, ry, {align:"right"}); ry += 13;
+    doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(...GREEN);
+    doc.text(paymentDate + " — " + paymentMethod, rx, ry, {align:"right"});
+  }
+  y += blockH + 14;
+
+  const cols = [210, 130, 110, 72];
+  const hdrs = ["Description", "Service", "Quantity", "Amount"];
+  const hdrH = 24;
+  doc.setFillColor(...HDRBLK);
+  doc.rect(ML, y, usable, hdrH, "F");
+  doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...GOLD);
+  let cx = ML;
+  hdrs.forEach((h,i) => {
+    const right = i >= 2;
+    doc.text(h, right ? cx+cols[i]-6 : cx+6, y+16, {align: right?"right":"left"});
+    cx += cols[i];
+  });
+  y += hdrH;
+
+  (job.areas||[]).forEach((a,idx) => {
+    const svc  = allRates[a.serviceType];
+    const amt  = calcLineAmt(a, allRates);
+    const qty  = Number(a.measurement||0);
+    const tons = isTonMode(a.serviceType, allRates) ? calcTons(qty, a.depthIn??(svc?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(svc?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(svc?.tonsFormula??DEFAULT_TONS_FORMULA)) : null;
+    const qtyStr = tons !== null
+      ? qty.toLocaleString() + " sq ft
+" + tons.toFixed(2) + " tons"
+      : qty.toLocaleString() + (svc?.unit==="linft" ? " lin ft" : " sq ft");
+    const nameArr = doc.splitTextToSize(a.name, cols[0]-12);
+    const qtyParts = qtyStr.split("
+");
+    const rh = Math.max(nameArr.length, qtyParts.length) * 13 + 10;
+    doc.setFillColor(...(idx%2===0 ? WHITE : LGRAY));
+    doc.rect(ML, y, usable, rh, "F");
+    doc.setDrawColor(...MGRAY); doc.setLineWidth(0.25);
+    doc.line(ML, y+rh, ML+usable, y+rh);
+    doc.setFontSize(9); doc.setTextColor(...BLACK);
+    cx = ML;
+    doc.setFont("helvetica","bold"); doc.text(nameArr[0], cx+6, y+15);
+    if (nameArr[1]) { doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY); doc.text(nameArr[1], cx+6, y+28); doc.setTextColor(...BLACK); }
+    cx += cols[0];
+    doc.setFont("helvetica","normal"); doc.text(svc?.label||"", cx+6, y+15);
+    cx += cols[1];
+    doc.text(qtyParts[0], cx+cols[2]-6, y+15, {align:"right"});
+    if (qtyParts[1]) { doc.setTextColor(...DGRAY); doc.text(qtyParts[1], cx+cols[2]-6, y+28, {align:"right"}); doc.setTextColor(...BLACK); }
+    cx += cols[2];
+    doc.setFont("helvetica","bold"); doc.text(formatCurrency(amt), cx+cols[3]-6, y+15, {align:"right"});
+    y += rh;
+  });
+  y += 8;
+
+  if (discount > 0) {
+    doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(220,38,38);
+    doc.text("Discount (" + discount + "%)", ML+10, y+12);
+    doc.text("-" + formatCurrency(discountAmt), PW-MR-6, y+12, {align:"right"});
+    y += 18;
+  } else { y += 8; }
+
+  const totalBarH = 30;
+  doc.setFillColor(...HDRBLK);
+  doc.rect(ML, y, usable, totalBarH, "F");
+  doc.setDrawColor(...(isPaid ? GREEN : GOLD)); doc.setLineWidth(1);
+  doc.line(ML, y, ML+usable, y);
+  doc.setFontSize(12); doc.setFont("helvetica","bold");
+  doc.setTextColor(...(isPaid ? GREEN : GOLD));
+  doc.text(isPaid ? "TOTAL PAID" : "TOTAL DUE", ML+10, y+20);
+  doc.text(formatCurrency(total), PW-MR-6, y+20, {align:"right"});
+  y += totalBarH + 16;
+
+  if (isPaid) {
+    doc.setFillColor(220,255,220);
+    doc.setDrawColor(...GREEN); doc.setLineWidth(0.5);
+    doc.roundedRect(ML, y, usable, 30, 3, 3, "FD");
+    doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(...GREEN);
+    doc.text("Payment received on " + paymentDate + " via " + paymentMethod + "  —  Thank you!", PW/2, y+19, {align:"center"});
+    y += 44;
+  }
+
+  y += 8;
+  if (!isPaid) {
+    const closingLines = ["Please make checks payable to "" + CS_NAME + "".", "", "Thank you for your business!"];
+    doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
+    closingLines.forEach(line => {
+      if (line === "") { y += 5; return; }
+      const wrapped = doc.splitTextToSize(line, usable);
+      wrapped.forEach(l => { doc.text(l, PW/2, y, {align:"center"}); y += 11; });
+    });
+  }
+
+  return doc;
+}
+
+
 // ─── Invoice View ─────────────────────────────────────────────────────────────
 function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessToken, tenantId }) {
   const CS_NAME = companySettings?.name || "";
@@ -2375,221 +2582,18 @@ ${email}`:""}`;
     if (!currentJob.areas || currentJob.areas.length === 0) { alert("No line items on this job yet."); return; }
     if (!skipSave) setPdfLoading(true);
     try {
-      await new Promise((resolve, reject) => {
-        if (window.jspdf) { resolve(); return; }
-        if (document.querySelector('script[src*="jspdf"]')) {
-          const wait = setInterval(() => { if (window.jspdf) { clearInterval(wait); resolve(); } }, 100);
-          setTimeout(() => { clearInterval(wait); reject(new Error("jsPDF load timeout")); }, 10000);
-          return;
-        }
-        const s = document.createElement("script");
-        s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-        s.onload = resolve;
-        s.onerror = () => reject(new Error("Failed to load jsPDF"));
-        const timeout = setTimeout(() => reject(new Error("jsPDF load timeout")), 10000);
-        s.addEventListener("load", () => clearTimeout(timeout));
-        document.head.appendChild(s);
+      const doc = await generateInvoicePDFDoc({
+        job: currentJob,
+        companySettings,
+        rates,
+        isPaid,
+        paymentDate,
+        paymentMethod,
       });
-
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({ unit:"pt", format:"letter" });
-      const PW = 612; const ML = 45; const MR = 45;
-      let y = 36;
-      const usable = PW - ML - MR;
-      const _brand = getBrand(companySettings);
-      const GOLD   = _brand.accentRgb;
-      const BLACK  = [17,17,17];
-      const DGRAY  = [85,85,85];
-      const LGRAY  = [244,244,244];
-      const MGRAY  = [221,221,221];
-      const WHITE  = [255,255,255];
-      const HDRBLK = _brand.headerRgb;
-      const GREEN  = [34,197,94];
-
-      // Logo or company name fallback
-      const LOGO_MAX_W = 260, LOGO_MAX_H = 90; // pt — fixed max for every tenant
-      if (companySettings?.logoB64) {
-        try {
-          const logoDataUrl2 = "data:image/png;base64," + companySettings.logoB64;
-          // Use a browser Image element — reliable for any file size / format
-          await new Promise((res) => {
-            const im = new Image();
-            im.onload = () => {
-              // Scale to fill the box — both up AND down, preserving aspect ratio
-              const ratio2 = Math.min(LOGO_MAX_W / im.naturalWidth, LOGO_MAX_H / im.naturalHeight);
-              const logoW2 = im.naturalWidth  * ratio2;
-              const logoH2 = im.naturalHeight * ratio2;
-              doc.addImage(im, "PNG", (PW - logoW2) / 2, y, logoW2, logoH2);
-              y += logoH2 + 20;
-              res();
-            };
-            im.onerror = () => res(); // skip gracefully on bad image
-            im.src = logoDataUrl2;
-          });
-        } catch(e){ y += LOGO_MAX_H + 20; }
-      } else {
-        // No logo — render company name large
-        doc.setFontSize(28); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
-        doc.text(CS_NAME || "Your Company", PW/2, y + 52, { align:"center" });
-        y += LOGO_MAX_H + 20;
-      }
-
-      // Company sub-line
-      doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
-      doc.text(CS_NAME + "  \u00b7  " + CS_PHONE, PW/2, y, {align:"center"});
-      y += 20;
-
-      // Gold rule
-      doc.setDrawColor(...GOLD); doc.setLineWidth(2);
-      doc.line(ML, y, PW-MR, y);
-      y += 16;
-
-      // PAID stamp or INVOICE header
-      if (isPaid) {
-        // Green PAID banner
-        doc.setFillColor(...GREEN);
-        doc.roundedRect(ML, y-2, usable, 28, 4, 4, "F");
-        doc.setFontSize(14); doc.setFont("helvetica","bold"); doc.setTextColor(255,255,255);
-        doc.text("** PAID IN FULL **", PW/2, y+17, {align:"center"});
-        y += 36;
-      }
-
-      y += 4;
-
-      // Client / date block
-      const blockH = 84;
-      doc.setFillColor(...LGRAY); doc.setDrawColor(...MGRAY); doc.setLineWidth(0.5);
-      doc.roundedRect(ML, y, usable, blockH, 3, 3, "FD");
-
-      let cy = y + 13;
-      doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
-      doc.text("BILL TO", ML+10, cy); cy += 13;
-      doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
-      doc.text(currentJob.clientName || "\u2014", ML+10, cy); cy += 13;
-      doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(...BLACK);
-      if (currentJob.address)    { doc.text(currentJob.address,    ML+10, cy); cy += 12; }
-      if (cityLine)              { doc.text(cityLine,              ML+10, cy); cy += 12; }
-      if (currentJob.clientPhone){ doc.text(currentJob.clientPhone, ML+10, cy); }
-
-      const rx = PW-MR-10;
-      let ry = y + 13;
-      doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
-      doc.text("DATE", rx, ry, {align:"right"}); ry += 13;
-      doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
-      doc.text(currentJob.invoiceSentDate ? new Date(currentJob.invoiceSentDate+"T12:00:00").toLocaleDateString() : currentJob.date, rx, ry, {align:"right"}); ry += 20;
-      doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
-      doc.text("INVOICE #", rx, ry, {align:"right"}); ry += 13;
-      doc.setFontSize(10); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
-      doc.text(invNum, rx, ry, {align:"right"});
-      if (isPaid) {
-        ry += 20;
-        doc.setFontSize(7); doc.setFont("helvetica","bold"); doc.setTextColor(...DGRAY);
-        doc.text("PAYMENT DATE", rx, ry, {align:"right"}); ry += 13;
-        doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(...GREEN);
-        doc.text(paymentDate + " — " + paymentMethod, rx, ry, {align:"right"});
-      }
-      y += blockH + 14;
-
-      // Line items
-      const cols = [210, 130, 110, 72];
-      const hdrs = ["Description", "Service", "Quantity", "Amount"];
-      const hdrH = 24;
-      doc.setFillColor(...HDRBLK);
-      doc.rect(ML, y, usable, hdrH, "F");
-      doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...GOLD);
-      let cx = ML;
-      hdrs.forEach((h,i) => {
-        const right = i >= 2;
-        doc.text(h, right ? cx+cols[i]-6 : cx+6, y+16, {align: right?"right":"left"});
-        cx += cols[i];
-      });
-      y += hdrH;
-
-      (currentJob.areas||[]).forEach((a,idx) => {
-        const svc  = rates[a.serviceType];
-        const amt  = calcLineAmt(a,rates);
-        const qty  = Number(a.measurement||0);
-        const tons = isTonMode(a.serviceType,rates) ? calcTons(qty, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)) : null;
-        const qtyStr = tons !== null
-          ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
-          : qty.toLocaleString() + (svc?.unit==="linft" ? " lin ft" : " sq ft");
-        const nameArr = doc.splitTextToSize(a.name + (a.notes ? `
-${a}`.notes : ""), cols[0]-12);
-        const qtyParts = qtyStr.split("\n");
-        const rh = Math.max(nameArr.length, qtyParts.length) * 13 + 10;
-
-        doc.setFillColor(...(idx%2===0 ? WHITE : LGRAY));
-        doc.rect(ML, y, usable, rh, "F");
-        doc.setDrawColor(...MGRAY); doc.setLineWidth(0.25);
-        doc.line(ML, y+rh, ML+usable, y+rh);
-
-        doc.setFontSize(9); doc.setTextColor(...BLACK);
-        cx = ML;
-        doc.setFont("helvetica","bold"); doc.text(nameArr[0], cx+6, y+15);
-        if (nameArr[1]) { doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY); doc.text(nameArr[1], cx+6, y+28); doc.setTextColor(...BLACK); }
-        cx += cols[0];
-        doc.setFont("helvetica","normal"); doc.text(svc?.label||"", cx+6, y+15);
-        cx += cols[1];
-        doc.text(qtyParts[0], cx+cols[2]-6, y+15, {align:"right"});
-        if (qtyParts[1]) { doc.setTextColor(...DGRAY); doc.text(qtyParts[1], cx+cols[2]-6, y+28, {align:"right"}); doc.setTextColor(...BLACK); }
-        cx += cols[2];
-        doc.setFont("helvetica","bold"); doc.text(formatCurrency(amt), cx+cols[3]-6, y+15, {align:"right"});
-        y += rh;
-      });
-
-      y += 8;
-
-      // Discount row
-      if (discount > 0) {
-        doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(220,38,38);
-        doc.text("Discount (" + discount + "%)", ML+10, y+12);
-        doc.text("-" + formatCurrency(discountAmt), PW-MR-6, y+12, {align:"right"});
-        y += 18;
-      } else {
-        y += 8;
-      }
-
-      // Total bar
-      const totalBarH = 30;
-      doc.setFillColor(...HDRBLK);
-      doc.rect(ML, y, usable, totalBarH, "F");
-      doc.setDrawColor(...(isPaid ? GREEN : GOLD)); doc.setLineWidth(1);
-      doc.line(ML, y, ML+usable, y);
-      doc.setFontSize(12); doc.setFont("helvetica","bold");
-      doc.setTextColor(...(isPaid ? GREEN : GOLD));
-      doc.text(isPaid ? "TOTAL PAID" : "TOTAL DUE", ML+10, y+20);
-      doc.text(formatCurrency(total), PW-MR-6, y+20, {align:"right"});
-      y += totalBarH + 16;
-
-      // Payment info for paid invoices
-      if (isPaid) {
-        doc.setFillColor(34,197,94,30);
-        doc.setFillColor(220,255,220);
-        doc.setDrawColor(...GREEN); doc.setLineWidth(0.5);
-        doc.roundedRect(ML, y, usable, 30, 3, 3, "FD");
-        doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(...GREEN);
-        doc.text("Payment received on " + paymentDate + " via " + paymentMethod + "  —  Thank you!", PW/2, y+19, {align:"center"});
-        y += 44;
-      }
-
-      // Closing language (due invoices only)
-      y += 8;
-      if (!isPaid) {
-        const closingLines = [
-          "Please make checks payable to \"" + CS_NAME + "\".",
-          "",
-          "Thank you for your business!",
-        ];
-        doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
-        closingLines.forEach(line => {
-          if (line === "") { y += 5; return; }
-          const wrapped = doc.splitTextToSize(line, usable);
-          wrapped.forEach(l => { doc.text(l, PW/2, y, {align:"center"}); y += 11; });
-        });
-      }
-
-      // Save
-      const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20) + "_" + (isPaid ? "PaidInvoice" : "Invoice") + "_" + invNum + ".pdf";
+      if (!doc) return null;
+      const filename = (companySettings?.name||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20)
+        + "_" + (isPaid ? "PaidInvoice" : "Invoice") + "_"
+        + (currentJob.estimateNum||currentJob.id||"").toString().replace("EST-","INV-") + ".pdf";
       if (!skipSave) {
         doc.save(filename);
       }
@@ -8179,14 +8183,40 @@ ${email}`:""}` ;
         if (!reminderPhone.trim()) { setReminderError("Phone required."); setSendingReminder(null); return; }
         let pdfLink = job.invoicePdfUrl || null;
         if (!pdfLink) {
-          setReminderError("No invoice PDF found. Please send the invoice via Text from the Invoice tab first to generate a link, then retry the reminder.");
-          setSendingReminder(null);
-          return;
+          // Generate PDF and upload to storage
+          try {
+            const doc = await generateInvoicePDFDoc({
+              job,
+              companySettings,
+              rates,
+              isPaid: job.status === "paid",
+              paymentDate: job.paymentDate ? new Date(job.paymentDate+"T12:00:00").toLocaleDateString() : "",
+              paymentMethod: job.paymentMethod || "Check",
+            });
+            if (!doc) { setReminderError("PDF generation failed."); setSendingReminder(null); return; }
+            const pdfBase64 = doc.output("datauristring").split(",")[1];
+            const filename = (companySettings?.name||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20)
+              + "_Invoice_" + (job.estimateNum||job.id||"").toString().replace("EST-","INV-") + ".pdf";
+            const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
+            const byteStr = atob(pdfBase64);
+            const bytes = new Uint8Array(byteStr.length);
+            for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+            const blob = new Blob([bytes], {type:"application/pdf"});
+            const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/estimate-pdfs/${tenantId}/${filename}`, {
+              method:"PUT",
+              headers:{"Authorization":"Bearer "+accessToken,"Content-Type":"application/pdf","x-upsert":"true"},
+              body: blob,
+            });
+            if (!uploadRes.ok) { setReminderError("Upload failed."); setSendingReminder(null); return; }
+            pdfLink = `${SUPABASE_URL}/storage/v1/object/public/estimate-pdfs/${tenantId}/${filename}`;
+            // Save for future reminders
+            updateJobById(job.id, j => ({...j, invoicePdfUrl: pdfLink}));
+          } catch(e) { setReminderError("PDF error: "+e.message); setSendingReminder(null); return; }
         }
         const smsNum = reminderPhone.replace(/[^0-9]/g,"");
         const smsBody = `${body}
 
-${pdfLink}`;
+${pdfLink}` ;
         window.location.href = `sms:${smsNum}${/iPhone|iPad|iPod/i.test(navigator.userAgent)?"&":"?"}body=${encodeURIComponent(smsBody)}`;
       }
 
@@ -8261,6 +8291,7 @@ ${pdfLink}`;
         }
       }
     }
+  });
 
   // ── Aging ──
   const agingItems = [];
