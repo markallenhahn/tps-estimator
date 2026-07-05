@@ -2361,9 +2361,17 @@ ${email}`:""}`;
     try {
       await new Promise((resolve, reject) => {
         if (window.jspdf) { resolve(); return; }
+        if (document.querySelector('script[src*="jspdf"]')) {
+          const wait = setInterval(() => { if (window.jspdf) { clearInterval(wait); resolve(); } }, 100);
+          setTimeout(() => { clearInterval(wait); reject(new Error("jsPDF load timeout")); }, 10000);
+          return;
+        }
         const s = document.createElement("script");
         s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-        s.onload = resolve; s.onerror = reject;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error("Failed to load jsPDF"));
+        const timeout = setTimeout(() => reject(new Error("jsPDF load timeout")), 10000);
+        s.addEventListener("load", () => clearTimeout(timeout));
         document.head.appendChild(s);
       });
 
@@ -8878,9 +8886,18 @@ ${owner}${phone ? `\n${phone}` : ""}${email ? `\n${email}` : ""}`;
       // Dynamically load jsPDF from CDN
       await new Promise((resolve, reject) => {
         if (window.jspdf) { resolve(); return; }
+        // Check if script already being loaded
+        if (document.querySelector('script[src*="jspdf"]')) {
+          const wait = setInterval(() => { if (window.jspdf) { clearInterval(wait); resolve(); } }, 100);
+          setTimeout(() => { clearInterval(wait); reject(new Error("jsPDF load timeout")); }, 10000);
+          return;
+        }
         const s = document.createElement("script");
         s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-        s.onload = resolve; s.onerror = reject;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error("Failed to load jsPDF"));
+        const timeout = setTimeout(() => reject(new Error("jsPDF load timeout")), 10000);
+        s.addEventListener("load", () => clearTimeout(timeout));
         document.head.appendChild(s);
       });
 
