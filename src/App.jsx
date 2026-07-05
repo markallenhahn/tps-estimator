@@ -2352,6 +2352,8 @@ ${email}`:""}`;
       });
       if (!uploadRes.ok) { setTextError("Upload failed."); setTextSending(false); return; }
       const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/estimate-pdfs/${tenantId}/${filename}`;
+      // Save URL on job so reminders can reuse it without regenerating
+      updateJob(j => ({...j, invoicePdfUrl: publicUrl}));
       const phone = formatPhone(companySettings?.phone||"");
       const email = companySettings?.email||companySettings?.officeEmail||"";
       const owner = companySettings?.ownerName||CS_NAME||"";
@@ -8144,9 +8146,9 @@ If you have any questions or concerns, please don't hesitate to reach out.${cont
 
 Thank you,
 
-${owner}${phone?"
-"+phone:""}${email?"
-"+email:""}`;
+${owner}${phone?`
+${phone}`:""}${email?`
+${email}`:""}` ;
 
     setSendingReminder(job.id);
     setReminderError("");
@@ -8173,12 +8175,18 @@ ${owner}${phone?"
         const data = await res.json();
         if (!res.ok) { setReminderError(data.error||"Failed to send."); setSendingReminder(null); return; }
       } else {
-        // Text
+        // Text — use existing PDF URL if available, otherwise generate and upload
         if (!reminderPhone.trim()) { setReminderError("Phone required."); setSendingReminder(null); return; }
+        let pdfLink = job.invoicePdfUrl || null;
+        if (!pdfLink) {
+          setReminderError("No invoice PDF found. Please send the invoice via Text from the Invoice tab first to generate a link, then retry the reminder.");
+          setSendingReminder(null);
+          return;
+        }
         const smsNum = reminderPhone.replace(/[^0-9]/g,"");
-        const smsBody = body + `
+        const smsBody = `${body}
 
-Invoice: ${invNum}`;
+${pdfLink}`;
         window.location.href = `sms:${smsNum}${/iPhone|iPad|iPod/i.test(navigator.userAgent)?"&":"?"}body=${encodeURIComponent(smsBody)}`;
       }
 
