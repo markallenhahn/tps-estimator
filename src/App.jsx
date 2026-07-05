@@ -2302,7 +2302,9 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessT
       const email = companySettings?.email||companySettings?.officeEmail||"";
       const owner = companySettings?.ownerName||CS_NAME||"";
       const contactStr = [phone?"by phone at "+phone:"",email?"by email at "+email:""].filter(Boolean).join(" or ");
-      const body = `Hi ${currentJob.clientName||"there"},\n\nPlease see attached for your ${isPaid?"receipt":"invoice"} from ${CS_NAME||"us"}.${contactStr?" Please let us know if you have any questions. We can be reached "+contactStr+".":""}\n\nThanks,\n\n${owner}${phone?"\n"+phone:""}${email?"\n"+email:""}`;
+      const body = `Hi ${currentJob.clientName||"there"},\n\nPlease see attached for your ${isPaid?"receipt":"invoice"} from ${CS_NAME||"us"}.${contactStr?" Please let us know if you have any questions. We can be reached "+contactStr+".":""}\n\nThanks,\n\n${owner}${phone?`
+${phone}`:""}${email?`
+${email}`:""}`;
       const res = await fetch("/api/public?action=send-estimate-email", {
         method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+accessToken},
@@ -2338,7 +2340,9 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessT
       const email = companySettings?.email||companySettings?.officeEmail||"";
       const owner = companySettings?.ownerName||CS_NAME||"";
       const contactStr = [phone?"by phone at "+phone:"",email?"by email at "+email:""].filter(Boolean).join(" or ");
-      const msg = `Hi ${currentJob.clientName||"there"},\n\nPlease see the link below for your ${isPaid?"receipt":"invoice"} from ${CS_NAME||"us"}.${contactStr?" Please let us know if you have any questions. We can be reached "+contactStr+".":""}\n\n${publicUrl}\n\nThanks,\n${owner}${phone?"\n"+phone:""}${email?"\n"+email:""}`;
+      const msg = `Hi ${currentJob.clientName||"there"},\n\nPlease see the link below for your ${isPaid?"receipt":"invoice"} from ${CS_NAME||"us"}.${contactStr?" Please let us know if you have any questions. We can be reached "+contactStr+".":""}\n\n${publicUrl}\n\nThanks,\n${owner}${phone?`
+${phone}`:""}${email?`
+${email}`:""}`;
       const smsNum = (textTo||"").replace(/[^0-9]/g,"");
       window.location.href = `sms:${smsNum}${/iPhone|iPad|iPod/i.test(navigator.userAgent)?"&":"?"}body=${encodeURIComponent(msg)}`;
       setShowTextModal(false); setTextSending(false); setSent(true);
@@ -2482,7 +2486,8 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessT
         const qtyStr = tons !== null
           ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
           : qty.toLocaleString() + (svc?.unit==="linft" ? " lin ft" : " sq ft");
-        const nameArr = doc.splitTextToSize(a.name + (a.notes ? "\n"+a.notes : ""), cols[0]-12);
+        const nameArr = doc.splitTextToSize(a.name + (a.notes ? `
+${a}`.notes : ""), cols[0]-12);
         const qtyParts = qtyStr.split("\n");
         const rh = Math.max(nameArr.length, qtyParts.length) * 13 + 10;
 
@@ -8964,7 +8969,8 @@ ${owner}${phone ? "
         const qtyStr  = tons !== null
           ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
           : qty.toLocaleString() + (svc?.unit === "linft" ? " lin ft" : " sq ft");
-        const nameStr = a.name + (a.notes ? "\n" + a.notes : "");
+        const nameStr = a.name + (a.notes ? `
+${a}`.notes : "");
         const nameArr = doc.splitTextToSize(nameStr, cols[0]-12);
         const qtyParts = qtyStr.split("\n");
         const rh = Math.max(nameArr.length, qtyParts.length) * 13 + 10;
