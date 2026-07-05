@@ -3402,7 +3402,7 @@ const MATERIAL_TYPES = [
   { key:"stone",     label:"Stone",           defaultUnit:"ton" },
   { key:"other",     label:"Other",           defaultUnit:"unit"},
 ];
-const MATERIAL_STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
+const MATERIAL_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
 const materialStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
 function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole }) {
@@ -3967,7 +3967,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
 
   // ── Which job status categories get geocoded/clustered/shown on the map ──
   // Defaults to Signed + Scheduled — the statuses you'd actually drive a route to.
-  const ZONE_STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
+  const ZONE_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
   const zoneStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
   const [filterStatuses, setFilterStatuses] = useState(zones?.filterStatuses || ["signed","scheduled"]);
   const filterInitRef = useRef(false);
@@ -5366,7 +5366,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
       "# Jobs": c.jobCount, "Total Revenue": c.totalRevenue, "Last Job Date": c.lastJobDate,
     }));
     const jobRows = filtered.flatMap(c => c.jobs.map(j => ({
-      "Customer": c.name, "Job Date": j.date || "", "Status": j.status || "",
+      "Customer": c.name, "Job Date": j.date || "", "Status": pipelineStatusLabel(j.status) || "",
       "Address": j.address || "", "Revenue": calcJobFinancials(j, allRates).revenue,
     })));
     const logRows = filtered.flatMap(c =>
@@ -5601,8 +5601,8 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
   const [pdfLoading,   setPdfLoading]   = useState(false);
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
-  const STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
-  const statusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
+  const STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
+  const statusLabel = (s) => s==="pending_review" ? "Pending Review" : s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
   // Filter jobs that have any revenue
   const reportJobs = jobs
@@ -7856,7 +7856,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
       const areaDetails = (j.areas||[]).map(a => `${a.name}: ${a.serviceType} ${a.measurement}${a.notes?" ["+a.notes+"]":""}`).join(" | ");
 
       rows.push([
-        j.id, j.status||"", j.date||"", scheduleDays,
+        j.id, pipelineStatusLabel(j.status)||"", j.date||"", scheduleDays,
         j.clientName||"", j.clientPhone||"", j.clientEmail||"",
         j.address||"", j.city||"", j.state||"", j.zip||"", fullAddress,
         j.estimateNum||"",
@@ -7903,7 +7903,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
       if (f.revenue === 0) return;
 
       rows.push([
-        j.id, j.clientName||"", fullAddress, j.status||"", f.revenue.toFixed(2),
+        j.id, j.clientName||"", fullAddress, pipelineStatusLabel(j.status)||"", f.revenue.toFixed(2),
         estSealcoat.toFixed(2), (actuals.sealcoat||"").toString(),
         estCrackFill.toFixed(2), (actuals.crackfill||"").toString(),
         estAsphalt.toFixed(2), (actuals.asphalt||"").toString(),
