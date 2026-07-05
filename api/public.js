@@ -155,6 +155,7 @@ ${owner}${phone ? "\n" + phone : ""}${email ? "\n" + email : ""}`;
         body: JSON.stringify({
           from,
           to: [toName ? `${toName} <${toEmail}>` : toEmail],
+          reply_to: email ? `${fromName || "BlacktopIQ"} <${email}>` : undefined,
           subject: subject || `Your Estimate from ${fromName || "Us"}`,
           text: emailBody,
           attachments: [{ filename: pdfFilename || "Estimate.pdf", content: pdfBase64 }],
