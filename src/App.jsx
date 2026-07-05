@@ -8158,8 +8158,24 @@ ${email}`:""}` ;
       if (reminderChannel === "email") {
         if (!reminderEmail.trim()) { setReminderError("Email required."); setSendingReminder(null); return; }
 
-        // Generate invoice PDF via the invoice view — we'll use a simple approach
-        // by sending without PDF first, then upgrade later if needed
+        // Generate invoice PDF
+        let pdfBase64 = null, pdfFilename = null;
+        try {
+          const doc = await generateInvoicePDFDoc({
+            job,
+            companySettings,
+            rates,
+            isPaid: job.status === "paid",
+            paymentDate: job.paymentDate ? new Date(job.paymentDate+"T12:00:00").toLocaleDateString() : "",
+            paymentMethod: job.paymentMethod || "Check",
+          });
+          if (doc) {
+            pdfBase64 = doc.output("datauristring").split(",")[1];
+            pdfFilename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20)
+              + "_Invoice_" + invNum + ".pdf";
+          }
+        } catch(e) { /* send without PDF if generation fails */ }
+
         const subject = `Invoice Follow-Up — ${invNum} — ${job.clientName||"Your Property"}`;
         const res = await fetch("/api/public?action=send-estimate-email", {
           method:"POST",
@@ -8168,6 +8184,8 @@ ${email}`:""}` ;
             toEmail: reminderEmail.trim(),
             toName:  job.clientName||"",
             subject, body,
+            pdfBase64,
+            pdfFilename,
             fromName:  CS_NAME,
             fromPhone: phone,
             fromEmail: email,

@@ -128,7 +128,7 @@ export default async function handler(req, res) {
 
     const { toEmail, toName, subject, pdfBase64, pdfFilename, fromName, fromPhone, fromEmail, ownerName } = req.body || {};
     if (!toEmail) return res.status(400).json({ error: "Client email is required." });
-    if (!pdfBase64) return res.status(400).json({ error: "PDF data is required." });
+    // pdfBase64 is optional — if not provided, send email without attachment
 
     const greeting   = toName ? `${toName},` : "Hello,";
     const company    = fromName || "Us";
@@ -158,7 +158,7 @@ ${owner}${phone ? "\n" + phone : ""}${email ? "\n" + email : ""}`;
           reply_to: email ? `${fromName || "BlacktopIQ"} <${email}>` : undefined,
           subject: subject || `Your Estimate from ${fromName || "Us"}`,
           text: emailBody,
-          attachments: [{ filename: pdfFilename || "Estimate.pdf", content: pdfBase64 }],
+          ...(pdfBase64 ? { attachments: [{ filename: pdfFilename || "Estimate.pdf", content: pdfBase64 }] } : {}),
         }),
       });
       const emailData = await emailRes.json();
