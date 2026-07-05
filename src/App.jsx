@@ -2423,7 +2423,7 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
 
   y += 8;
   if (!isPaid) {
-    const closingLines = ["Please make checks payable to "" + CS_NAME + "".", "", "Thank you for your business!"];
+    const closingLines = ["Please make checks payable to \"" + CS_NAME + "\".", "", "Thank you for your business!"];
     doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
     closingLines.forEach(line => {
       if (line === "") { y += 5; return; }
