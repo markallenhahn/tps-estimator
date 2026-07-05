@@ -8825,9 +8825,7 @@ Please see the link below for your estimate from ${CS_NAME||"us"}.${contactStr ?
 ${publicUrl}
 
 Thanks,
-${owner}${phone ? "
-"+phone : ""}${email ? "
-"+email : ""}`;
+${owner}${phone ? `\n${phone}` : ""}${email ? `\n${email}` : ""}`;
 
       // Open SMS app with pre-filled message
       const smsNum = (textTo||"").replace(/\D/g,"");
