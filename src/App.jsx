@@ -2370,12 +2370,10 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
     const qty  = Number(a.measurement||0);
     const tons = isTonMode(a.serviceType, allRates) ? calcTons(qty, a.depthIn??(svc?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(svc?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(svc?.tonsFormula??DEFAULT_TONS_FORMULA)) : null;
     const qtyStr = tons !== null
-      ? qty.toLocaleString() + " sq ft
-" + tons.toFixed(2) + " tons"
+      ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
       : qty.toLocaleString() + (svc?.unit==="linft" ? " lin ft" : " sq ft");
     const nameArr = doc.splitTextToSize(a.name, cols[0]-12);
-    const qtyParts = qtyStr.split("
-");
+    const qtyParts = qtyStr.split("\n");
     const rh = Math.max(nameArr.length, qtyParts.length) * 13 + 10;
     doc.setFillColor(...(idx%2===0 ? WHITE : LGRAY));
     doc.rect(ML, y, usable, rh, "F");
