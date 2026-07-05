@@ -2231,6 +2231,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessT
   const [invoiceType, setInvoiceType] = useState("due");
   const [pdfLoading,  setPdfLoading]  = useState(false);
   const [sent,        setSent]        = useState(false);
+  const [showSentConfirm, setShowSentConfirm] = useState(false);
   const [showEmailModal,  setShowEmailModal]  = useState(false);
   const [emailTo,         setEmailTo]         = useState("");
   const [sendingEmail,    setSendingEmail]     = useState(false);
@@ -2313,7 +2314,8 @@ ${email}`:""}`;
       const data = await res.json();
       if (!res.ok) { setEmailError(data.error||"Failed to send."); setSendingEmail(false); return; }
       updateJob(j => ({...j, invoiceSentDate: j.invoiceSentDate||new Date().toISOString().slice(0,10)}));
-      setShowEmailModal(false); setSendingEmail(false); setSent(true);
+      setShowEmailModal(false); setSendingEmail(false);
+      setTimeout(() => setShowSentConfirm(true), 300);
     } catch(e) { setEmailError("Error: "+e.message); setSendingEmail(false); }
   };
 
@@ -2345,7 +2347,8 @@ ${phone}`:""}${email?`
 ${email}`:""}`;
       const smsNum = (textTo||"").replace(/[^0-9]/g,"");
       window.location.href = `sms:${smsNum}${/iPhone|iPad|iPod/i.test(navigator.userAgent)?"&":"?"}body=${encodeURIComponent(msg)}`;
-      setShowTextModal(false); setTextSending(false); setSent(true);
+      setShowTextModal(false); setTextSending(false);
+      setTimeout(() => setShowSentConfirm(true), 1000);
     } catch(e) { setTextError("Error: "+e.message); setTextSending(false); }
   };
 
@@ -2573,7 +2576,7 @@ ${a}`.notes : ""), cols[0]-12);
       alert("PDF generation failed: " + e.message);
       return null;
     }
-    setPdfLoading(false);
+    if (!skipSave) setPdfLoading(false);
   };
 
   return (
@@ -2722,6 +2725,28 @@ ${a}`.notes : ""), cols[0]-12);
 
         <div style={S.estimateFooter}>Thank you for your business! · {CS_NAME} · {CS_PHONE}</div>
       </section>
+
+      {/* Sent confirm modal */}
+      {showSentConfirm && (
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+            <h2 style={{...S.h2, marginTop:0}}>📄 Did you send the {invoiceType==="paid"?"receipt":"invoice"}?</h2>
+            <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
+              Confirming will record today as the sent date.
+            </p>
+            <div style={{display:"flex", gap:8}}>
+              <button style={{...S.btnPrimary, flex:1}} onClick={() => {
+                updateJob(j => ({...j,
+                  invoiceSentDate: j.invoiceSentDate || new Date().toISOString().slice(0,10),
+                }));
+                setSent(true);
+                setShowSentConfirm(false);
+              }}>Yes, I sent it</button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowSentConfirm(false)}>No, not yet</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Email modal */}
       {showEmailModal && (
