@@ -1297,7 +1297,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       const ovrArea = { id:Date.now()+1,     name:newArea.name + " — Overlay",  serviceType:"overlay", measurement:newArea.overlayMeasurement,  depthIn:newArea.overlayDepthIn, density:newArea.overlayDensity, tonsFormula:newArea.overlayTonsFormula, condition:newArea.condition, notes:newArea.notes };
       if (!canSeeAllJobs) { delete milArea.priceOverride; delete ovrArea.priceOverride; }
       updateJob(j => ({...j, areas:[...j.areas, milArea, ovrArea]}));
-      setNewArea({...initialArea(), serviceType: defaultServiceType});
+      setNewArea({...initialArea(), serviceType: Object.keys(rates)[0] || "sealcoat"});
       setCalcRows([{id:1, l:"", w:""}]);
       setUseCalc(false);
       return;
@@ -1309,7 +1309,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     const toAdd = {...newArea, id:Date.now()};
     if (!canSeeAllJobs) delete toAdd.priceOverride;
     updateJob(j => ({...j, areas:[...j.areas, toAdd]}));
-    setNewArea({...initialArea(), serviceType: defaultServiceType});
+    setNewArea({...initialArea(), serviceType: Object.keys(rates)[0] || "sealcoat"});
     setCalcRows([{id:1, l:"", w:""}]);
     setUseCalc(false);
   };
