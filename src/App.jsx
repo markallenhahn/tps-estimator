@@ -10026,7 +10026,7 @@ function EstimateRequestForm({ tenantId }) {
 
   const brand = {
     accent: tenantInfo?.accentColor || "#f0ab2e",
-    name:   tenantInfo?.companyName || "Us",
+    name:   tenantInfo?.companyName || "",
     logo:   tenantInfo?.logoB64     || null,
   };
 
@@ -10045,7 +10045,7 @@ function EstimateRequestForm({ tenantId }) {
         <p style={{fontSize:14, color:"#6b7280", lineHeight:1.6}}>
           Thank you, <strong>{name}</strong>. We've received your estimate request and will be in touch soon.
         </p>
-        <p style={{fontSize:13, color:"#9ca3af", marginTop:16}}>— {brand.name}</p>
+        <p style={{fontSize:13, color:"#9ca3af", marginTop:16}}>{brand.name ? `— ${brand.name}` : ""}</p>
       </div>
     </div>
   );
@@ -10058,7 +10058,9 @@ function EstimateRequestForm({ tenantId }) {
         <div style={{textAlign:"center", marginBottom:24}}>
           {brand.logo
             ? <img src={"data:image/png;base64,"+brand.logo} alt={brand.name} style={{maxWidth:220, maxHeight:80, objectFit:"contain", margin:"0 auto 12px", display:"block"}}/>
-            : <div style={{fontSize:22, fontWeight:700, marginBottom:12}}>{brand.name}</div>
+            : brand.name
+              ? <div style={{fontSize:22, fontWeight:700, marginBottom:12}}>{brand.name}</div>
+              : <div style={{height:40, marginBottom:12}}/> /* placeholder while loading */
           }
           <h1 style={{fontSize:20, fontWeight:700, margin:"0 0 4px"}}>Request a Free Estimate</h1>
           <p style={{fontSize:13, color:"#6b7280", margin:0}}>Fill out the form below and we'll get back to you shortly.</p>
