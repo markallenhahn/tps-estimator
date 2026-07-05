@@ -2218,7 +2218,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
 }
 
 // ─── Invoice View ─────────────────────────────────────────────────────────────
-function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
+function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessToken, tenantId }) {
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
@@ -2231,6 +2231,14 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
   const [invoiceType, setInvoiceType] = useState("due");
   const [pdfLoading,  setPdfLoading]  = useState(false);
   const [sent,        setSent]        = useState(false);
+  const [showEmailModal,  setShowEmailModal]  = useState(false);
+  const [emailTo,         setEmailTo]         = useState("");
+  const [sendingEmail,    setSendingEmail]     = useState(false);
+  const [emailError,      setEmailError]       = useState("");
+  const [showTextModal,   setShowTextModal]    = useState(false);
+  const [textTo,          setTextTo]           = useState("");
+  const [textSending,     setTextSending]      = useState(false);
+  const [textError,       setTextError]        = useState("");
   const [invoiceNum,  setInvoiceNum]  = useState("");
   const [paymentDate,   setPaymentDate]   = useState(currentJob?.paymentDate   ? new Date(currentJob.paymentDate+"T12:00:00").toLocaleDateString() : new Date().toLocaleDateString());
   const [paymentMethod, setPaymentMethod] = useState(currentJob?.paymentMethod || "Check");
@@ -2274,11 +2282,67 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
   ].filter(l => l !== null).join("\n");
 
   const emailInvoice = () => {
-    const subject = encodeURIComponent(invoiceLabel + " — " + (currentJob.address||currentJob.clientName||"Your Property"));
-    const body    = encodeURIComponent(buildEmailBody());
-    const to      = currentJob.clientEmail ? encodeURIComponent(currentJob.clientEmail) : "";
-    window.location.href = "mailto:" + to + "?subject=" + subject + "&body=" + body;
-    setSent(true);
+    setEmailTo(currentJob.clientEmail || "");
+    setEmailError("");
+    setShowEmailModal(true);
+  };
+
+  const sendInvoiceEmail = async () => {
+    if (!emailTo.trim()) { setEmailError("Please enter a client email address."); return; }
+    setSendingEmail(true); setEmailError("");
+    try {
+      const doc = await generatePDF();
+      if (!doc) { setEmailError("PDF generation failed."); setSendingEmail(false); return; }
+      const pdfBase64 = doc.output("datauristring").split(",")[1];
+      const isPaid = invoiceType === "paid";
+      const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20)
+        + (isPaid ? "_Receipt_" : "_Invoice_") + (currentJob.estimateNum||currentJob.id).toString().replace("EST-","INV-") + ".pdf";
+      const subject = (isPaid?"Receipt":"Invoice") + " from " + (CS_NAME||"Us") + " — " + (currentJob.address||currentJob.clientName||"Your Property");
+      const phone = formatPhone(companySettings?.phone||"");
+      const email = companySettings?.email||companySettings?.officeEmail||"";
+      const owner = companySettings?.ownerName||CS_NAME||"";
+      const contactStr = [phone?"by phone at "+phone:"",email?"by email at "+email:""].filter(Boolean).join(" or ");
+      const body = `Hi ${currentJob.clientName||"there"},\n\nPlease see attached for your ${isPaid?"receipt":"invoice"} from ${CS_NAME||"us"}.${contactStr?" Please let us know if you have any questions. We can be reached "+contactStr+".":""}\n\nThanks,\n\n${owner}${phone?"\n"+phone:""}${email?"\n"+email:""}`;
+      const res = await fetch("/api/public?action=send-estimate-email", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+accessToken},
+        body: JSON.stringify({ toEmail:emailTo.trim(), toName:currentJob.clientName||"", subject, body, pdfBase64, pdfFilename:filename, fromName:CS_NAME||"BlacktopIQ", fromPhone:phone, fromEmail:email, ownerName:owner }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailError(data.error||"Failed to send."); setSendingEmail(false); return; }
+      updateJob(j => ({...j, invoiceSentDate: j.invoiceSentDate||new Date().toISOString().slice(0,10)}));
+      setShowEmailModal(false); setSendingEmail(false); setSent(true);
+    } catch(e) { setEmailError("Error: "+e.message); setSendingEmail(false); }
+  };
+
+  const sendInvoiceText = async () => {
+    setTextSending(true); setTextError("");
+    try {
+      const doc = await generatePDF();
+      if (!doc) { setTextError("PDF generation failed."); setTextSending(false); return; }
+      const pdfBase64 = doc.output("datauristring").split(",")[1];
+      const isPaid = invoiceType === "paid";
+      const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20)
+        + (isPaid?"_Receipt_":"_Invoice_") + (currentJob.estimateNum||currentJob.id).toString().replace("EST-","INV-") + ".pdf";
+      const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
+      const byteStr = atob(pdfBase64);
+      const bytes = new Uint8Array(byteStr.length);
+      for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+      const blob = new Blob([bytes], {type:"application/pdf"});
+      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/estimate-pdfs/${tenantId}/${filename}`, {
+        method:"PUT", headers:{"Authorization":"Bearer "+accessToken,"Content-Type":"application/pdf","x-upsert":"true"}, body:blob,
+      });
+      if (!uploadRes.ok) { setTextError("Upload failed."); setTextSending(false); return; }
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/estimate-pdfs/${tenantId}/${filename}`;
+      const phone = formatPhone(companySettings?.phone||"");
+      const email = companySettings?.email||companySettings?.officeEmail||"";
+      const owner = companySettings?.ownerName||CS_NAME||"";
+      const contactStr = [phone?"by phone at "+phone:"",email?"by email at "+email:""].filter(Boolean).join(" or ");
+      const msg = `Hi ${currentJob.clientName||"there"},\n\nPlease see the link below for your ${isPaid?"receipt":"invoice"} from ${CS_NAME||"us"}.${contactStr?" Please let us know if you have any questions. We can be reached "+contactStr+".":""}\n\n${publicUrl}\n\nThanks,\n${owner}${phone?"\n"+phone:""}${email?"\n"+email:""}`;
+      const smsNum = (textTo||"").replace(/[^0-9]/g,"");
+      window.location.href = `sms:${smsNum}${/iPhone|iPad|iPod/i.test(navigator.userAgent)?"&":"?"}body=${encodeURIComponent(msg)}`;
+      setShowTextModal(false); setTextSending(false); setSent(true);
+    } catch(e) { setTextError("Error: "+e.message); setTextSending(false); }
   };
 
   const copyInvoice = () => { navigator.clipboard.writeText(buildEmailBody()); alert("Copied to clipboard."); };
@@ -2650,6 +2714,48 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
         <div style={S.estimateFooter}>Thank you for your business! · {CS_NAME} · {CS_PHONE}</div>
       </section>
 
+      {/* Email modal */}
+      {showEmailModal && (
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+            <h2 style={{...S.h2, marginTop:0}}>✉️ Email {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
+            <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>The PDF will be generated and sent directly to the client's inbox.</p>
+            <label style={S.formLabel}>Client Email *
+              <input type="email" value={emailTo} onChange={e => setEmailTo(e.target.value)}
+                placeholder="client@example.com" style={{...S.input, height:42, boxSizing:"border-box"}}/>
+            </label>
+            {emailError && <div style={{fontSize:12, color:C.danger, background:"#fef2f2", borderRadius:6, padding:"8px 12px", marginTop:10}}>{emailError}</div>}
+            <div style={{display:"flex", gap:8, marginTop:16}}>
+              <button style={{...S.btnPrimary, flex:1, opacity:sendingEmail?0.6:1}} disabled={sendingEmail} onClick={sendInvoiceEmail}>
+                {sendingEmail?"⏳ Sending...":"Send"}
+              </button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowEmailModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Text modal */}
+      {showTextModal && (
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+            <h2 style={{...S.h2, marginTop:0}}>💬 Text {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
+            <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>The PDF will be uploaded and a link sent via your phone's SMS app.</p>
+            <label style={S.formLabel}>Client Phone *
+              <input type="tel" value={textTo} onChange={e => setTextTo(e.target.value)}
+                placeholder="(570) 555-1234" style={{...S.input, height:42, boxSizing:"border-box"}}/>
+            </label>
+            {textError && <div style={{fontSize:12, color:C.danger, background:"#fef2f2", borderRadius:6, padding:"8px 12px", marginTop:10}}>{textError}</div>}
+            <div style={{display:"flex", gap:8, marginTop:16}}>
+              <button style={{...S.btnPrimary, flex:1, opacity:textSending?0.6:1}} disabled={textSending} onClick={sendInvoiceText}>
+                {textSending?"⏳ Uploading...":"Open SMS App"}
+              </button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowTextModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
       <section style={S.section}>
         <div style={S.actionBtns}>
@@ -2663,7 +2769,8 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={} }) {
             }} disabled={pdfLoading}>
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
-          <button style={S.btnSecondary} onClick={emailInvoice}>✉️ Email</button>
+          <button style={S.btnSecondary} onClick={emailInvoice}>✉️ Email PDF</button>
+          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}>💬 Text PDF</button>
           <button style={S.btnSecondary} onClick={copyInvoice}>📋 Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
@@ -5072,17 +5179,13 @@ function normalizedName(s)  { return (s || "").trim().toLowerCase(); }
 function matchExistingCustomer(job, customers) {
   const phone = normalizedPhone(job.clientPhone);
   const email = normalizedEmail(job.clientEmail);
-  const name  = normalizedName(job.clientName);
+  // Only match on phone or email — name matching is too loose and causes false merges
   if (phone) {
     const m = customers.find(c => normalizedPhone(c.phone) === phone);
     if (m) return m;
   }
   if (email) {
     const m = customers.find(c => normalizedEmail(c.email) === email);
-    if (m) return m;
-  }
-  if (name) {
-    const m = customers.find(c => normalizedName(c.name) === name);
     if (m) return m;
   }
   return null;
@@ -8478,6 +8581,10 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   const [emailError,      setEmailError]     = useState("");
   const [showEmailModal,  setShowEmailModal] = useState(false);
   const [emailTo,         setEmailTo]        = useState("");
+  const [showTextModal,   setShowTextModal]  = useState(false);
+  const [textTo,          setTextTo]         = useState("");
+  const [textSending,     setTextSending]    = useState(false);
+  const [textError,       setTextError]      = useState("");
   const clientSigRef  = useRef(null);
   const clientDrawing = useRef(false);
 
@@ -8660,6 +8767,75 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   };
 
   const copyEstimate = () => { navigator.clipboard.writeText(buildEmailBody()); alert("Copied to clipboard."); };
+
+  const sendTextEstimate = async () => {
+    setTextSending(true); setTextError("");
+    try {
+      // Generate PDF
+      const doc = await generatePDF();
+      if (!doc) { setTextError("PDF generation failed."); setTextSending(false); return; }
+      const pdfBase64 = doc.output("datauristring").split(",")[1];
+      const filename  = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20)
+        + "_Estimate_" + (currentJob.estimateNum || currentJob.id) + ".pdf";
+
+      // Upload to Supabase Storage estimate-pdfs bucket
+      const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
+      const byteStr = atob(pdfBase64);
+      const bytes   = new Uint8Array(byteStr.length);
+      for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "application/pdf" });
+
+      const uploadRes = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/estimate-pdfs/${tenantId}/${filename}`,
+        {
+          method: "PUT",
+          headers: {
+            "Authorization": "Bearer " + accessToken,
+            "Content-Type": "application/pdf",
+            "x-upsert": "true",
+          },
+          body: blob,
+        }
+      );
+      if (!uploadRes.ok) {
+        const err = await uploadRes.text();
+        setTextError("Upload failed: " + err);
+        setTextSending(false); return;
+      }
+
+      // Build public URL
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/estimate-pdfs/${tenantId}/${filename}`;
+
+      // Build SMS message
+      const clientName = currentJob.clientName || "there";
+      const phone      = formatPhone(companySettings?.phone || "");
+      const email      = companySettings?.email || companySettings?.officeEmail || "";
+      const owner      = companySettings?.ownerName || CS_NAME || "";
+      const contactStr = [phone ? `by phone at ${phone}` : "", email ? `by email at ${email}` : ""].filter(Boolean).join(" or ");
+
+      const msg = `Hi ${clientName},
+
+Please see the link below for your estimate from ${CS_NAME||"us"}.${contactStr ? ` Please let us know if you have any questions. We can be reached ${contactStr}.` : ""}
+
+${publicUrl}
+
+Thanks,
+${owner}${phone ? "
+"+phone : ""}${email ? "
+"+email : ""}`;
+
+      // Open SMS app with pre-filled message
+      const smsNum = (textTo||"").replace(/\D/g,"");
+      window.location.href = `sms:${smsNum}${/iPhone|iPad|iPod/i.test(navigator.userAgent) ? "&" : "?"}body=${encodeURIComponent(msg)}`;
+
+      setShowTextModal(false);
+      setTextSending(false);
+      setTimeout(() => setShowSentConfirm(true), 1000);
+    } catch(e) {
+      setTextError("Error: " + e.message);
+      setTextSending(false);
+    }
+  };
 
   // ── PDF via jsPDF (pure browser, no API) ──────────────────────────────────
   const generatePDF = async (clientSigOverride, signedAtOverride, printNameOverride) => {
@@ -9159,6 +9335,33 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
         </section>
       )}
 
+      {/* Text modal */}
+      {showTextModal && (
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+            <h2 style={{...S.h2, marginTop:0}}>💬 Text Estimate PDF</h2>
+            <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
+              The estimate PDF will be uploaded and a link sent via your phone's SMS app.
+            </p>
+            <label style={S.formLabel}>Client Phone *
+              <input type="tel" value={textTo} onChange={e => setTextTo(e.target.value)}
+                placeholder="(570) 555-1234"
+                style={{...S.input, height:42, boxSizing:"border-box"}}/>
+            </label>
+            {textError && (
+              <div style={{fontSize:12, color:C.danger, background:"#fef2f2", borderRadius:6, padding:"8px 12px", marginTop:10}}>{textError}</div>
+            )}
+            <div style={{display:"flex", gap:8, marginTop:16}}>
+              <button style={{...S.btnPrimary, flex:1, opacity: textSending ? 0.6 : 1}}
+                disabled={textSending} onClick={sendTextEstimate}>
+                {textSending ? "⏳ Uploading..." : "Open SMS App"}
+              </button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => setShowTextModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Email modal */}
       {showEmailModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
@@ -9226,6 +9429,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
           <button style={S.btnSecondary} onClick={emailEstimate}>✉️ Email PDF</button>
+          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}>💬 Text PDF</button>
           <button style={S.btnSecondary} onClick={copyEstimate}>📋 Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
@@ -11834,7 +12038,7 @@ export default function App() {
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session}/>}
-        {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings}/>}
+        {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
