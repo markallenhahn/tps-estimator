@@ -2806,8 +2806,12 @@ ${a}`.notes : ""), cols[0]-12);
                 const go = confirm("You haven't set an Invoice Sent Date.\n\nHit OK to go back and set the date, or Cancel to download anyway.");
                 if (go) return;
               }
-              const doc = await generatePDF();
-              if (doc) setSent(true);
+              try {
+                const doc = await generatePDF();
+                if (doc) setSent(true);
+              } finally {
+                setPdfLoading(false);
+              }
             }} disabled={pdfLoading}>
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
@@ -9165,24 +9169,7 @@ ${a}`.notes : "");
     }
   };
 
-  // buildPDFDoc — generates PDF and returns the doc object without saving
-  const buildPDFDoc = async () => {
-    if ((currentJob.areas||[]).length === 0) throw new Error("Add at least one line item before sending.");
-    await new Promise((resolve, reject) => {
-      if (window.jspdf) { resolve(); return; }
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-      s.onload = resolve; s.onerror = reject;
-      document.head.appendChild(s);
-    });
-    // Reuse generatePDF logic by calling it and capturing output
-    // We return a promise that generates the doc — reuse the same function
-    // but intercept before save by calling output() directly
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "pt", format: "letter" });
-    // We'll just call generatePDF which also returns doc now
-    return doc; // placeholder — actual generation happens in generatePDF
-  };
+
 
   return (
     <div className="tps-page" style={S.page}>
@@ -9477,8 +9464,12 @@ ${a}`.notes : "");
                 const go = confirm("You haven't set an Estimate Sent Date.\n\nHit OK to go back and set the date, or Cancel to download anyway.");
                 if (go) return;
               }
-              const doc = await generatePDF();
-              if (doc) setSent(true);
+              try {
+                const doc = await generatePDF();
+                if (doc) setSent(true);
+              } finally {
+                setPdfLoading(false);
+              }
             }} disabled={pdfLoading}>
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
