@@ -8426,6 +8426,8 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
   const isDesktopLayout = useIsDesktop();
   const [dragOverStatus, setDragOverStatus] = useState(null);
   const [mobileStatus, setMobileStatus] = useState("estimate");
+  const [paidPage, setPaidPage] = useState(1);
+  const PAID_PAGE_SIZE = 10;
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
 
@@ -8453,7 +8455,9 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
 
   const columns = PIPELINE_STATUSES.map(status => {
     // pending_review jobs show in the Estimate column (highlighted, not a separate column)
-    const jobsInStatus = visibleJobs.filter(j => j.status === status || (status === "estimate" && (j.status === "pending_review" || j.readyForReview)));
+    const jobsInStatus = visibleJobs
+      .filter(j => j.status === status || (status === "estimate" && (j.status === "pending_review" || j.readyForReview)))
+      .sort((a,b) => (b.statusChangedAt||b.date||"").localeCompare(a.statusChangedAt||a.date||""));
     const total = jobsInStatus.reduce((s,j) => s + calcJobFinancials(j, allRates).revenue, 0);
     return { status, jobs: jobsInStatus, total };
   });
@@ -8559,7 +8563,11 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
         </div>
         {col.jobs.length === 0 ? (
           <p style={{fontSize:12, color:C.textMuted}}>No jobs in this stage.</p>
-        ) : col.jobs.map(j => (
+        ) : (() => {
+          const isPaid = col.status === "paid";
+          const visibleJobs2 = isPaid ? col.jobs.slice(0, paidPage * PAID_PAGE_SIZE) : col.jobs;
+          return (<>
+            {visibleJobs2.map(j => (
           <div key={j.id} style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:12, marginBottom:8}}>
             <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10}}>
               <div>
@@ -8586,6 +8594,20 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
             </div>
           </div>
         ))}
+            {isPaid && col.jobs.length > paidPage * PAID_PAGE_SIZE && (
+              <button style={{...S.btnSecondary, width:"100%", fontSize:12, marginTop:4}}
+                onClick={() => setPaidPage(p => p+1)}>
+                ▾ Show next {Math.min(PAID_PAGE_SIZE, col.jobs.length - paidPage * PAID_PAGE_SIZE)} paid jobs
+              </button>
+            )}
+            {isPaid && paidPage > 1 && (
+              <button style={{...S.btnSmall, width:"100%", fontSize:11, marginTop:4, color:C.textMuted}}
+                onClick={() => setPaidPage(1)}>
+                ▴ Collapse
+              </button>
+            )}
+          </>);
+        })()}
       </div>
     );
   }
