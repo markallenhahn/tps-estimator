@@ -2291,7 +2291,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessT
     if (!emailTo.trim()) { setEmailError("Please enter a client email address."); return; }
     setSendingEmail(true); setEmailError("");
     try {
-      const doc = await generatePDF();
+      const doc = await generatePDF(undefined, undefined, undefined, true); // skipSave=true
       if (!doc) { setEmailError("PDF generation failed."); setSendingEmail(false); return; }
       const pdfBase64 = doc.output("datauristring").split(",")[1];
       const isPaid = invoiceType === "paid";
@@ -2320,7 +2320,7 @@ ${email}`:""}`;
   const sendInvoiceText = async () => {
     setTextSending(true); setTextError("");
     try {
-      const doc = await generatePDF();
+      const doc = await generatePDF(true);
       if (!doc) { setTextError("PDF generation failed."); setTextSending(false); return; }
       const pdfBase64 = doc.output("datauristring").split(",")[1];
       const isPaid = invoiceType === "paid";
@@ -2352,7 +2352,7 @@ ${email}`:""}`;
   const copyInvoice = () => { navigator.clipboard.writeText(buildEmailBody()); alert("Copied to clipboard."); };
 
   // ── PDF via jsPDF ────────────────────────────────────────────────────────
-  const generatePDF = async () => {
+  const generatePDF = async (skipSave=false) => {
     if (!currentJob.areas || currentJob.areas.length === 0) { alert("No line items on this job yet."); return; }
     setPdfLoading(true);
     try {
@@ -2563,11 +2563,15 @@ ${a}`.notes : ""), cols[0]-12);
 
       // Save
       const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20) + "_" + (isPaid ? "PaidInvoice" : "Invoice") + "_" + invNum + ".pdf";
-      doc.save(filename);
-      setSent(true);
+      if (!skipSave) {
+        doc.save(filename);
+        setSent(true);
+      }
+      return doc;
     } catch(e) {
       console.error(e);
       alert("PDF generation failed: " + e.message);
+      return null;
     }
     setPdfLoading(false);
   };
@@ -8736,7 +8740,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
     setSendingEmail(true); setEmailError("");
     try {
       // Generate PDF using existing generatePDF which returns doc
-      const doc = await generatePDF();
+      const doc = await generatePDF(true);
       if (!doc) { setEmailError("PDF generation failed."); setSendingEmail(false); return; }
       const pdfBase64 = doc.output("datauristring").split(",")[1];
       const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20)
@@ -8777,7 +8781,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
     setTextSending(true); setTextError("");
     try {
       // Generate PDF
-      const doc = await generatePDF();
+      const doc = await generatePDF(undefined, undefined, undefined, true); // skipSave=true
       if (!doc) { setTextError("PDF generation failed."); setTextSending(false); return; }
       const pdfBase64 = doc.output("datauristring").split(",")[1];
       const filename  = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20)
@@ -8841,7 +8845,7 @@ ${owner}${phone ? `\n${phone}` : ""}${email ? `\n${email}` : ""}`;
   };
 
   // ── PDF via jsPDF (pure browser, no API) ──────────────────────────────────
-  const generatePDF = async (clientSigOverride, signedAtOverride, printNameOverride) => {
+  const generatePDF = async (clientSigOverride, signedAtOverride, printNameOverride, skipSave=false) => {
     if (currentJob.areas.length === 0) { alert("Add at least one line item before generating a PDF."); return; }
     setPdfLoading(true);
 
@@ -9103,8 +9107,10 @@ ${a}`.notes : "");
 
       // ── Save ──
       const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20) + "_Estimate_" + (currentJob.estimateNum || currentJob.id) + ".pdf";
-      doc.save(filename);
-      setSent(true);
+      if (!skipSave) {
+        doc.save(filename);
+        setSent(true);
+      }
       return doc;
 
     } catch(e) {
