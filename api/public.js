@@ -139,7 +139,7 @@ export default async function handler(req, res) {
     const emailLine  = email ? `by email at ${email}` : "";
     const contactStr = [phoneLine, emailLine].filter(Boolean).join(" or ");
 
-    const emailBody = `${greeting}
+    const emailBody = req.body.body || `${greeting}
 
 Please see attached for your estimate from ${company}.${contactStr ? ` Please let us know if you have any questions. We can be reached ${contactStr}.` : ""}
 
