@@ -2314,9 +2314,9 @@ ${email}`:""}`;
       const data = await res.json();
       if (!res.ok) { setEmailError(data.error||"Failed to send."); setSendingEmail(false); return; }
       updateJob(j => ({...j, invoiceSentDate: j.invoiceSentDate||new Date().toISOString().slice(0,10)}));
-      setShowEmailModal(false); setSendingEmail(false);
+      setShowEmailModal(false); setSendingEmail(false); setPdfLoading(false);
       setTimeout(() => setShowSentConfirm(true), 300);
-    } catch(e) { setEmailError("Error: "+e.message); setSendingEmail(false); }
+    } catch(e) { setEmailError("Error: "+e.message); setSendingEmail(false); setPdfLoading(false); }
   };
 
   const sendInvoiceText = async () => {
@@ -2347,9 +2347,9 @@ ${phone}`:""}${email?`
 ${email}`:""}`;
       const smsNum = (textTo||"").replace(/[^0-9]/g,"");
       window.location.href = `sms:${smsNum}${/iPhone|iPad|iPod/i.test(navigator.userAgent)?"&":"?"}body=${encodeURIComponent(msg)}`;
-      setShowTextModal(false); setTextSending(false);
+      setShowTextModal(false); setTextSending(false); setPdfLoading(false);
       setTimeout(() => setShowSentConfirm(true), 1000);
-    } catch(e) { setTextError("Error: "+e.message); setTextSending(false); }
+    } catch(e) { setTextError("Error: "+e.message); setTextSending(false); setPdfLoading(false); }
   };
 
   const copyInvoice = () => { navigator.clipboard.writeText(buildEmailBody()); alert("Copied to clipboard."); };
@@ -8801,10 +8801,12 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
 
       setShowEmailModal(false);
       setSendingEmail(false);
+      setPdfLoading(false);
       setTimeout(() => setShowSentConfirm(true), 300);
     } catch(e) {
       setEmailError("Error: " + e.message);
       setSendingEmail(false);
+      setPdfLoading(false);
     }
   };
 
