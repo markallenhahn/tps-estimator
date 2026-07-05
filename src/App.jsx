@@ -8100,7 +8100,7 @@ function daysSince(isoOrDateStr) {
 // Default aging thresholds — adjustable later, not exposed as settings yet.
 const AGING = { estimateStuckDays: 7, sentNoResponseDays: 3, unpaidInvoiceDays: 14 };
 
-function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView, rates, tFetch, setJobs, updateJobById }) {
+function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, setView, rates, tFetch, setJobs, updateJobById, companySettings={}, accessToken, tenantId }) {
   const isDesktopLayout = useIsDesktop();
   const roles = userRoles || [userRole];
   const isEstimator = hasRole(roles, "estimator");
@@ -8115,9 +8115,83 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
   );
 
   const open = (job) => { setCurrentJob(job); setView("jobdetail"); };
+  const [sendingReminder, setSendingReminder] = useState(null); // job.id being processed
+  const [reminderModal,   setReminderModal]   = useState(null); // {job, daysPast}
+  const [reminderChannel, setReminderChannel] = useState("email");
+  const [reminderEmail,   setReminderEmail]   = useState("");
+  const [reminderPhone,   setReminderPhone]   = useState("");
+  const [reminderError,   setReminderError]   = useState("");
 
   // For request form jobs: fetch fresh from Supabase before opening
   // in case the job was just created and isn't in local state yet
+  // ── Invoice reminder send ─────────────────────────────────────────────────
+  const sendReminder = async () => {
+    if (!reminderModal) return;
+    const { job, daysPast } = reminderModal;
+    const CS_NAME  = companySettings?.name  || "Us";
+    const phone    = formatPhone(companySettings?.phone  || "");
+    const email    = companySettings?.email || companySettings?.officeEmail || "";
+    const owner    = companySettings?.ownerName || CS_NAME;
+    const invNum   = (job.estimateNum||job.id||"").toString().replace("EST-","INV-");
+    const invTotal = formatCurrency(calcJobFinancials(job, {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue);
+    const contactStr = [phone?"by phone at "+phone:"", email?"by email at "+email:""].filter(Boolean).join(" or ");
+
+    const body = `Hi ${job.clientName||"there"},
+
+I wanted to follow up on invoice ${invNum} for ${invTotal}, which is now ${daysPast} days past due. I've reattached it for your convenience.
+
+If you have any questions or concerns, please don't hesitate to reach out.${contactStr ? " We can be reached "+contactStr+"." : ""}
+
+Thank you,
+
+${owner}${phone?"
+"+phone:""}${email?"
+"+email:""}`;
+
+    setSendingReminder(job.id);
+    setReminderError("");
+    try {
+      if (reminderChannel === "email") {
+        if (!reminderEmail.trim()) { setReminderError("Email required."); setSendingReminder(null); return; }
+
+        // Generate invoice PDF via the invoice view — we'll use a simple approach
+        // by sending without PDF first, then upgrade later if needed
+        const subject = `Invoice Follow-Up — ${invNum} — ${job.clientName||"Your Property"}`;
+        const res = await fetch("/api/public?action=send-estimate-email", {
+          method:"POST",
+          headers:{"Content-Type":"application/json","Authorization":"Bearer "+accessToken},
+          body: JSON.stringify({
+            toEmail: reminderEmail.trim(),
+            toName:  job.clientName||"",
+            subject, body,
+            fromName:  CS_NAME,
+            fromPhone: phone,
+            fromEmail: email,
+            ownerName: owner,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setReminderError(data.error||"Failed to send."); setSendingReminder(null); return; }
+      } else {
+        // Text
+        if (!reminderPhone.trim()) { setReminderError("Phone required."); setSendingReminder(null); return; }
+        const smsNum = reminderPhone.replace(/[^0-9]/g,"");
+        const smsBody = body + `
+
+Invoice: ${invNum}`;
+        window.location.href = `sms:${smsNum}${/iPhone|iPad|iPod/i.test(navigator.userAgent)?"&":"?"}body=${encodeURIComponent(smsBody)}`;
+      }
+
+      // Record that reminder was sent
+      updateJobById(job.id, j => ({...j, lastReminderSentAt: new Date().toISOString(), reminderCount: (j.reminderCount||0)+1}));
+      setReminderModal(null);
+      setSendingReminder(null);
+    } catch(e) {
+      setReminderError("Error: "+e.message);
+      setSendingReminder(null);
+    }
+  };
+
   const openRequest = async (job) => {
     if (jobs.find(j => j.id === job.id)) {
       // Already in local state — open directly
@@ -8162,7 +8236,23 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
     if (canSeeAllJobs && j.status === "completed") {
       actionItems.push({ job:j, label: "Mark paid once invoice is collected" });
     }
-  });
+    // Overdue invoice reminders
+    if (canSeeAllJobs && j.invoiceSentDate && !["paid","lost"].includes(j.status)) {
+      const daysPast = Math.floor((Date.now() - new Date(j.invoiceSentDate).getTime()) / 86400000);
+      const MILESTONES = [3, 7, 14, 21, 30];
+      const milestone = [...MILESTONES].reverse().find(m => daysPast >= m);
+      if (milestone) {
+        // Check if reminder already sent at this milestone
+        const sentAt = j.lastReminderSentAt ? new Date(j.lastReminderSentAt) : null;
+        const sentDaysAgo = sentAt ? Math.floor((Date.now() - sentAt.getTime()) / 86400000) : null;
+        // Find next milestone after the one we sent at
+        const sentMilestone = sentAt ? [...MILESTONES].reverse().find(m => (daysPast - sentDaysAgo) >= m) : null;
+        const alreadySentForCurrent = sentMilestone !== null && sentMilestone >= milestone;
+        if (!alreadySentForCurrent) {
+          actionItems.push({ job:j, label: `Invoice ${daysPast} days past due`, type:"overdue", daysPast, urgent: daysPast >= 14 });
+        }
+      }
+    }
 
   // ── Aging ──
   const agingItems = [];
@@ -8315,15 +8405,31 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
           {actionItems.length === 0 ? (
             <p style={{fontSize:13, color:C.textMuted}}>Nothing needs your attention right now.</p>
           ) : actionItems.map((item, i) => (
-            <div key={item.job.id+"-"+i} onClick={() => open(item.job)}
-              style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer",
-                padding:"10px 12px", background: item.urgent ? "#fef3c7" : C.surface2, borderRadius:8, marginBottom:8,
-                border: item.urgent ? "1px solid #fde68a" : `1px solid ${C.border}`}}>
-              <div style={{flex:1, minWidth:0, marginRight:10}}>
-                <div style={{fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.job.clientName||"Unnamed Client"}</div>
-                <div style={{fontSize:12, color:item.urgent ? "#92400e" : C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.label}</div>
+            <div key={item.job.id+"-"+i}
+              style={{padding:"10px 12px", background: item.urgent ? "#fef3c7" : C.surface2, borderRadius:8, marginBottom:8,
+                border: item.type==="overdue" ? "1px solid #fca5a5" : item.urgent ? "1px solid #fde68a" : `1px solid ${C.border}`}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", cursor: item.type==="overdue" ? "default" : "pointer"}}
+                onClick={() => item.type!=="overdue" && open(item.job)}>
+                <div style={{flex:1, minWidth:0, marginRight:10}}>
+                  <div style={{fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.job.clientName||"Unnamed Client"}</div>
+                  <div style={{fontSize:12, color: item.type==="overdue" ? "#b91c1c" : item.urgent ? "#92400e" : C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.label}</div>
+                </div>
+                {item.type==="overdue" ? (
+                  <div style={{display:"flex", gap:6, flexShrink:0}} onClick={e => e.stopPropagation()}>
+                    <button style={{...S.btnSmall, fontSize:11, background:"#dbeafe", color:"#1d4ed8", border:"1px solid #bfdbfe"}}
+                      onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("email"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}>
+                      ✉️ Email
+                    </button>
+                    <button style={{...S.btnSmall, fontSize:11, background:"#dcfce7", color:"#15803d", border:"1px solid #86efac"}}
+                      onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("text"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}>
+                      💬 Text
+                    </button>
+                    <button style={{...S.btnSmall, fontSize:11}} onClick={() => open(item.job)}>Open →</button>
+                  </div>
+                ) : (
+                  <span style={{fontSize:12, color:C.accent, fontWeight:600, flexShrink:0}}>Open →</span>
+                )}
               </div>
-              <span style={{fontSize:12, color:C.accent, fontWeight:600, flexShrink:0}}>Open →</span>
             </div>
           ))}
         </section>
@@ -8418,6 +8524,53 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
       </section>
       </>
       )} {/* end homeTab ternary */}
+
+      {/* ── Invoice Reminder Modal ── */}
+      {reminderModal && createPortal(
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+            <h2 style={{...S.h2, marginTop:0}}>📄 Invoice Reminder</h2>
+            <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
+              Sending reminder for <strong>{reminderModal.job.clientName||"Unnamed"}</strong> — {reminderModal.daysPast} days past due.
+            </p>
+            {/* Channel toggle */}
+            <div style={{display:"flex", gap:0, marginBottom:14, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden"}}>
+              {["email","text"].map(ch => (
+                <button key={ch} onClick={() => setReminderChannel(ch)}
+                  style={{flex:1, padding:"8px", fontSize:13, fontWeight:600, border:"none", cursor:"pointer",
+                    background: reminderChannel===ch ? C.accent : C.surface2,
+                    color: reminderChannel===ch ? "#000" : C.textMuted}}>
+                  {ch === "email" ? "✉️ Email" : "💬 Text"}
+                </button>
+              ))}
+            </div>
+            {reminderChannel === "email" ? (
+              <label style={S.formLabel}>Client Email *
+                <input type="email" value={reminderEmail} onChange={e => setReminderEmail(e.target.value)}
+                  style={{...S.input, height:42, boxSizing:"border-box"}}/>
+              </label>
+            ) : (
+              <label style={S.formLabel}>Client Phone *
+                <input type="tel" value={reminderPhone} onChange={e => setReminderPhone(e.target.value)}
+                  style={{...S.input, height:42, boxSizing:"border-box"}}/>
+              </label>
+            )}
+            <div style={{fontSize:11, color:C.textMuted, marginTop:6, marginBottom:12}}>
+              {reminderChannel === "email"
+                ? "A reminder email will be sent with the invoice attached."
+                : "Your SMS app will open with the reminder pre-filled."}
+            </div>
+            {reminderError && <div style={{fontSize:12, color:C.danger, background:"#fef2f2", borderRadius:6, padding:"8px 12px", marginBottom:12}}>{reminderError}</div>}
+            <div style={{display:"flex", gap:8}}>
+              <button style={{...S.btnPrimary, flex:1, opacity: sendingReminder ? 0.6 : 1}}
+                disabled={!!sendingReminder} onClick={sendReminder}>
+                {sendingReminder ? "⏳ Sending..." : "Send Reminder"}
+              </button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => setReminderModal(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
     </div>
   );
 }
@@ -12104,7 +12257,7 @@ export default function App() {
             <button onClick={goBack} style={S.btnSecondary}>← Back</button>
           </div>
         )}
-        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} tFetch={tFetch} setJobs={setJobs} updateJobById={updateJobById}/></div>}
+        {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} tFetch={tFetch} setJobs={setJobs} updateJobById={updateJobById} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
         {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
