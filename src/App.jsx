@@ -2576,7 +2576,6 @@ ${a}`.notes : ""), cols[0]-12);
       const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20) + "_" + (isPaid ? "PaidInvoice" : "Invoice") + "_" + invNum + ".pdf";
       if (!skipSave) {
         doc.save(filename);
-        setSent(true);
       }
       return doc;
     } catch(e) {
@@ -2584,7 +2583,7 @@ ${a}`.notes : ""), cols[0]-12);
       alert("PDF generation failed: " + e.message);
       return null;
     }
-    if (!skipSave) setPdfLoading(false);
+    setPdfLoading(false);
   };
 
   return (
@@ -2802,12 +2801,13 @@ ${a}`.notes : ""), cols[0]-12);
       <section style={S.section}>
         <div style={S.actionBtns}>
           <button style={{...S.btnPrimary, opacity:pdfLoading?0.5:1, background: isPaid ? "#16a34a" : brand.accent}}
-            onClick={() => {
+            onClick={async () => {
               if (!currentJob.invoiceSentDate) {
                 const go = confirm("You haven't set an Invoice Sent Date.\n\nHit OK to go back and set the date, or Cancel to download anyway.");
-                if (go) return; // stay on screen
+                if (go) return;
               }
-              generatePDF();
+              const doc = await generatePDF();
+              if (doc) setSent(true);
             }} disabled={pdfLoading}>
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
@@ -9153,7 +9153,6 @@ ${a}`.notes : "");
       const filename = (CS_NAME||"Company").replace(/[^a-zA-Z0-9]/g,"_").slice(0,20) + "_Estimate_" + (currentJob.estimateNum || currentJob.id) + ".pdf";
       if (!skipSave) {
         doc.save(filename);
-        setSent(true);
       }
       return doc;
 
@@ -9162,7 +9161,7 @@ ${a}`.notes : "");
       alert("PDF generation failed: " + e.message);
       return null;
     } finally {
-      if (!skipSave) setPdfLoading(false);
+      setPdfLoading(false);
     }
   };
 
@@ -9473,12 +9472,13 @@ ${a}`.notes : "");
       {canSeeMoney && <section style={S.section}>
         <div style={S.actionBtns}>
           <button style={{...S.btnPrimary, opacity:pdfLoading?0.5:1}}
-            onClick={() => {
+            onClick={async () => {
               if (!currentJob.estimateSentDate) {
                 const go = confirm("You haven't set an Estimate Sent Date.\n\nHit OK to go back and set the date, or Cancel to download anyway.");
-                if (go) return; // stay on screen
+                if (go) return;
               }
-              generatePDF();
+              const doc = await generatePDF();
+              if (doc) setSent(true);
             }} disabled={pdfLoading}>
             {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
           </button>
