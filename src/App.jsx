@@ -12584,7 +12584,7 @@ function LoginView({ onSuccess, onShowSignup }) {
 
 // ─── Admin App (admin.blacktopiq.com) ────────────────────────────────────────
 const SUPABASE_URL_ADMIN = "https://elzymtqlcceouftwhcdk.supabase.co";
-const SUPABASE_KEY_ADMIN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A";
+const SUPABASE_KEY_ADMIN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDk3MDYsImV4cCI6MjA5NjA4NTcwNn0.rTr3e4739fJpbHXgBneRTr18utum5XxMWTf2E0DtOVQ";
 
 function AdminApp() {
   const [adminSession,   setAdminSession]   = useState(null);
