@@ -1030,7 +1030,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
         )}
         {homeMsg && <div style={{fontSize:12, color: homeMsg.startsWith("⚠️") ? C.danger : C.green, marginTop:8}}>{homeMsg}</div>}
         <button style={{...S.btnPrimary, marginTop:12, opacity:savingHome?0.6:1}} onClick={saveHomeBase} disabled={savingHome}>
-          {savingHome ? "Saving..." : "<LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Home Base"}
+          {savingHome ? "Saving..." : <><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Home Base</>}
         </button>
       </section>
     </div>
@@ -2831,7 +2831,7 @@ ${email}`:""}`;
                 setPdfLoading(false);
               }
             }} disabled={pdfLoading}>
-            {pdfLoading ? "⏳ Building PDF..." : "<LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF"}
+            {pdfLoading ? "⏳ Building PDF..." : <><LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF</>}
           </button>
           <button style={S.btnSecondary} onClick={emailInvoice}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email PDF</button>
           <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><LucideIcons.MessageSquare size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Text PDF</button>
@@ -6128,7 +6128,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
         </p>
         <button style={{...S.btnPrimary, width:"100%", opacity:pdfLoading?.5:1}}
           onClick={printReport} disabled={pdfLoading}>
-          {pdfLoading?"⏳ Generating...":"<LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF"}
+          {pdfLoading?"⏳ Generating...":<><LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF</>}
         </button>
       </section>
 
@@ -6718,7 +6718,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
             {profileErr && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{profileErr}</div>}
             {profileMsg && <div style={{color:C.green, fontSize:13, marginTop:10}}>{profileMsg}</div>}
             <button style={{...S.btnPrimary, marginTop:14, opacity:savingProfile?0.6:1}} onClick={saveProfile} disabled={savingProfile}>
-              {savingProfile ? "Saving..." : "<LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Info"}
+              {savingProfile ? "Saving..." : <><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Info</>}
             </button>
           </>
         )}
@@ -7472,7 +7472,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
         {message && <div style={{color:C.green, fontSize:13, marginTop:14}}>{message}</div>}
         {!readOnly && <div style={{display:"flex", gap:8, marginTop:14}}>
           <button style={{...S.btnPrimary, flex:1, opacity:saving?0.6:1}} onClick={save} disabled={saving}>
-            {saving ? "Saving..." : "<LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Permissions"}
+            {saving ? "Saving..." : <><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Permissions</>}
           </button>
           <button style={S.btnSecondary} onClick={resetToDefaults}>↩ Reset to Defaults</button>
         </div>}
@@ -10377,7 +10377,7 @@ ${a}`.notes : "");
                 setPdfLoading(false);
               }
             }} disabled={pdfLoading}>
-            {pdfLoading ? "⏳ Building PDF..." : "<LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF"}
+            {pdfLoading ? "⏳ Building PDF..." : <><LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF</>}
           </button>
           <button style={S.btnSecondary} onClick={emailEstimate}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email PDF</button>
           <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><LucideIcons.MessageSquare size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Text PDF</button>
@@ -11150,7 +11150,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       {message && <div style={{fontSize:13,color:message.startsWith("⚠️")?C.danger:C.green,padding:"0 16px 12px"}}>{message}</div>}
       <div style={{padding:"0 16px 24px"}}>
         <button style={{...S.btnPrimary,width:"100%",opacity:saving?0.6:1}} onClick={save} disabled={saving}>
-          {saving?"Saving...":"<LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Company Settings"}
+          {saving?"Saving...":<><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Company Settings</>}
         </button>
       </div>
     </div>
