@@ -4008,7 +4008,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                       {ac.ratio < specVal
                         ? `Covering ${((1-Number(ac.ratio||0)/specVal)*100).toFixed(0)}% less area per ${u} than spec.`
                         : ac.ratio > specVal
-                        ? `Covering ${(((Number(ac.ratio||0)/specVal-1)*100).toFixed(0)}% more area per ${u} than spec.`
+                        ? `Covering ${((Number(ac.ratio||0)/specVal-1)*100).toFixed(0)}% more area per ${u} than spec.`
                         : "Matches manufacturer spec."}
                     </p>
                     <button style={S.btnSmall} onClick={() => applyActualCoverage(key)}>Use this as my coverage rate</button>
