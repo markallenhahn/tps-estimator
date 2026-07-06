@@ -12672,7 +12672,8 @@ function AdminApp() {
         body: JSON.stringify({ email: adminEmail.trim(), password: adminPassword }),
       });
       const data = await res.json();
-      if (!res.ok) { setLoginError(data.error_description || data.msg || "Login failed."); setLoggingIn(false); return; }
+      console.log("[AdminApp login] status:", res.status, "body:", JSON.stringify(data));
+      if (!res.ok) { setLoginError((data.error_description || data.msg || data.error || "Login failed.") + " (status " + res.status + ")"); setLoggingIn(false); return; }
       localStorage.setItem("adminToken", data.access_token);
       const ok = await verifyAndSetAdmin(data.user, data.access_token);
       if (!ok) localStorage.removeItem("adminToken");
