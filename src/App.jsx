@@ -4041,6 +4041,15 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
             const f = forecast[m.key];
             const u = m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit;
             const hasEstimate = m.key === "crackfill" ? settings.crackfillLinFtPerUnit > 0 : true;
+            if (!f) {
+              // New material type not yet in forecast — no coverage rate configured
+              return (
+                <div key={m.key} style={{background:C.surface2, borderRadius:10, border:`1px solid ${C.border}`, padding:14}}>
+                  <div style={{fontWeight:700, fontSize:14, marginBottom:8}}>{m.label}</div>
+                  <p style={{fontSize:12, color:C.textMuted, margin:0}}>No forecast available — log purchases and stock checks to enable.</p>
+                </div>
+              );
+            }
             if (!hasEstimate) {
               return (
                 <div key={m.key} style={{background:C.surface2, borderRadius:10, border:`1px solid ${C.border}`, padding:14}}>
