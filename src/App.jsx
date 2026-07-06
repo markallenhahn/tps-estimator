@@ -3394,20 +3394,58 @@ function jobRawMeasurement(job, serviceType) {
 const MATERIAL_DONE_STATUSES = ["completed","paid"];
 const MATERIAL_UPCOMING_STATUSES = ["signed","scheduled"];
 
-const MATERIAL_TYPES = [
-  { key:"sealcoat",  label:"Sealcoat",        defaultUnit:"gal" },
-  { key:"crackfill", label:"Crack Filling",   defaultUnit:"lb"  },
-  { key:"patch",     label:"Patch / Asphalt", defaultUnit:"ton" },
-  { key:"stone",     label:"Stone",           defaultUnit:"ton" },
-  { key:"other",     label:"Other",           defaultUnit:"unit"},
+const BUILTIN_MATERIAL_TYPES = [
+  { key:"sealcoat",     label:"Sealcoat",              defaultUnit:"gal",  builtin:true },
+  { key:"crackfill",    label:"Crack Filling",          defaultUnit:"lb",   builtin:true },
+  { key:"patch",        label:"Patch / Asphalt",        defaultUnit:"ton",  builtin:true },
+  { key:"tack",         label:"Tack Coat",              defaultUnit:"gal",  builtin:true },
+  { key:"binder",       label:"Asphalt Binder",         defaultUnit:"ton",  builtin:true },
+  { key:"coldpatch",    label:"Cold Patch",             defaultUnit:"bag",  builtin:true },
+  { key:"primer",       label:"Oil Spot Primer",        defaultUnit:"gal",  builtin:true },
+  { key:"additive",     label:"Sealer Additives",       defaultUnit:"gal",  builtin:true },
+  { key:"millteeth",    label:"Milling Teeth",          defaultUnit:"unit", builtin:true },
+  { key:"preprepair",   label:"Preparation & Repair",   defaultUnit:"unit", builtin:true },
+  { key:"stone",        label:"Stone",                  defaultUnit:"ton",  builtin:true },
+  { key:"paint_yellow", label:"Traffic Paint (Yellow)", defaultUnit:"gal" },
+  { key:"paint_white", label:"Traffic Paint (White)", defaultUnit:"gal" },
+  { key:"paint_black", label:"Traffic Paint (Black)", defaultUnit:"gal" },
+  { key:"paint_orange", label:"Traffic Paint (Orange)", defaultUnit:"gal" },
+  { key:"paint_red", label:"Traffic Paint (Red)", defaultUnit:"gal" },
+  { key:"paint_maroon", label:"Traffic Paint (Maroon)", defaultUnit:"gal" },
+  { key:"paint_blue", label:"Traffic Paint (Blue)", defaultUnit:"gal" },
+  { key:"paint_light_blue", label:"Traffic Paint (Light Blue)", defaultUnit:"gal" },
+  { key:"paint_green", label:"Traffic Paint (Green)", defaultUnit:"gal" },
+  { key:"paint_light_green", label:"Traffic Paint (Light Green)", defaultUnit:"gal" },
+  { key:"paint_forest_green", label:"Traffic Paint (Forest Green)", defaultUnit:"gal" },
+  { key:"paint_dark_green", label:"Traffic Paint (Dark Green)", defaultUnit:"gal" },
+  { key:"paint_purple", label:"Traffic Paint (Purple)", defaultUnit:"gal" },
+  { key:"paint_gray", label:"Traffic Paint (Gray)", defaultUnit:"gal" },
+  { key:"paint_dove_gray", label:"Traffic Paint (Dove Gray)", defaultUnit:"gal" },
+  { key:"paint_ice_blue", label:"Traffic Paint (Ice Blue)", defaultUnit:"gal" },
+  { key:"paint_beige", label:"Traffic Paint (Beige)", defaultUnit:"gal" },
+  { key:"paint_sandstone", label:"Traffic Paint (Sandstone)", defaultUnit:"gal" },
+  { key:"other",        label:"Other",                  defaultUnit:"unit", builtin:true },
 ];
+
+// getMaterialTypes merges builtin + tenant custom types
+function getMaterialTypes(materialSettings) {
+  const custom = (materialSettings?.customMaterialTypes || []).map(t => ({...t, builtin:false}));
+  return [...BUILTIN_MATERIAL_TYPES, ...custom];
+}
+
+// For backward compat
+const MATERIAL_TYPES = BUILTIN_MATERIAL_TYPES;
 const MATERIAL_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
 const materialStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
 function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole }) {
   const canEdit = userRole === "owner" || userRole === "manager";
+  const allMatTypes = getMaterialTypes(materialSettings);
 
   const [category,  setCategory]  = useState("sealcoat");
+  const [showAddMatType, setShowAddMatType] = useState(false);
+  const [newMatLabel,    setNewMatLabel]    = useState("");
+  const [newMatUnit,     setNewMatUnit]     = useState("gal");
   const [qty,        setQty]       = useState("");
   const [unit,        setUnit]       = useState(MATERIAL_TYPES[0].defaultUnit);
   const [cost,        setCost]       = useState("");
@@ -3449,9 +3487,10 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
     countedStatuses: materialSettings?.countedStatuses || ["signed","scheduled","completed","paid"],
     serviceMappings: materialSettings?.serviceMappings || {
       sealcoat: ["sealcoat"], crackfill: ["crackfill"], patch: ["patch"],
-      paving: ["patch"], basepaving: ["patch"], striping: [], infrared: ["patch"],
-      milling: [], overlay: ["patch"], mobilization: [], sitework: [], other: [],
+      paving: ["patch","tack"], basepaving: ["patch","tack"], striping: [], infrared: ["patch"],
+      milling: [], overlay: ["patch","tack"], mobilization: [], sitework: [], other: [],
     },
+    customMaterialTypes: materialSettings?.customMaterialTypes || [],
   };
   const [draftSettings, setDraftSettings] = useState(settings);
   useEffect(() => { setDraftSettings(settings); }, [JSON.stringify(settings)]);
@@ -3653,13 +3692,47 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <h2 style={{...S.h2, margin:0}}>Service → Material Mapping</h2>
               <p style={{fontSize:12, color:C.textMuted, margin:"4px 0 0"}}>Map each service type to the materials it uses for cost calculations.</p>
             </div>
-            <button style={S.btnSmall} onClick={async () => {
-              const updated = {...draftSettings};
-              setMaterialSettings(updated);
-              await syncMaterialSettings(updated);
-              alert("Mappings saved.");
-            }}>Save</button>
+            <div style={{display:"flex", gap:6}}>
+              <button style={S.btnSmall} onClick={() => setShowAddMatType(v=>!v)}>
+                {showAddMatType ? "Cancel" : "+ Material Type"}
+              </button>
+              <button style={S.btnSmall} onClick={async () => {
+                const updated = {...draftSettings};
+                setMaterialSettings(updated);
+                await syncMaterialSettings(updated);
+                alert("Mappings saved.");
+              }}>Save</button>
+            </div>
           </div>
+          {showAddMatType && (
+            <div style={{background:C.surface2, borderRadius:8, padding:"12px 14px", marginBottom:10}}>
+              <div style={{fontSize:12, fontWeight:700, marginBottom:8}}>New Material Type</div>
+              <div style={{display:"flex", gap:8, flexWrap:"wrap", alignItems:"flex-end"}}>
+                <label style={{fontSize:12}}>Name *
+                  <input value={newMatLabel} onChange={e => setNewMatLabel(e.target.value)}
+                    placeholder="e.g. Crack Filler Pro" style={{...S.input, marginTop:4, width:180}}/>
+                </label>
+                <label style={{fontSize:12}}>Default Unit
+                  <input value={newMatUnit} onChange={e => setNewMatUnit(e.target.value)}
+                    placeholder="gal, lb, ton..." style={{...S.input, marginTop:4, width:80}}/>
+                </label>
+                <button style={S.btnPrimary} onClick={async () => {
+                  if (!newMatLabel.trim()) { alert("Name required."); return; }
+                  const key = "custom_" + newMatLabel.trim().toLowerCase().replace(/[^a-z0-9]/g,"_").slice(0,20) + "_" + Date.now().toString().slice(-4);
+                  const newType = { key, label: newMatLabel.trim(), defaultUnit: newMatUnit.trim()||"unit", builtin:false };
+                  const updated = {
+                    ...draftSettings,
+                    customMaterialTypes: [...(draftSettings.customMaterialTypes||[]), newType]
+                  };
+                  setDraftSettings(updated);
+                  setMaterialSettings(updated);
+                  await syncMaterialSettings(updated);
+                  setNewMatLabel(""); setNewMatUnit("gal"); setShowAddMatType(false);
+                }}>Add</button>
+              </div>
+            </div>
+          )}
+
           <div style={{display:"flex", flexDirection:"column", gap:10}}>
             {Object.keys(DEFAULT_RATES).filter(k => !["mobilization","sitework","other"].includes(k)).map(svcKey => {
               const svcLabel = DEFAULT_RATES[svcKey]?.label || svcKey;
@@ -3668,7 +3741,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                 <div key={svcKey} style={{display:"flex", alignItems:"center", gap:10, flexWrap:"wrap"}}>
                   <div style={{fontWeight:600, fontSize:13, width:160, flexShrink:0}}>{svcLabel}</div>
                   <div style={{display:"flex", gap:6, flexWrap:"wrap", flex:1}}>
-                    {MATERIAL_TYPES.filter(m => m.key !== "other").map(mat => {
+                    {allMatTypes.filter(m => m.key !== "other").map(mat => {
                       const checked = currentMapped.includes(mat.key);
                       return (
                         <button key={mat.key}
@@ -3757,7 +3830,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           <div style={S.formGrid}>
             <label style={S.formLabel}>Material
               <select value={category} onChange={e => onCategoryChange(e.target.value)} style={S.input}>
-                {MATERIAL_TYPES.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                {allMatTypes.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
               </select>
             </label>
             <label style={S.formLabel}>Date
@@ -8143,6 +8216,8 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const [importing,     setImporting]     = useState(false);
   const [importResult,  setImportResult]  = useState(null); // { added, skipped }
   const [importError,   setImportError]   = useState("");
+  const [payMethodMap,  setPayMethodMap]  = useState({}); // { rawValue: PAYMENT_METHODS value }
+  const [unmatchedPay,  setUnmatchedPay]  = useState([]); // raw values needing mapping
 
   // Form state
   // ── Parse date like "29-Apr", "12-Jan", "2026-01-29", etc. ──────────────────
@@ -8203,6 +8278,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
       const payeeCol   = colIdx("payee");
       const invoiceCol = colIdx("invoice");
       const catCol     = colIdx("category");
+      const paidByCol  = colIdx("paid by") >= 0 ? colIdx("paid by") : colIdx("payment") >= 0 ? colIdx("payment") : -1;
 
       const parsed = [];
       for (let i = headerIdx+1; i < rows.length; i++) {
@@ -8220,7 +8296,8 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         const date = parseExpenseDate(rawDate, importYear);
         if (!date) continue;
 
-        parsed.push({ item:rawItem, date, amount, payee:rawPayee, invoice:rawInvoice, sheetCat:rawCat });
+        const rawPaidBy = paidByCol >= 0 ? String(row[paidByCol]||"").trim() : "";
+        parsed.push({ item:rawItem, date, amount, payee:rawPayee, invoice:rawInvoice, sheetCat:rawCat, paidBy:rawPaidBy });
       }
 
       // Find unique categories
@@ -8234,6 +8311,22 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
       setImportMapping(autoMap);
       setImportRows(parsed);
       setImportResult(null);
+
+      // Find unmatched payment methods
+      const uniquePay = [...new Set(parsed.map(r => r.paidBy).filter(Boolean))];
+      const autoPayMap = {};
+      uniquePay.forEach(p => {
+        const norm = p.toLowerCase().replace(/[^a-z]/g,"");
+        if (norm.includes("cash")) autoPayMap[p] = "Cash";
+        else if (norm.includes("check")) autoPayMap[p] = "Check";
+        else if (norm.includes("ach") || norm.includes("transfer")) autoPayMap[p] = "ACH/Transfer";
+        else if (norm.includes("personal")) autoPayMap[p] = "Personal Card";
+        else if (norm.includes("company") || norm.includes("corp")) autoPayMap[p] = "Company Card";
+        // else — needs manual mapping
+      });
+      const unmatched = uniquePay.filter(p => !autoPayMap[p]);
+      setPayMethodMap(autoPayMap);
+      setUnmatchedPay(unmatched);
     } catch(e) {
       setImportError("Failed to parse file: " + e.message);
     }
@@ -8276,10 +8369,13 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
 
       if (isDupe) { skipped++; return; }
 
+      const payMethod = row.paidBy
+        ? (payMethodMap[row.paidBy] || "Check")
+        : "Check";
       addExpense({
         id: Date.now() + Math.random(),
         date, category: appCat, amount, vendorId, vendorName: row.payee,
-        notes, paymentMethod: "Check", jobId: "", receiptUrl: "",
+        notes, paymentMethod: payMethod, jobId: "", receiptUrl: "",
       });
       added++;
     });
@@ -8398,9 +8494,27 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           <button style={S.btnSecondary} onClick={() => setShowVendors(v=>!v)}>
             🏢 Manage Vendors ({vendors.length})
           </button>
-          <button style={S.btnSecondary} onClick={() => { setShowImport(true); setImportRows([]); setImportResult(null); setImportError(""); }}>
-            <LucideIcons.Upload size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Import from Spreadsheet
-          </button>
+          <div style={{display:"flex", gap:6, alignItems:"center"}}>
+            <button style={S.btnSecondary} onClick={() => { setShowImport(true); setImportRows([]); setImportResult(null); setImportError(""); setPayMethodMap({}); setUnmatchedPay([]); }}>
+              <LucideIcons.Upload size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Import from Spreadsheet
+            </button>
+            <button title="Spreadsheet format info" style={{...S.btnSmall, padding:"6px 8px", fontSize:11}}
+              onClick={() => alert(
+                "Expected spreadsheet columns:\n\n" +
+                "• Item — Description of the expense (e.g. Website Hosting)\n" +
+                "• Date — Date of expense (e.g. 29-Apr, Apr 29, 2026-04-29)\n" +
+                "• Amount — Dollar amount (e.g. $359.88 or 359.88)\n" +
+                "• Payee — Vendor or company name (e.g. SiteGround)\n" +
+                "• Category — Expense category (e.g. G&A, COGS, Equipment, Sales)\n" +
+                "• Paid By — Payment method (e.g. Check, Cash, Company Card) — optional\n" +
+                "• Invoice # — Invoice or reference number — optional\n\n" +
+                "• Blank rows are skipped automatically\n" +
+                "• Year defaults to current year if not in date\n" +
+                "• Duplicate entries (same date + amount + category + vendor) are skipped"
+              )}>
+              <LucideIcons.Info size={14} strokeWidth={2}/>
+            </button>
+          </div>
         </div>
       )}
 
@@ -8422,7 +8536,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
 
             <label style={S.formLabel}>Material Type
               <select value={cogsMatType} onChange={e => { setCogsMatType(e.target.value); setCogsMatUnit(MATERIAL_TYPES.find(m=>m.key===e.target.value)?.defaultUnit||"unit"); }} style={S.input}>
-                {MATERIAL_TYPES.filter(m=>m.key!=="other").map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                {allMatTypes.filter(m=>m.key!=="other").map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
               </select>
             </label>
 
@@ -8577,6 +8691,30 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                   </div>
                 )}
 
+                {/* Payment method mapping for unmatched values */}
+                {unmatchedPay.length > 0 && (
+                  <div style={{marginBottom:16}}>
+                    <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8}}>
+                      Payment Method Mapping
+                    </div>
+                    <p style={{fontSize:12, color:C.danger, marginBottom:8}}>
+                      These "Paid By" values weren't recognized — please map them:
+                    </p>
+                    {unmatchedPay.map(raw => (
+                      <div key={raw} style={{display:"flex", alignItems:"center", gap:10, marginBottom:8}}>
+                        <div style={{flex:1, fontSize:13, fontWeight:600}}>"{raw}"</div>
+                        <span style={{fontSize:12, color:C.textMuted}}>→</span>
+                        <select value={payMethodMap[raw]||""}
+                          onChange={e => setPayMethodMap(prev => ({...prev, [raw]: e.target.value}))}
+                          style={{...S.input, width:160}}>
+                          <option value="">-- Select --</option>
+                          {PAYMENT_METHODS.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Preview */}
                 <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8}}>
                   Preview (first 5 rows)
@@ -8594,9 +8732,10 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 </div>
 
                 <div style={{display:"flex", gap:8}}>
-                  <button style={{...S.btnPrimary, flex:1, opacity:importing?0.6:1}}
-                    disabled={importing} onClick={runImport}>
-                    {importing ? "⏳ Importing..." : `Import ${importRows.length} Expenses`}
+                  <button style={{...S.btnPrimary, flex:1, opacity:(importing || unmatchedPay.some(p => !payMethodMap[p]))?0.6:1}}
+                    disabled={importing || unmatchedPay.some(p => !payMethodMap[p])}
+                    onClick={runImport}>
+                    {importing ? "⏳ Importing..." : unmatchedPay.some(p => !payMethodMap[p]) ? "Map all payment methods first" : `Import ${importRows.length} Expenses`}
                   </button>
                   <button style={{...S.btnSecondary, flex:1}} onClick={() => { setImportRows([]); setImportMapping({}); }}>
                     ← Re-upload
