@@ -3757,7 +3757,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                           background:"#fffbeb", border:`1px solid ${C.accent}`, color:"#000"}}>
                           {mat.label}
                           <button onClick={() => {
-                            const next = currentMapped.filter(k => k !== matKey);
+                            const next = currentMapped.filter(mk => mk !== matKey);
                             setDraftSettings(prev => ({
                               ...prev,
                               serviceMappings: {...(prev.serviceMappings||{}), [svcKey]: next}
