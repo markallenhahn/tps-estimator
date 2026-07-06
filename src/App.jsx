@@ -10883,10 +10883,10 @@ function JoinCompanyView({ token, onSuccess }) {
   };
 
   return (
-    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+    <div style={{...S.app, alignItems:"center", justifyContent:"flex-start", paddingTop:"5vh", paddingBottom:"5vh", overflowY:"auto"}}>
       <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:220, display:"block", margin:"0 auto 20px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome to BlacktopIQ</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
           Set up your company and create your admin account.
@@ -10973,10 +10973,10 @@ function PublicSignupView({ onBack }) {
   }
 
   return (
-    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+    <div style={{...S.app, alignItems:"center", justifyContent:"flex-start", paddingTop:"5vh", paddingBottom:"5vh", overflowY:"auto"}}>
       <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:220, display:"block", margin:"0 auto 20px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Start your free trial</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
           Set up your company — no credit card required.
