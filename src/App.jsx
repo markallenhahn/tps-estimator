@@ -3912,18 +3912,18 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                 <div style={{fontWeight:700, fontSize:14, marginBottom:8}}>{m.label}</div>
                 <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
                   <span style={{color:C.textMuted}}>Purchased</span>
-                  <span style={{fontWeight:600}}>{purch.qty.toFixed(1)} {purchased[m.key] ? (materials.find(mm=>mm.category===m.key)?.unit || m.defaultUnit) : m.defaultUnit} · {formatCurrency(purch.cost)}</span>
+                  <span style={{fontWeight:600}}>{Number(purch.qty||0).toFixed(1)} {purchased[m.key] ? (materials.find(mm=>mm.category===m.key)?.unit || m.defaultUnit) : m.defaultUnit} · {formatCurrency(purch.cost)}</span>
                 </div>
                 <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
                   <span style={{color:C.textMuted}}>Estimated Used</span>
-                  <span style={{fontWeight:600}}>{hasEstimate ? `${est.toFixed(1)} ${m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit}` : "set coverage rate"}</span>
+                  <span style={{fontWeight:600}}>{hasEstimate ? `${Number(est||0).toFixed(1)} ${m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit}` : "set coverage rate"}</span>
                 </div>
                 {hasEstimate && est > 0 && (
                   <div style={{display:"flex", justifyContent:"space-between", fontSize:13, paddingTop:6, borderTop:`1px solid ${C.border}`, marginTop:4}}>
                     <span style={{color:C.textMuted}}>Variance</span>
                     <span style={{fontWeight:700, color: overBuying ? C.danger : C.green}}>
-                      {overBuying ? "+" : ""}{variance.toFixed(1)} {m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit}
-                      {variancePct !== null && ` (${overBuying?"+":""}${variancePct.toFixed(0)}%)`}
+                      {overBuying ? "+" : ""}{Number(variance||0).toFixed(1)} {m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit}
+                      {variancePct !== null && ` (${overBuying?"+":""}${Number(variancePct||0).toFixed(0)}%)`}
                     </span>
                   </div>
                 )}
@@ -4002,13 +4002,13 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                     </div>
                     <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:8}}>
                       <span style={{color:C.textMuted}}>Your Actual ({ac.periodsUsed} period{ac.periodsUsed!==1?"s":""})</span>
-                      <span style={{fontWeight:700, color:C.accent}}>{ac.ratio.toFixed(2)} {basisLabel}/{u}</span>
+                      <span style={{fontWeight:700, color:C.accent}}>{Number(ac.ratio||0).toFixed(2)} {basisLabel}/{u}</span>
                     </div>
                     <p style={{fontSize:11, color:C.textDim, margin:"0 0 8px"}}>
                       {ac.ratio < specVal
-                        ? `Covering ${((1-ac.ratio/specVal)*100).toFixed(0)}% less area per ${u} than spec.`
+                        ? `Covering ${((1-Number(ac.ratio||0)/specVal)*100).toFixed(0)}% less area per ${u} than spec.`
                         : ac.ratio > specVal
-                        ? `Covering ${((ac.ratio/specVal-1)*100).toFixed(0)}% more area per ${u} than spec.`
+                        ? `Covering ${(((Number(ac.ratio||0)/specVal-1)*100).toFixed(0)}% more area per ${u} than spec.`
                         : "Matches manufacturer spec."}
                     </p>
                     <button style={S.btnSmall} onClick={() => applyActualCoverage(key)}>Use this as my coverage rate</button>
@@ -4063,25 +4063,25 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                 <div style={{fontWeight:700, fontSize:14, marginBottom:8}}>{m.label}</div>
                 <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
                   <span style={{color:C.textMuted}}>On Hand {f.lastCheck ? "(from stock check)" : "(est., no check logged)"}</span>
-                  <span style={{fontWeight:600}}>{f.onHand.toFixed(1)} {u}</span>
+                  <span style={{fontWeight:600}}>{Number(f.onHand||0).toFixed(1)} {u}</span>
                 </div>
                 <div style={{display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4}}>
                   <span style={{color:C.textMuted}}>Your buying vs. spec</span>
-                  <span style={{fontWeight:600}}>{(f.wasteFactor*100).toFixed(0)}%{f.wasteFactor>1 ? " (buying more than spec)" : f.wasteFactor<1 ? " (buying less than spec)" : ""}</span>
+                  <span style={{fontWeight:600}}>{(Number(f.wasteFactor||1)*100).toFixed(0)}%{f.wasteFactor>1 ? " (buying more than spec)" : f.wasteFactor<1 ? " (buying less than spec)" : ""}</span>
                 </div>
                 <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}`}}>
                   <div>
                     <div style={{fontSize:11, color:C.textDim, marginBottom:2}}>Manufacturer Spec</div>
-                    <div style={{fontSize:13}}>Need: {f.specNeed.toFixed(1)} {u}</div>
+                    <div style={{fontSize:13}}>Need: {Number(f.specNeed||0).toFixed(1)} {u}</div>
                     <div style={{fontWeight:800, fontSize:16, color: f.suggestedSpec>0 ? C.accent : C.green}}>
-                      {f.suggestedSpec>0 ? `Buy ${f.suggestedSpec.toFixed(1)} ${u}` : "Stocked ✓"}
+                      {f.suggestedSpec>0 ? `Buy ${Number(f.suggestedSpec||0).toFixed(1)} ${u}` : "Stocked ✓"}
                     </div>
                   </div>
                   <div>
                     <div style={{fontSize:11, color:C.textDim, marginBottom:2}}>Your History</div>
-                    <div style={{fontSize:13}}>Need: {f.histNeed.toFixed(1)} {u}</div>
+                    <div style={{fontSize:13}}>Need: {Number(f.histNeed||0).toFixed(1)} {u}</div>
                     <div style={{fontWeight:800, fontSize:16, color: f.suggestedHist>0 ? C.accent : C.green}}>
-                      {f.suggestedHist>0 ? `Buy ${f.suggestedHist.toFixed(1)} ${u}` : "Stocked ✓"}
+                      {f.suggestedHist>0 ? `Buy ${Number(f.suggestedHist||0).toFixed(1)} ${u}` : "Stocked ✓"}
                     </div>
                   </div>
                 </div>
@@ -8545,7 +8545,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
 
             <label style={S.formLabel}>Material Type
               <select value={cogsMatType} onChange={e => { setCogsMatType(e.target.value); setCogsMatUnit(MATERIAL_TYPES.find(m=>m.key===e.target.value)?.defaultUnit||"unit"); }} style={S.input}>
-                {allMatTypes.filter(m=>m.key!=="other").map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                {BUILTIN_MATERIAL_TYPES.filter(m=>m.key!=="other").map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
               </select>
             </label>
 
