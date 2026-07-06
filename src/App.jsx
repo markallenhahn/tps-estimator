@@ -8130,7 +8130,8 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   // Import state
   const [showImport,    setShowImport]    = useState(false);
   // COGS → Materials prompt state
-  const [cogsMatPrompt,    setCogsMatPrompt]    = useState(null); // pending expense entry
+  const [cogsMatPrompt,    setCogsMatPrompt]    = useState(null); // current expense being prompted
+  const [cogsMatQueue,     setCogsMatQueue]     = useState([]); // remaining queue
   const [cogsMatType,      setCogsMatType]      = useState("sealcoat");
   const [cogsMatName,      setCogsMatName]      = useState("");
   const [cogsMatQty,       setCogsMatQty]       = useState("");
@@ -8286,7 +8287,31 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     setImportResult({ added, skipped });
     setImporting(false);
     if (added > 0) {
-      setTimeout(() => setShowImport(false), 2000);
+      // Queue COGS expenses for Materials prompt
+      const cogsEntries = importRows
+        .filter(r => (importMapping[r.sheetCat]||"Other") === "COGS")
+        .map(r => ({
+          id: Date.now() + Math.random(),
+          date: r.date,
+          amount: r.amount,
+          vendorName: r.payee || r.item || "",
+          category: "COGS",
+        }));
+      if (cogsEntries.length > 0) {
+        const [first, ...rest] = cogsEntries;
+        setTimeout(() => {
+          setShowImport(false);
+          setCogsMatPrompt(first);
+          setCogsMatQueue(rest);
+          setCogsMatName(first.vendorName||"");
+          setCogsMatUseVendor(true);
+          setCogsMatQty("");
+          setCogsMatUnit(MATERIAL_TYPES[0].defaultUnit);
+          setCogsMatType(MATERIAL_TYPES[0].key);
+        }, 2200);
+      } else {
+        setTimeout(() => setShowImport(false), 2000);
+      }
     }
   };
 
@@ -8383,9 +8408,16 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
       {cogsMatPrompt && createPortal(
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:460, boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
-            <h2 style={{...S.h2, marginTop:0}}>Add to Materials?</h2>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
+              <h2 style={{...S.h2, margin:0}}>Add to Materials?</h2>
+              {cogsMatQueue.length > 0 && (
+                <span style={{fontSize:11, color:C.textMuted, background:C.surface2, borderRadius:6, padding:"2px 8px"}}>
+                  {cogsMatQueue.length + 1} remaining
+                </span>
+              )}
+            </div>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
-              This COGS expense of <strong>{formatCurrency(cogsMatPrompt.amount)}</strong> from <strong>{cogsMatPrompt.vendorName}</strong> — would you like to add it as a material purchase for cost tracking?
+              COGS expense of <strong>{formatCurrency(cogsMatPrompt.amount)}</strong> from <strong>{cogsMatPrompt.vendorName||"Unknown"}</strong> on {cogsMatPrompt.date} — add it as a material purchase for cost tracking?
             </p>
 
             <label style={S.formLabel}>Material Type
@@ -8445,11 +8477,38 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                     notes: cogsMatName !== cogsMatPrompt.vendorName ? cogsMatName : "",
                     fromExpenseId: cogsMatPrompt.id,
                   });
+                  // Advance to next in queue
+                const [next, ...rest] = cogsMatQueue;
+                setCogsMatQueue(rest);
+                if (next) {
+                  setCogsMatPrompt(next);
+                  setCogsMatName(next.vendorName||"");
+                  setCogsMatUseVendor(true);
+                  setCogsMatQty("");
+                  setCogsMatUnit(MATERIAL_TYPES[0].defaultUnit);
+                  setCogsMatType(MATERIAL_TYPES[0].key);
+                } else {
                   setCogsMatPrompt(null);
+                }
                 }}>
                 Yes, Add to Materials
               </button>
-              <button style={{...S.btnSecondary, flex:1}} onClick={() => setCogsMatPrompt(null)}>No Thanks</button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => {
+                const [next, ...rest] = cogsMatQueue;
+                setCogsMatQueue(rest);
+                if (next) {
+                  setCogsMatPrompt(next);
+                  setCogsMatName(next.vendorName||"");
+                  setCogsMatUseVendor(true);
+                  setCogsMatQty("");
+                  setCogsMatUnit(MATERIAL_TYPES[0].defaultUnit);
+                  setCogsMatType(MATERIAL_TYPES[0].key);
+                } else {
+                  setCogsMatPrompt(null);
+                }
+              }}>
+                {cogsMatQueue.length > 0 ? `Skip (${cogsMatQueue.length} more)` : "No Thanks"}
+              </button>
             </div>
           </div>
         </div>
