@@ -6057,6 +6057,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     const actualsCOGS = Object.values(actuals).reduce((s,av) => s + Number(av||0), 0);
 
     // FIFO material cost: for each area, look up material type via serviceMappings, get FIFO unit cost × qty ÷ coverage
+    const jobDate = j.date?.includes("/") ? new Date(j.date).toISOString().slice(0,10) : (j.date||"");
     const serviceMappings = materialSettings?.serviceMappings || {};
     let fifoCOGS = 0;
     let hasFifo = false;
@@ -6090,7 +6091,6 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     const cogsSource = hasActuals ? "actual" : hasFifo ? "fifo" : "estimated";
 
     // Labor: actual hours × rate
-    const jobDate = j.date?.includes("/") ? new Date(j.date).toISOString().slice(0,10) : (j.date||"");
     const jobLabor = laborEntries
       .filter(e => e.jobId === j.id || (e.date && e.date === jobDate)) // by jobId or date match
       .reduce((s,e) => {
