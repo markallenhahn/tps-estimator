@@ -12656,16 +12656,23 @@ function AdminApp() {
       });
       const admins = await r.json();
       if (!Array.isArray(admins)) return;
-      // Get profile info for each admin
       const ids = admins.map(a => a.user_id).join(",");
+      // Try profiles table first
       const pr = await fetch(SUPABASE_URL_ADMIN + "/rest/v1/profiles?id=in.(" + ids + ")&select=id,first_name,last_name,email", {
         headers: sbH(token)
       });
       const profiles = await pr.json();
-      const merged = admins.map(a => {
+      const merged = await Promise.all(admins.map(async (a) => {
         const p = Array.isArray(profiles) ? profiles.find(x => x.id === a.user_id) : null;
-        return { ...a, name: p ? [p.first_name, p.last_name].filter(Boolean).join(" ") : "", email: p?.email || "" };
-      });
+        let name = p ? [p.first_name, p.last_name].filter(Boolean).join(" ") : "";
+        let email = p?.email || "";
+        // If no profile found, pull email directly from auth session email (for admin-created users)
+        if (!email && a.user_id === adminSession?.user?.id) {
+          email = adminSession.user.email || "";
+          if (!name) name = email.split("@")[0];
+        }
+        return { ...a, name, email };
+      }));
       setAdminUsers(merged);
     } catch(e) { console.error("loadAdminUsers error:", e); }
   };
