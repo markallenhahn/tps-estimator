@@ -12599,6 +12599,7 @@ function AdminApp() {
   const [addingAdmin,    setAddingAdmin]    = useState(false);
   const [addAdminError,  setAddAdminError]  = useState("");
   const [permissions,    setPermissions]    = useState(DEFAULT_PERMISSIONS);
+  const [showPermissions, setShowPermissions] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileFirst,   setProfileFirst]   = useState("");
   const [profileLast,    setProfileLast]    = useState("");
@@ -12786,7 +12787,7 @@ function AdminApp() {
       {/* Content */}
       <div style={{maxWidth:1200, margin:"0 auto", padding:24}}>
         <PlatformAdminView
-          setView={() => {}}
+          setView={(v) => { if (v === "global-permissions") setShowPermissions(true); }}
           accessToken={adminSession.access_token}
           permissions={permissions}
           setPermissions={setPermissions}
@@ -12798,6 +12799,42 @@ function AdminApp() {
           }}
         />
 
+        {/* Global Permissions Modal */}
+        {showPermissions && (
+          <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"40px 16px", overflowY:"auto"}}>
+            <div style={{background:"#fff", borderRadius:12, width:"100%", maxWidth:860, boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"20px 24px", borderBottom:"1px solid #f0f0f0"}}>
+                <h2 style={{margin:0, fontSize:18, fontWeight:700}}>Global Permissions</h2>
+                <button onClick={() => setShowPermissions(false)} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:"#888"}}>×</button>
+              </div>
+              <div style={{padding:24}}>
+                <PermissionsView
+                  permissions={permissions}
+                  setPermissions={setPermissions}
+                  syncPermissions={async (p) => {
+                    setPermissions(p);
+                    try {
+                      const existing = await fetch(SUPABASE_URL_ADMIN + "/rest/v1/global_permissions?select=id&limit=1", { headers: sbH(adminSession.access_token) });
+                      const rows = await existing.json();
+                      const method = Array.isArray(rows) && rows.length > 0 ? "PATCH" : "POST";
+                      const url = method === "PATCH"
+                        ? SUPABASE_URL_ADMIN + "/rest/v1/global_permissions?id=eq." + rows[0].id
+                        : SUPABASE_URL_ADMIN + "/rest/v1/global_permissions";
+                      await fetch(url, {
+                        method,
+                        headers: { ...sbH(adminSession.access_token), "Prefer": "return=representation" },
+                        body: JSON.stringify({ data: p }),
+                      });
+                    } catch(e) { console.error("syncPermissions error:", e); }
+                  }}
+                  setView={() => setShowPermissions(false)}
+                  readOnly={false}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* My Profile */}
         <section style={{background:"#fff", borderRadius:12, padding:24, marginTop:20, boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
           <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
@@ -12805,14 +12842,14 @@ function AdminApp() {
               <h2 style={{fontSize:18, fontWeight:700, margin:0}}>My Profile</h2>
               <p style={{fontSize:13, color:"#888", margin:"4px 0 0"}}>Update your admin account name or password.</p>
             </div>
-            <button onClick={() => { setEditingProfile(p => !p); setProfileMsg(""); }}
+            <button onClick={() => { setEditingProfile(pr => !pr); setProfileMsg(""); }}
               style={{fontSize:13, padding:"6px 14px", borderRadius:8, border:"1px solid #ddd", background:"#f9f9f9", cursor:"pointer"}}>
               {editingProfile ? "Cancel" : "Edit"}
             </button>
           </div>
           {!editingProfile && (
             <div style={{fontSize:14, color:"#444"}}>
-              <div style={{fontWeight:600}}>{adminUsers.find(a => a.user_id === adminSession?.user?.id)?.name || adminSession?.user?.email}</div>
+              <div style={{fontWeight:600}}>{adminUsers.find(au => au.user_id === adminSession?.user?.id)?.name || adminSession?.user?.email}</div>
               <div style={{fontSize:12, color:"#888", marginTop:2}}>{adminSession?.user?.email}</div>
             </div>
           )}
@@ -12837,24 +12874,18 @@ function AdminApp() {
                 setProfileSaving(true); setProfileMsg("");
                 try {
                   const patch = {};
-                  if (profileFirst.trim() || profileLast.trim()) {
-                    patch.data = { full_name: [profileFirst.trim(), profileLast.trim()].filter(Boolean).join(" ") };
-                  }
+                  if (profileFirst.trim() || profileLast.trim()) patch.data = { full_name: [profileFirst.trim(), profileLast.trim()].filter(Boolean).join(" ") };
                   if (profileNewPw) patch.password = profileNewPw;
                   if (Object.keys(patch).length === 0) { setProfileMsg("Nothing to update."); setProfileSaving(false); return; }
                   const res = await fetch(SUPABASE_URL_ADMIN + "/auth/v1/user", {
-                    method: "PUT",
-                    headers: sbH(adminSession.access_token),
-                    body: JSON.stringify(patch),
+                    method: "PUT", headers: sbH(adminSession.access_token), body: JSON.stringify(patch),
                   });
                   const data = await res.json();
                   if (!res.ok) { setProfileMsg("Error: " + (data.msg || data.error_description || "Update failed")); }
                   else {
-                    // Also update profiles table
                     if (profileFirst.trim() || profileLast.trim()) {
                       await fetch(SUPABASE_URL_ADMIN + "/rest/v1/profiles?id=eq." + adminSession.user.id, {
-                        method: "PATCH",
-                        headers: sbH(adminSession.access_token),
+                        method: "PATCH", headers: sbH(adminSession.access_token),
                         body: JSON.stringify({ first_name: profileFirst.trim(), last_name: profileLast.trim() }),
                       });
                     }
@@ -12877,20 +12908,19 @@ function AdminApp() {
         <section style={{background:"#fff", borderRadius:12, padding:24, marginTop:20, boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
           <h2 style={{fontSize:18, fontWeight:700, margin:"0 0 4px"}}>Platform Admins</h2>
           <p style={{fontSize:13, color:"#888", margin:"0 0 16px"}}>Manage who has access to this dashboard.</p>
-
           <div style={{display:"flex", flexDirection:"column", gap:0, border:"1px solid #f0f0f0", borderRadius:8, overflow:"hidden"}}>
-            {adminUsers.map((a, idx) => (
-              <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between",
+            {adminUsers.map((au, idx) => (
+              <div key={au.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between",
                 padding:"12px 16px", borderBottom: idx < adminUsers.length-1 ? "1px solid #f0f0f0" : "none",
                 background: idx % 2 === 0 ? "#fff" : "#fafafa"}}>
                 <div>
-                  <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || "Admin"}</div>
-                  <div style={{fontSize:12, color:"#888", marginTop:2}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
+                  <div style={{fontWeight:600, fontSize:14}}>{au.name || au.email || "Admin"}</div>
+                  <div style={{fontSize:12, color:"#888", marginTop:2}}>{au.email}{au.is_super ? " · Super Admin" : ""}</div>
                 </div>
                 <div style={{display:"flex", alignItems:"center", gap:8}}>
-                  {a.is_super && <span style={{fontSize:11, color:"#f0ab2e", fontWeight:700, padding:"2px 8px", border:"1px solid #f0ab2e", borderRadius:20}}>SUPER</span>}
-                  {isSuperAdmin && !a.is_super && (
-                    <button onClick={() => removeAdmin(a.user_id)}
+                  {au.is_super && <span style={{fontSize:11, color:"#f0ab2e", fontWeight:700, padding:"2px 8px", border:"1px solid #f0ab2e", borderRadius:20}}>SUPER</span>}
+                  {isSuperAdmin && !au.is_super && (
+                    <button onClick={() => removeAdmin(au.user_id)}
                       style={{fontSize:12, color:"#ef4444", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:6, padding:"4px 10px", cursor:"pointer"}}>
                       Remove
                     </button>
@@ -12899,7 +12929,6 @@ function AdminApp() {
               </div>
             ))}
           </div>
-
           {isSuperAdmin && (
             <div style={{marginTop:20}}>
               <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>Add Admin</div>
