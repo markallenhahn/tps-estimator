@@ -12668,7 +12668,7 @@ function AdminApp() {
     try {
       const res = await fetch(SUPABASE_URL_ADMIN + "/auth/v1/token?grant_type=password", {
         method: "POST",
-        headers: { "apikey": SUPABASE_KEY_ADMIN, "Content-Type": "application/json" },
+        headers: { "apikey": SUPABASE_KEY_ADMIN, "Authorization": "Bearer " + SUPABASE_KEY_ADMIN, "Content-Type": "application/json" },
         body: JSON.stringify({ email: adminEmail.trim(), password: adminPassword }),
       });
       const data = await res.json();
