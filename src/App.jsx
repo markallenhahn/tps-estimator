@@ -3733,37 +3733,57 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
             </div>
           )}
 
-          <div style={{display:"flex", flexDirection:"column", gap:10}}>
-            {Object.keys(DEFAULT_RATES).filter(k => !["mobilization","sitework","other"].includes(k)).map(svcKey => {
+          <div style={{display:"flex", flexDirection:"column", gap:0, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden"}}>
+            {Object.keys(DEFAULT_RATES).filter(k => !["mobilization","sitework","other"].includes(k)).map((svcKey, idx, arr) => {
               const svcLabel = DEFAULT_RATES[svcKey]?.label || svcKey;
               const currentMapped = draftSettings.serviceMappings?.[svcKey] || [];
+              const unmapped = allMatTypes.filter(m => m.key !== "other" && !currentMapped.includes(m.key));
+              const isLast = idx === arr.length - 1;
               return (
-                <div key={svcKey} style={{display:"flex", alignItems:"center", gap:10, flexWrap:"wrap"}}>
-                  <div style={{fontWeight:600, fontSize:13, width:160, flexShrink:0}}>{svcLabel}</div>
-                  <div style={{display:"flex", gap:6, flexWrap:"wrap", flex:1}}>
-                    {allMatTypes.filter(m => m.key !== "other").map(mat => {
-                      const checked = currentMapped.includes(mat.key);
+                <div key={svcKey} style={{display:"flex", alignItems:"flex-start", gap:12, padding:"10px 14px",
+                  borderBottom: isLast ? "none" : `1px solid ${C.border}`,
+                  background: idx % 2 === 0 ? C.surface : C.surface2}}>
+                  <div style={{fontWeight:600, fontSize:13, width:150, flexShrink:0, paddingTop:4}}>{svcLabel}</div>
+                  <div style={{display:"flex", gap:6, flexWrap:"wrap", flex:1, alignItems:"center"}}>
+                    {currentMapped.length === 0 && (
+                      <span style={{fontSize:11, color:C.textMuted, fontStyle:"italic"}}>No materials mapped</span>
+                    )}
+                    {currentMapped.map(matKey => {
+                      const mat = allMatTypes.find(m => m.key === matKey);
+                      if (!mat) return null;
                       return (
-                        <button key={mat.key}
-                          onClick={() => {
-                            const next = checked
-                              ? currentMapped.filter(k => k !== mat.key)
-                              : [...currentMapped, mat.key];
+                        <span key={matKey} style={{display:"inline-flex", alignItems:"center", gap:4,
+                          fontSize:11, fontWeight:600, padding:"3px 8px 3px 10px", borderRadius:20,
+                          background:"#fffbeb", border:`1px solid ${C.accent}`, color:"#000"}}>
+                          {mat.label}
+                          <button onClick={() => {
+                            const next = currentMapped.filter(k => k !== matKey);
                             setDraftSettings(prev => ({
                               ...prev,
                               serviceMappings: {...(prev.serviceMappings||{}), [svcKey]: next}
                             }));
-                          }}
-                          style={{fontSize:11, fontWeight:600, padding:"3px 10px", borderRadius:6, cursor:"pointer",
-                            border: `1px solid ${checked ? C.accent : C.border}`,
-                            background: checked ? "#fffbeb" : C.surface2,
-                            color: checked ? "#000" : C.textMuted}}>
-                          {mat.label}
-                        </button>
+                          }} style={{background:"none", border:"none", cursor:"pointer", padding:"0 0 0 2px",
+                            fontSize:13, lineHeight:1, color:"#92400e", display:"flex", alignItems:"center"}}>×</button>
+                        </span>
                       );
                     })}
-                    {currentMapped.length === 0 && (
-                      <span style={{fontSize:11, color:C.textMuted, fontStyle:"italic"}}>No material mapped</span>
+                    {unmapped.length > 0 && (
+                      <select
+                        value=""
+                        onChange={e => {
+                          if (!e.target.value) return;
+                          const next = [...currentMapped, e.target.value];
+                          setDraftSettings(prev => ({
+                            ...prev,
+                            serviceMappings: {...(prev.serviceMappings||{}), [svcKey]: next}
+                          }));
+                          e.target.value = "";
+                        }}
+                        style={{fontSize:11, padding:"3px 6px", borderRadius:6, border:`1px solid ${C.border}`,
+                          background:C.surface, color:C.textMuted, cursor:"pointer"}}>
+                        <option value="">+ Add material…</option>
+                        {unmapped.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                      </select>
                     )}
                   </div>
                 </div>
