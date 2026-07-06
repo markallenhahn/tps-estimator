@@ -10566,9 +10566,9 @@ function SetPasswordView({ inviteToken, onSuccess }) {
 
   return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
-      <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
+      <div style={{maxWidth:400, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:340, display:"block", margin:"0 auto 28px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome!</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
           Set a password to finish creating your account.
@@ -10884,9 +10884,9 @@ function JoinCompanyView({ token, onSuccess }) {
 
   return (
     <div style={{...S.app, alignItems:"center", justifyContent:"flex-start", paddingTop:"5vh", paddingBottom:"5vh", overflowY:"auto"}}>
-      <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
+      <div style={{maxWidth:440, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:220, display:"block", margin:"0 auto 20px"}}/>
+          style={{width:"100%", maxWidth:340, display:"block", margin:"0 auto 16px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome to BlacktopIQ</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
           Set up your company and create your admin account.
@@ -10960,9 +10960,9 @@ function PublicSignupView({ onBack }) {
   if (submitted) {
     return (
       <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
-        <div style={{maxWidth:380, width:"100%", padding:"0 24px", textAlign:"center"}}>
+        <div style={{maxWidth:440, width:"100%", padding:"0 24px", textAlign:"center"}}>
           <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-            style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
+            style={{width:"100%", maxWidth:340, display:"block", margin:"0 auto 28px"}}/>
           <h1 style={{...S.h1, marginBottom:10}}>Check your email</h1>
           <p style={{fontSize:14, color:C.textMuted, lineHeight:1.5}}>
             We sent a confirmation link to <strong>{email.trim()}</strong>. Click it to activate your account and start your 14-day trial.
@@ -10974,9 +10974,9 @@ function PublicSignupView({ onBack }) {
 
   return (
     <div style={{...S.app, alignItems:"center", justifyContent:"flex-start", paddingTop:"5vh", paddingBottom:"5vh", overflowY:"auto"}}>
-      <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
+      <div style={{maxWidth:440, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:220, display:"block", margin:"0 auto 20px"}}/>
+          style={{width:"100%", maxWidth:340, display:"block", margin:"0 auto 16px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Start your free trial</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
           Set up your company — no credit card required.
@@ -11054,9 +11054,9 @@ function CompleteSignupView({ accessToken, onSuccess }) {
 
   return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
-      <div style={{maxWidth:340, width:"100%", padding:"0 24px", textAlign:"center"}}>
+      <div style={{maxWidth:400, width:"100%", padding:"0 24px", textAlign:"center"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:340, display:"block", margin:"0 auto 28px"}}/>
         {error ? (
           <div style={{color:C.danger, fontSize:14}}>{error}</div>
         ) : (
@@ -12022,9 +12022,9 @@ function LoginView({ onSuccess, onShowSignup }) {
   if (mode === "forgot") {
     return (
       <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
-        <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
+        <div style={{maxWidth:400, width:"100%", padding:"0 24px"}}>
           <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-            style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
+            style={{width:"100%", maxWidth:340, display:"block", margin:"0 auto 28px"}}/>
           {resetSent ? (
             <>
               <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Check your email</h1>
@@ -12065,9 +12065,9 @@ function LoginView({ onSuccess, onShowSignup }) {
 
   return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
-      <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
+      <div style={{maxWidth:400, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:340, display:"block", margin:"0 auto 28px"}}/>
         <form onSubmit={handleLogin}>
           <label style={S.formLabel}>Email
             <input type="email" value={email} onChange={e => setEmail(e.target.value)}
