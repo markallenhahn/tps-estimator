@@ -671,7 +671,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
             <button onClick={() => setView("platform-admin")}
               style={{...S.sidebarTab,...(view==="platform-admin"?S.sidebarTabActive:{})}}>
               <TabIcon tabKey="owner" iconStyle={iconStyle} size={18}/>
-              <span>🌐 Platform Admin</span>
+              <span><LucideIcons.Globe size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Platform Admin</span>
             </button>
           )}
           <div style={S.sidebarDivider}/>
@@ -959,7 +959,7 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
           </div>
         </div>
         <div style={{...S.btnRow, marginTop:16}}>
-          <button style={S.btnPrimary} onClick={save}>💾 Save Rates</button>
+          <button style={S.btnPrimary} onClick={save}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Rates</button>
           <button style={S.btnSecondary} onClick={reset}>↩ Reset</button>
         </div>
       </section>
@@ -996,7 +996,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
   return (
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
-        <h1 style={S.h1}>🏠 Home Base</h1>
+        <h1 style={S.h1}><LucideIcons.Home size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Home Base</h1>
       </div>
       <p style={S.subhead}>Route start/end point</p>
       <section style={S.section}>
@@ -1030,7 +1030,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
         )}
         {homeMsg && <div style={{fontSize:12, color: homeMsg.startsWith("⚠️") ? C.danger : C.green, marginTop:8}}>{homeMsg}</div>}
         <button style={{...S.btnPrimary, marginTop:12, opacity:savingHome?0.6:1}} onClick={saveHomeBase} disabled={savingHome}>
-          {savingHome ? "Saving..." : "💾 Save Home Base"}
+          {savingHome ? "Saving..." : "<LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Home Base"}
         </button>
       </section>
     </div>
@@ -1507,7 +1507,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             {showPayModal && (
               <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
                 <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-                  <h2 style={{...S.h2, marginTop:0}}>💲 Mark as Paid</h2>
+                  <h2 style={{...S.h2, marginTop:0}}><LucideIcons.DollarSign size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Mark as Paid</h2>
                   <div style={{display:"flex", flexDirection:"column", gap:12}}>
                     <label style={S.formLabel}>Payment Date
                       <input type="date" value={payModalDate}
@@ -1570,7 +1570,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 <div key={i} style={{display:"flex", gap:8, marginBottom:8, alignItems:"center"}}>
                   <input type="date" value={d.date||""} onChange={e => updateDay(i, "date", e.target.value)} style={{...S.input, flex:1}}/>
                   <input type="text" placeholder="Label (optional)" value={d.label||""} onChange={e => updateDay(i, "label", e.target.value)} style={{...S.input, flex:1}}/>
-                  <button onClick={() => removeDay(i)} style={S.btnSmallDanger}>🗑</button>
+                  <button onClick={() => removeDay(i)} style={S.btnSmallDanger}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
                 </div>
               ))}
               <button style={S.btnSecondary} onClick={addDay}>+ Add Date</button>
@@ -1681,7 +1681,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               />
             </div>
             <div style={{display:"flex", gap:10, marginTop:10}}>
-              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearSig}>🗑 Clear</button>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearSig}><LucideIcons.Trash2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Clear</button>
               <button style={{...S.btnPrimary, flex:1}} onClick={async () => {
                 const c = sigCanvasRef.current; if (!c) return;
                 const px = c.getContext("2d").getImageData(0,0,c.width,c.height).data;
@@ -2007,7 +2007,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                       )}
                     </div>
                     <div style={{display:"flex", gap:8}}>
-                      <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}>💾 Save</button>
+                      <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
                       <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
                     </div>
                   </div>
@@ -2059,13 +2059,13 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             </p>
           </>
         ) : !capturing ? (
-          <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}>📷 Take Photo</button>
+          <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}><LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Take Photo</button>
         ) : (
           <div style={S.cameraBox}>
             <video ref={videoRef} autoPlay muted playsInline style={S.cameraPreview}/>
             <canvas ref={canvasRef} style={{display:"none"}}/>
             <div style={S.cameraControls}>
-              <button style={S.btnShoot} onClick={takePhoto}>📸 Capture</button>
+              <button style={S.btnShoot} onClick={takePhoto}><LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Capture</button>
               <button style={S.btnCancel} onClick={stopStream}>Cancel</button>
             </div>
           </div>
@@ -2094,7 +2094,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {showApptModal && createPortal(
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}>📋 Set Estimator Appointment</h2>
+            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.CalendarCheck size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Set Estimator Appointment</h2>
             {(() => {
               const assignee = teamUsers.find(u => u.id === apptAssignId);
               const assigneeName = assignee ? [assignee.first_name, assignee.last_name].filter(Boolean).join(" ") || assignee.email : "Estimator";
@@ -2755,7 +2755,7 @@ ${email}`:""}`;
       {showSentConfirm && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}>📄 Did you send the {invoiceType==="paid"?"receipt":"invoice"}?</h2>
+            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Send size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Did you send the {invoiceType==="paid"?"receipt":"invoice"}?</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
               Confirming will record today as the sent date.
             </p>
@@ -2777,7 +2777,7 @@ ${email}`:""}`;
       {showEmailModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}>✉️ Email {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Mail size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>The PDF will be generated and sent directly to the client's inbox.</p>
             <label style={S.formLabel}>Client Email *
               <input type="email" value={emailTo} onChange={e => setEmailTo(e.target.value)}
@@ -2798,7 +2798,7 @@ ${email}`:""}`;
       {showTextModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}>💬 Text {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.MessageSquare size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>The PDF will be uploaded and a link sent via your phone's SMS app.</p>
             <label style={S.formLabel}>Client Phone *
               <input type="tel" value={textTo} onChange={e => setTextTo(e.target.value)}
@@ -2831,11 +2831,11 @@ ${email}`:""}`;
                 setPdfLoading(false);
               }
             }} disabled={pdfLoading}>
-            {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
+            {pdfLoading ? "⏳ Building PDF..." : "<LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF"}
           </button>
-          <button style={S.btnSecondary} onClick={emailInvoice}>✉️ Email PDF</button>
-          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}>💬 Text PDF</button>
-          <button style={S.btnSecondary} onClick={copyInvoice}>📋 Copy Text</button>
+          <button style={S.btnSecondary} onClick={emailInvoice}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email PDF</button>
+          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><LucideIcons.MessageSquare size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Text PDF</button>
+          <button style={S.btnSecondary} onClick={copyInvoice}><LucideIcons.Copy size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
 
@@ -2856,8 +2856,7 @@ ${email}`:""}`;
                 <a href={`mailto:${currentJob.clientEmail}?subject=${encodeURIComponent("We'd love your feedback!")}&body=${encodeURIComponent(
                   `${currentJob.clientName || "Hi"},\n\nThank you for choosing ${CS_NAME || "us"}. We would love your feedback and would welcome a review on our Google profile.\n\nRegards,\n${CS_NAME || "us"}\n\n${CS_GOOGLE_REVIEW_URL}`
                 )}`}
-                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}>
-                  ✉️ Email Review Request
+                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email Review Request
                 </a>
               )}
               {!currentJob.clientPhone && !currentJob.clientEmail && (
@@ -3079,7 +3078,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
       {/* Clock In / Out with GPS — mobile/tablet only; desktop uses manual entry below */}
       {!isDesktop && (
       <section style={{...S.section, border:`2px solid ${activeClock ? C.green : C.border}`}}>
-        <h2 style={S.h2}>📍 Clock {activeClock ? "Out" : "In"}</h2>
+        <h2 style={S.h2}><LucideIcons.Clock size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Clock {activeClock ? "Out" : "In"}</h2>
         {!activeClock ? (
           <>
             <div style={{background:C.surface2, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
@@ -3256,7 +3255,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                         min="0" step="0.5" style={{...S.input, flex:1}}/>
                     </div>
                     <div style={{display:"flex", gap:8}}>
-                      <button style={{...S.btnPrimary, flex:1, fontSize:12}} onClick={() => saveEdit(e)}>💾 Save</button>
+                      <button style={{...S.btnPrimary, flex:1, fontSize:12}} onClick={() => saveEdit(e)}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
                       <button style={{...S.btnSecondary, flex:1, fontSize:12}} onClick={cancelEdit}>Cancel</button>
                     </div>
                   </div>
@@ -3413,6 +3412,8 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const [unit,        setUnit]       = useState(MATERIAL_TYPES[0].defaultUnit);
   const [cost,        setCost]       = useState("");
   const [coverage,    setCoverage]   = useState("");
+  const [unitCost,    setUnitCost]   = useState("");
+  const [unitCostManual, setUnitCostManual] = useState(false);
   const [supplier,    setSupplier]   = useState("");
   const [notes,        setNotes]      = useState("");
   const [date,        setDate]       = useState(new Date().toISOString().slice(0,10));
@@ -3498,9 +3499,13 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
     if (!cost || isNaN(Number(cost)) || Number(cost) < 0) { alert("Enter a valid cost."); return; }
     const basis = coverageBasisFor(category);
     const coverageNum = coverage && !isNaN(Number(coverage)) ? Number(coverage) : null;
+    const qtyNum = Number(qty);
+    const costNum = Number(cost);
+    const calcUnitCost = qtyNum > 0 ? costNum / qtyNum : 0;
+    const finalUnitCost = (unitCostManual && unitCost && !isNaN(Number(unitCost))) ? Number(unitCost) : calcUnitCost;
     addMaterial({
-      id: Date.now(), date, category, qty: Number(qty), unit: unit.trim() || "unit",
-      cost: Number(cost), supplier: supplier.trim(), notes: notes.trim(),
+      id: Date.now(), date, category, qty: qtyNum, unit: unit.trim() || "unit",
+      cost: costNum, unitCost: finalUnitCost, supplier: supplier.trim(), notes: notes.trim(),
       ...(basis && coverageNum ? { coverageRate: coverageNum, coverageBasis: basis } : {}),
     });
     // Keep this category's "active" coverage rate in sync with whatever was
@@ -3513,7 +3518,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
       setMaterialSettings(updated);
       syncMaterialSettings(updated);
     }
-    setQty(""); setCost(""); setSupplier(""); setNotes("");
+    setQty(""); setCost(""); setUnitCost(""); setUnitCostManual(false); setSupplier(""); setNotes("");
   };
 
   const coverageBasis = coverageBasisFor(category);
@@ -3680,7 +3685,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                   );
                 })}
               </div>
-              <button style={S.btnPrimary} onClick={saveSettings}>💾 Save Settings</button>
+              <button style={S.btnPrimary} onClick={saveSettings}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Settings</button>
             </>
           )}
         </section>
@@ -3699,7 +3704,12 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <input type="date" value={date} onChange={e => setDate(e.target.value)} style={S.input}/>
             </label>
             <label style={S.formLabel}>Quantity
-              <input type="number" min="0" step="0.01" value={qty} onChange={e => setQty(e.target.value)} style={S.input} placeholder="0"/>
+              <input type="number" min="0" step="0.01" value={qty} onChange={e => {
+                setQty(e.target.value);
+                if (!unitCostManual && cost && Number(e.target.value) > 0) {
+                  setUnitCost((Number(cost) / Number(e.target.value)).toFixed(4));
+                }
+              }} style={S.input} placeholder="0"/>
             </label>
             <label style={S.formLabel}>Unit
               <input value={unit} onChange={e => setUnit(e.target.value)} style={S.input} placeholder="gal, ton, lb..."/>
@@ -3711,7 +3721,28 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               </label>
             )}
             <label style={S.formLabel}>Total Cost ($)
-              <input type="number" min="0" step="0.01" value={cost} onChange={e => setCost(e.target.value)} style={S.input} placeholder="0.00"/>
+              <input type="number" min="0" step="0.01" value={cost} onChange={e => {
+                setCost(e.target.value);
+                // Auto-calc unit cost if not manually set
+                if (!unitCostManual && qty && Number(qty) > 0) {
+                  setUnitCost((Number(e.target.value) / Number(qty)).toFixed(4));
+                }
+              }} style={S.input} placeholder="0.00"/>
+            </label>
+            <label style={S.formLabel}>
+              Unit Cost ($/{ unit||"unit"})
+              <div style={{display:"flex", gap:6, alignItems:"center"}}>
+                <input type="number" min="0" step="0.0001" value={unitCost}
+                  onChange={e => { setUnitCost(e.target.value); setUnitCostManual(true); }}
+                  style={{...S.input, flex:1}}
+                  placeholder={qty && cost && Number(qty)>0 ? (Number(cost)/Number(qty)).toFixed(4) : "auto"}/>
+                {unitCostManual && (
+                  <button style={{...S.btnSmall, fontSize:11}} onClick={() => {
+                    setUnitCostManual(false);
+                    if (qty && cost && Number(qty)>0) setUnitCost((Number(cost)/Number(qty)).toFixed(4));
+                  }}>Auto</button>
+                )}
+              </div>
             </label>
             <label style={S.formLabel}>Supplier (optional)
               <input value={supplier} onChange={e => setSupplier(e.target.value)} style={S.input}/>
@@ -3792,7 +3823,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <input value={checkNotes} onChange={e => setCheckNotes(e.target.value)} style={S.input} placeholder="e.g. tank filled to 480 gal"/>
             </label>
           </div>
-          <button style={S.btnPrimary} onClick={addCheck}>📏 Log Stock Check</button>
+          <button style={S.btnPrimary} onClick={addCheck}><LucideIcons.Ruler size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Log Stock Check</button>
           <div style={{marginTop:14, display:"flex", flexWrap:"wrap", gap:10}}>
             {MATERIAL_TYPES.filter(m => m.key !== "other").map(m => {
               const lc = lastCheckFor(m.key);
@@ -3802,7 +3833,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                   <strong style={{color:C.text}}>{m.label}:</strong>{" "}
                   {lc ? `${lc.qty} ${u} on ${new Date(lc.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}` : "no check logged"}
                   {lc && canEdit && (
-                    <button style={{...S.btnSmallDanger, marginLeft:6}} onClick={() => { if (confirm("Delete this stock check?")) deleteStockCheck(lc.id); }}>🗑</button>
+                    <button style={{...S.btnSmallDanger, marginLeft:6}} onClick={() => { if (confirm("Delete this stock check?")) deleteStockCheck(lc.id); }}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
                   )}
                 </div>
               );
@@ -3933,11 +3964,16 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                   {new Date(m.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                   {m.supplier && ` · ${m.supplier}`}{m.notes && ` · ${m.notes}`}
                 </div>
+                {m.unitCost && (
+                  <div style={{fontSize:11, color:C.accent}}>
+                    {formatCurrency(m.unitCost)}/{m.unit} unit cost
+                  </div>
+                )}
               </div>
               <div style={{display:"flex", alignItems:"center", gap:10}}>
                 <span style={{fontWeight:700, color:C.accent}}>{formatCurrency(m.cost)}</span>
                 {canEdit && (
-                  <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this purchase entry?")) deleteMaterial(m.id); }}>🗑</button>
+                  <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this purchase entry?")) deleteMaterial(m.id); }}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
                 )}
               </div>
             </div>
@@ -4318,7 +4354,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
                   {!editingNames ? (
                     <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={startEditingNames}>✎ Rename</button>
                   ) : (
-                    <button style={{...S.btnPrimary, fontSize:12, padding:"4px 10px"}} onClick={saveZoneNames}>💾 Save</button>
+                    <button style={{...S.btnPrimary, fontSize:12, padding:"4px 10px"}} onClick={saveZoneNames}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
                   )}
                 </div>
                 {zonesList.map((z, i) => (
@@ -5390,7 +5426,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
         <div style={{display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", marginBottom:14}}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, email, address..."
             style={{...S.input, flex:1, minWidth:200}}/>
-          <button style={S.btnSecondary} onClick={exportToExcel}>📊 Export to Excel</button>
+          <button style={S.btnSecondary} onClick={exportToExcel}><LucideIcons.Table2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Export to Excel</button>
         </div>
 
         {/* Customer list — hidden on mobile when detail is open */}
@@ -5499,7 +5535,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                     <span style={{fontSize:11, color:C.textMuted, display:"flex", alignItems:"center", gap:8}}>
                       {new Date(l.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                       {canEdit && (
-                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}>🗑</button>
+                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
                       )}
                     </span>
                   </div>
@@ -5513,6 +5549,149 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
   );
 }
 
+
+
+// ─── EBITDA Report ────────────────────────────────────────────────────────────
+function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, setCurrentJob, setView }) {
+  const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
+  const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
+  const isDesktopLayout = useIsDesktop();
+
+  return (
+    <div>
+      {/* Date range controls */}
+      <section style={S.section}>
+        <h2 style={S.h2}>EBITDA Report</h2>
+        <div style={{display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"flex-end"}}>
+          <div style={{display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden"}}>
+            {["ytd","custom"].map(r => (
+              <button key={r} onClick={() => setEbitdaRange(r)}
+                style={{padding:"6px 14px", fontSize:12, fontWeight:600, border:"none", cursor:"pointer",
+                  background: ebitdaRange===r ? C.accent : C.surface2,
+                  color: ebitdaRange===r ? "#000" : C.textMuted}}>
+                {r === "ytd" ? "Year to Date" : "Custom Range"}
+              </button>
+            ))}
+          </div>
+          {ebitdaRange === "custom" && (
+            <>
+              <input type="date" value={ebitdaFrom} onChange={e => setEbitdaFrom(e.target.value)}
+                style={{...S.input, height:36, width:140}}/>
+              <span style={{fontSize:12, color:C.textMuted, alignSelf:"center"}}>to</span>
+              <input type="date" value={ebitdaTo} onChange={e => setEbitdaTo(e.target.value)}
+                style={{...S.input, height:36, width:140}}/>
+            </>
+          )}
+        </div>
+
+        {/* Summary cards */}
+        <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px,1fr))", gap:10, marginBottom:16}}>
+          {[
+            { label:"Revenue",      value:fmtMoney(ebitdaTotals.revenue),      color:C.accent },
+            { label:"COGS",         value:fmtMoney(ebitdaTotals.cogs),          color:"#ef4444" },
+            { label:"Gross Profit", value:fmtMoney(ebitdaTotals.grossProfit),   color:"#3b82f6",
+              sub: fmtPct(ebitdaTotals.revenue > 0 ? (ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100 : 0) },
+            { label:"Labor",        value:fmtMoney(ebitdaTotals.jobLabor),      color:"#f59e0b" },
+            { label:"Overhead",     value:fmtMoney(ebitdaTotals.overheadAlloc), color:"#8b5cf6" },
+            { label:"EBITDA",       value:fmtMoney(ebitdaTotals.ebitda),        color:"#10b981",
+              sub: fmtPct(ebitdaTotals.revenue > 0 ? (ebitdaTotals.ebitda/ebitdaTotals.revenue)*100 : 0) },
+          ].map(c => (
+            <div key={c.label} style={{background:C.surface2, borderRadius:8, padding:"10px 14px", border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:11, color:C.textMuted, marginBottom:4}}>{c.label}</div>
+              <div style={{fontSize:18, fontWeight:800, color:c.color}}>{c.value}</div>
+              {c.sub && <div style={{fontSize:11, color:C.textMuted}}>{c.sub}</div>}
+            </div>
+          ))}
+        </div>
+
+        {/* Overhead context */}
+        <div style={{fontSize:12, color:C.textMuted, marginBottom:16, background:C.surface2, borderRadius:8, padding:"10px 14px"}}>
+          <strong>Overhead</strong>: {fmtMoney(periodOverhead)} logged for this period · {fmtMoney(yearOverhead)} full year to date
+          {periodRevenue === 0 && <span style={{color:C.danger}}> — No revenue in period, overhead not allocated</span>}
+        </div>
+      </section>
+
+      {/* Per-job breakdown */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Per-Job Breakdown ({ebitdaJobData.length} jobs)</h2>
+        {ebitdaJobData.length === 0 ? (
+          <p style={{fontSize:13, color:C.textMuted}}>No jobs in this date range.</p>
+        ) : isDesktopLayout ? (
+          /* Desktop table */
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%", borderCollapse:"collapse", fontSize:12}}>
+              <thead>
+                <tr style={{background:C.surface2, borderBottom:`2px solid ${C.border}`}}>
+                  {["Job","Date","Revenue","COGS","Gross Profit","GP%","Labor","Overhead","EBITDA","EBITDA%"].map(h => (
+                    <th key={h} style={{padding:"8px 10px", textAlign: h==="Job"||h==="Date" ? "left":"right", fontWeight:700, fontSize:11, color:C.textMuted, whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ebitdaJobData.map((d,i) => (
+                  <tr key={d.job.id} style={{borderBottom:`1px solid ${C.border}`, background: i%2===0 ? C.surface : C.surface2, cursor:"pointer"}}
+                    onClick={() => { setCurrentJob(d.job); setView("jobdetail"); }}>
+                    <td style={{padding:"8px 10px", fontWeight:600}}>{d.job.clientName||"Unnamed"}</td>
+                    <td style={{padding:"8px 10px", color:C.textMuted}}>{d.job.date}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right"}}>{fmtMoney(d.revenue)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:"#ef4444"}}>
+                      {fmtMoney(d.cogs)}
+                      {d.cogsIsEstimated && <span style={{fontSize:9, color:C.textMuted, marginLeft:3}}>est.</span>}
+                    </td>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtMoney(d.grossProfit)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtPct(d.grossMarginPct)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:"#f59e0b"}}>
+                      {fmtMoney(d.jobLabor)}
+                      {d.laborIsEstimated && <span style={{fontSize:9, color:C.textMuted, marginLeft:3}}>—</span>}
+                    </td>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:"#8b5cf6"}}>{fmtMoney(d.overheadAlloc)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: d.ebitda >= 0 ? "#10b981" : "#ef4444"}}>{fmtMoney(d.ebitda)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: d.ebitdaPct >= 0 ? "#10b981" : "#ef4444"}}>{fmtPct(d.ebitdaPct)}</td>
+                  </tr>
+                ))}
+                {/* Totals row */}
+                <tr style={{borderTop:`2px solid ${C.border}`, background:C.surface2, fontWeight:700}}>
+                  <td colSpan={2} style={{padding:"8px 10px"}}>TOTALS</td>
+                  <td style={{padding:"8px 10px", textAlign:"right"}}>{fmtMoney(ebitdaTotals.revenue)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:"#ef4444"}}>{fmtMoney(ebitdaTotals.cogs)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtMoney(ebitdaTotals.grossProfit)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtPct(ebitdaTotals.revenue>0?(ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100:0)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:"#f59e0b"}}>{fmtMoney(ebitdaTotals.jobLabor)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:"#8b5cf6"}}>{fmtMoney(ebitdaTotals.overheadAlloc)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:"#10b981"}}>{fmtMoney(ebitdaTotals.ebitda)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:"#10b981"}}>{fmtPct(ebitdaTotals.revenue>0?(ebitdaTotals.ebitda/ebitdaTotals.revenue)*100:0)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div style={{fontSize:11, color:C.textMuted, marginTop:8}}>
+              * <strong>est.</strong> = COGS estimated from service rates (no actuals logged) · Labor shows — when no rates set for crew members
+            </div>
+          </div>
+        ) : (
+          /* Mobile cards */
+          ebitdaJobData.map(d => (
+            <div key={d.job.id} onClick={() => { setCurrentJob(d.job); setView("jobdetail"); }}
+              style={{background:C.surface2, borderRadius:8, padding:"12px 14px", marginBottom:8, cursor:"pointer", border:`1px solid ${C.border}`}}>
+              <div style={{display:"flex", justifyContent:"space-between", marginBottom:6}}>
+                <div style={{fontWeight:700, fontSize:14}}>{d.job.clientName||"Unnamed"}</div>
+                <div style={{fontWeight:700, color: d.ebitda >= 0 ? "#10b981" : "#ef4444"}}>{fmtMoney(d.ebitda)}</div>
+              </div>
+              <div style={{fontSize:11, color:C.textMuted, marginBottom:6}}>{d.job.date} · {d.job.address||"No address"}</div>
+              <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4, fontSize:11}}>
+                <div><span style={{color:C.textMuted}}>Rev: </span>{fmtMoney(d.revenue)}</div>
+                <div><span style={{color:C.textMuted}}>COGS: </span>{fmtMoney(d.cogs)}{d.cogsIsEstimated&&<span style={{color:C.textMuted}}> est</span>}</div>
+                <div><span style={{color:C.textMuted}}>GP: </span>{fmtPct(d.grossMarginPct)}</div>
+                <div><span style={{color:C.textMuted}}>Labor: </span>{fmtMoney(d.jobLabor)}</div>
+                <div><span style={{color:C.textMuted}}>OH: </span>{fmtMoney(d.overheadAlloc)}</div>
+                <div><span style={{color:C.textMuted}}>EBITDA: </span>{fmtPct(d.ebitdaPct)}</div>
+              </div>
+            </div>
+          ))
+        )}
+      </section>
+    </div>
+  );
+}
 
 function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
   const today = new Date();
@@ -5588,7 +5767,7 @@ function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
 }
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
-function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }) {
+function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, laborEntries=[], expenses=[], teamUsers=[] }) {
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
@@ -5596,9 +5775,104 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
 
-  const [mode,          setMode]          = useState("profitability"); // "profitability" | "outstanding"
+  const [mode,          setMode]          = useState("profitability"); // "profitability" | "outstanding" | "ebitda"
   const [filterStatuses, setFilterStatuses] = useState([]); // empty = all statuses
   const [pdfLoading,   setPdfLoading]   = useState(false);
+  const [ebitdaRange,   setEbitdaRange]   = useState("ytd"); // "ytd" | "custom"
+  const [ebitdaFrom,    setEbitdaFrom]    = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10));
+  const [ebitdaTo,      setEbitdaTo]      = useState(new Date().toISOString().slice(0,10));
+
+  // ── Helper: get hourly rate for a user on a given date ──────────────────────
+  const getRateForUser = (userId, dateStr) => {
+    const user = teamUsers.find(u => u.id === userId);
+    const history = user?.rateHistory || [];
+    if (!history.length) return null;
+    // Find the most recent rate that started on or before dateStr
+    const sorted = [...history].sort((a,b) => b.startDate.localeCompare(a.startDate));
+    const match = sorted.find(r => r.startDate <= dateStr);
+    return match ? match.rate : sorted[sorted.length-1].rate;
+  };
+
+  // ── EBITDA calculations ──────────────────────────────────────────────────────
+  const ebitdaDateRange = {
+    from: ebitdaRange === "ytd" ? new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10) : ebitdaFrom,
+    to:   ebitdaRange === "ytd" ? new Date().toISOString().slice(0,10) : ebitdaTo,
+  };
+
+  // Jobs in date range (by date)
+  const ebitdaJobs = jobs.filter(j => {
+    if (!j.date) return false;
+    const d = j.date.includes("/") ? new Date(j.date).toISOString().slice(0,10) : j.date;
+    return d >= ebitdaDateRange.from && d <= ebitdaDateRange.to && !["estimate","draft","lost"].includes(j.status);
+  });
+
+  // Total revenue for period (for overhead allocation %)
+  const periodRevenue = ebitdaJobs.reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue, 0);
+
+  // Overhead expenses for period
+  const periodOverhead = expenses
+    .filter(e => e.category === "Overhead" && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to)
+    .reduce((s,e) => s + Number(e.amount||0), 0);
+
+  // Also get full year overhead for context
+  const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10);
+  const yearEnd   = new Date().toISOString().slice(0,10);
+  const yearOverhead = expenses
+    .filter(e => e.category === "Overhead" && e.date >= yearStart && e.date <= yearEnd)
+    .reduce((s,e) => s + Number(e.amount||0), 0);
+  const yearRevenue = jobs
+    .filter(j => {
+      if (!j.date) return false;
+      const d = j.date.includes("/") ? new Date(j.date).toISOString().slice(0,10) : j.date;
+      return d >= yearStart && d <= yearEnd && !["estimate","draft","lost"].includes(j.status);
+    })
+    .reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue, 0);
+
+  // Per-job EBITDA data
+  const allRatesEbitda = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
+  const ebitdaJobData = ebitdaJobs.map(j => {
+    const fin = calcJobFinancials(j, allRatesEbitda);
+    const revenue = fin.revenue;
+
+    // COGS: actuals first, then estimated
+    const actuals = j.costs?.actuals || {};
+    const hasActuals = Object.values(actuals).some(v => v !== null && v !== "" && Number(v) > 0);
+    const actualsCOGS = Object.values(actuals).reduce((s,v) => s + Number(v||0), 0);
+    const estimatedCOGS = fin.totalMaterials;
+    const cogs = hasActuals ? actualsCOGS : estimatedCOGS;
+    const cogsIsEstimated = !hasActuals;
+
+    // Labor: actual hours × rate
+    const jobDate = j.date?.includes("/") ? new Date(j.date).toISOString().slice(0,10) : (j.date||"");
+    const jobLabor = laborEntries
+      .filter(e => e.jobId === j.id || (e.date && e.date === jobDate)) // by jobId or date match
+      .reduce((s,e) => {
+        const rate = getRateForUser(e.userId, e.date || jobDate);
+        return s + (Number(e.hours||0) * (rate||0));
+      }, 0);
+    const laborIsEstimated = jobLabor === 0;
+
+    // Overhead: allocate by revenue %
+    const revenueShare = periodRevenue > 0 ? revenue / periodRevenue : 0;
+    const overheadAlloc = periodOverhead * revenueShare;
+
+    const grossProfit = revenue - cogs;
+    const grossMarginPct = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
+    const ebitda = grossProfit - jobLabor - overheadAlloc;
+    const ebitdaPct = revenue > 0 ? (ebitda / revenue) * 100 : 0;
+
+    return { job:j, revenue, cogs, cogsIsEstimated, grossProfit, grossMarginPct, jobLabor, laborIsEstimated, overheadAlloc, ebitda, ebitdaPct };
+  });
+
+  const ebitdaTotals = ebitdaJobData.reduce((acc, d) => {
+    acc.revenue       += d.revenue;
+    acc.cogs          += d.cogs;
+    acc.grossProfit   += d.grossProfit;
+    acc.jobLabor      += d.jobLabor;
+    acc.overheadAlloc += d.overheadAlloc;
+    acc.ebitda        += d.ebitda;
+    return acc;
+  }, {revenue:0, cogs:0, grossProfit:0, jobLabor:0, overheadAlloc:0, ebitda:0});
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
   const STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
@@ -5772,10 +6046,10 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
 
   return (
     <div className="tps-page" style={S.page}>
-      <p style={S.subhead}>{mode==="profitability" ? "Profitability across all jobs" : "Invoices sent but not yet paid"}</p>
+      <p style={S.subhead}>{mode==="profitability" ? "Profitability across all jobs" : mode==="outstanding" ? "Invoices sent but not yet paid" : "EBITDA breakdown with actual costs"}</p>
 
       {/* Mode toggle */}
-      <div style={{display:"flex", gap:8, marginBottom:16}}>
+      <div style={{display:"flex", gap:8, marginBottom:16, flexWrap:"wrap"}}>
         <button onClick={() => setMode("profitability")}
           style={{
             flex:1, padding:"8px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
@@ -5794,10 +6068,33 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
           }}>
           🧾 Outstanding Invoices
         </button>
+        <button onClick={() => setMode("ebitda")}
+          style={{
+            flex:1, padding:"8px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
+            background: mode==="ebitda" ? C.accent : C.surface2,
+            color: mode==="ebitda" ? "#000" : C.textMuted,
+            border: `1px solid ${mode==="ebitda" ? C.accent : C.border}`,
+          }}>
+          💰 EBITDA
+        </button>
       </div>
 
       {mode === "outstanding" ? (
         <OutstandingInvoicesSection jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>
+      ) : mode === "ebitda" ? (
+        <EbitdaReport
+          ebitdaJobData={ebitdaJobData}
+          ebitdaTotals={ebitdaTotals}
+          periodOverhead={periodOverhead}
+          yearOverhead={yearOverhead}
+          periodRevenue={periodRevenue}
+          yearRevenue={yearRevenue}
+          ebitdaRange={ebitdaRange} setEbitdaRange={setEbitdaRange}
+          ebitdaFrom={ebitdaFrom} setEbitdaFrom={setEbitdaFrom}
+          ebitdaTo={ebitdaTo} setEbitdaTo={setEbitdaTo}
+          ebitdaDateRange={ebitdaDateRange}
+          setCurrentJob={setCurrentJob} setView={setView}
+        />
       ) : (
       <>
       {/* Filters + print */}
@@ -5831,7 +6128,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={} }
         </p>
         <button style={{...S.btnPrimary, width:"100%", opacity:pdfLoading?.5:1}}
           onClick={printReport} disabled={pdfLoading}>
-          {pdfLoading?"⏳ Generating...":"📄 Download PDF"}
+          {pdfLoading?"⏳ Generating...":"<LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF"}
         </button>
       </section>
 
@@ -6421,7 +6718,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
             {profileErr && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{profileErr}</div>}
             {profileMsg && <div style={{color:C.green, fontSize:13, marginTop:10}}>{profileMsg}</div>}
             <button style={{...S.btnPrimary, marginTop:14, opacity:savingProfile?0.6:1}} onClick={saveProfile} disabled={savingProfile}>
-              {savingProfile ? "Saving..." : "💾 Save Info"}
+              {savingProfile ? "Saving..." : "<LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Info"}
             </button>
           </>
         )}
@@ -6716,7 +7013,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   return (
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
-        <h1 style={S.h1}>🌐 Platform Admin</h1>
+        <h1 style={S.h1}><LucideIcons.Globe size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Platform Admin</h1>
         <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Exit</button>
       </div>
       <p style={S.subhead}>BlacktopIQ operator tools — not visible to any company's owner.</p>
@@ -6832,7 +7129,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
 
         return (
           <section style={S.section}>
-            <h2 style={S.h2}>📝 Feedback Pipeline</h2>
+            <h2 style={S.h2}><LucideIcons.MessageSquare size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Feedback Pipeline</h2>
 
             {/* Summary cards */}
             <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(130px,1fr))", gap:10, marginBottom:20}}>
@@ -6967,7 +7264,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
 
                       {/* Reply button */}
                       <button style={S.btnPrimary} onClick={() => { setReplyModal(f); setReplyBody(""); setReplyError(""); }}>
-                        ✉️ Reply to {f.submitter_name||"User"}
+                        <LucideIcons.Mail size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Reply to {f.submitter_name||"User"}
                       </button>
 
                       {/* Internal notes */}
@@ -7029,7 +7326,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
         {replyModal && createPortal(
           <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
             <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:520, boxShadow:"0 8px 32px rgba(0,0,0,0.18)", maxHeight:"90vh", overflowY:"auto"}}>
-              <h2 style={{...S.h2, marginTop:0}}>✉️ Reply to {replyModal.submitter_name||"User"}</h2>
+              <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Mail size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Reply to {replyModal.submitter_name||"User"}</h2>
               <div style={{background:C.surface2, borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:12, color:C.textMuted}}>
                 <div style={{fontWeight:700, color:C.text, marginBottom:4}}>{replyModal.title}</div>
                 <div style={{whiteSpace:"pre-wrap"}}>{replyModal.body}</div>
@@ -7175,7 +7472,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
         {message && <div style={{color:C.green, fontSize:13, marginTop:14}}>{message}</div>}
         {!readOnly && <div style={{display:"flex", gap:8, marginTop:14}}>
           <button style={{...S.btnPrimary, flex:1, opacity:saving?0.6:1}} onClick={save} disabled={saving}>
-            {saving ? "Saving..." : "💾 Save Permissions"}
+            {saving ? "Saving..." : "<LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Permissions"}
           </button>
           <button style={S.btnSecondary} onClick={resetToDefaults}>↩ Reset to Defaults</button>
         </div>}
@@ -7200,6 +7497,10 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
   const [editingRolesId, setEditingRolesId] = useState(null);
   const [editingRolesDraft, setEditingRolesDraft] = useState([]);
   const [savingRoles, setSavingRoles] = useState(false);
+  const [editingRateId, setEditingRateId] = useState(null);
+  const [newRate,       setNewRate]       = useState("");
+  const [newRateDate,   setNewRateDate]   = useState(new Date().toISOString().slice(0,10));
+  const [savingRate,    setSavingRate]    = useState(false);
 
   const isAdmin = userRole === "owner";
   const ALL_ROLE_OPTIONS = ["estimator","crew","crewlead","manager","owner"];
@@ -7230,12 +7531,55 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
     setSavingRoles(false);
   };
 
+  const saveRate = async (userId) => {
+    if (!newRate || isNaN(Number(newRate)) || Number(newRate) < 0) { alert("Enter a valid hourly rate."); return; }
+    if (!newRateDate) { alert("Enter a start date for this rate."); return; }
+    setSavingRate(true);
+    try {
+      const user = users.find(u => u.id === userId);
+      const existing = user?.rateHistory || [];
+      const entry = { rate: Number(newRate), startDate: newRateDate };
+      const rateHistory = [...existing, entry].sort((a,b) => a.startDate.localeCompare(b.startDate));
+      // Save to profiles table
+      const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
+      const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A";
+      await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + userId, {
+        method: "PATCH",
+        headers: { "apikey": anonKey, "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ rate_history: rateHistory }),
+      });
+      setUsers(prev => prev.map(u => u.id === userId ? {...u, rateHistory} : u));
+      setEditingRateId(null);
+      setNewRate(""); setNewRateDate(new Date().toISOString().slice(0,10));
+    } catch(e) { alert("Error saving rate: " + e.message); }
+    setSavingRate(false);
+  };
+
   const loadUsers = async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/admin?action=list-users&tenantId=" + tenantId);
       const data = await res.json();
-      if (res.ok) setUsers(data.users || []);
+      if (res.ok) {
+        // Also load rate_history from profiles
+        const users2 = data.users || [];
+        const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
+        const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A";
+        if (users2.length > 0) {
+          const ids = users2.map(u => u.id).join(",");
+          const rateRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=in.(" + ids + ")&select=id,rate_history", {
+            headers: { "apikey": anonKey, "Authorization": "Bearer " + accessToken },
+          });
+          const rateData = await rateRes.json();
+          if (Array.isArray(rateData)) {
+            rateData.forEach(r => {
+              const u = users2.find(u2 => u2.id === r.id);
+              if (u) u.rateHistory = r.rate_history || [];
+            });
+          }
+        }
+        setUsers(users2);
+      }
     } catch(e) { console.error(e); }
     setLoading(false);
   };
@@ -7358,6 +7702,53 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
                     {u.date_of_birth && <span>🎂 {new Date(u.date_of_birth+"T12:00:00").toLocaleDateString()}</span>}
                   </div>
                 )}
+                {/* Hourly rate — owner only, private */}
+                {isAdmin && (() => {
+                  const rateHistory = u.rateHistory || [];
+                  const currentRate = rateHistory.length ? rateHistory[rateHistory.length-1] : null;
+                  return (
+                    <div style={{marginTop:6}}>
+                      <div style={{fontSize:11, color:C.textMuted}}>
+                        💰 Rate: {currentRate ? `$${currentRate.rate.toFixed(2)}/hr (since ${currentRate.startDate})` : "Not set"}
+                        <button style={{...S.btnSmall, fontSize:10, marginLeft:8}} onClick={() => { setEditingRateId(u.id); setNewRate(""); setNewRateDate(new Date().toISOString().slice(0,10)); }}>
+                          {currentRate ? "Update" : "Set Rate"}
+                        </button>
+                      </div>
+                      {rateHistory.length > 1 && (
+                        <details style={{marginTop:4}}>
+                          <summary style={{fontSize:10, color:C.accent, cursor:"pointer"}}>▸ Rate history ({rateHistory.length} entries)</summary>
+                          {[...rateHistory].reverse().map((r,i) => (
+                            <div key={i} style={{fontSize:10, color:C.textMuted, padding:"2px 0"}}>
+                              ${r.rate.toFixed(2)}/hr — from {r.startDate}
+                            </div>
+                          ))}
+                        </details>
+                      )}
+                      {editingRateId === u.id && (
+                        <div style={{marginTop:8, padding:10, background:C.surface, borderRadius:8, border:`1px solid ${C.border}`}}>
+                          <div style={{fontSize:12, fontWeight:600, marginBottom:8}}>Add New Rate</div>
+                          <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+                            <label style={{fontSize:12}}>Hourly Rate ($)
+                              <input type="number" value={newRate} onChange={e => setNewRate(e.target.value)}
+                                placeholder="e.g. 22.50" min="0" step="0.01"
+                                style={{...S.input, width:100, marginTop:4}}/>
+                            </label>
+                            <label style={{fontSize:12}}>Effective Date
+                              <input type="date" value={newRateDate} onChange={e => setNewRateDate(e.target.value)}
+                                style={{...S.input, height:38, marginTop:4}}/>
+                            </label>
+                          </div>
+                          <div style={{display:"flex", gap:6, marginTop:8}}>
+                            <button style={{...S.btnPrimary, fontSize:12, opacity:savingRate?0.6:1}} disabled={savingRate} onClick={() => saveRate(u.id)}>
+                              {savingRate ? "Saving..." : "Save Rate"}
+                            </button>
+                            <button style={{...S.btnSecondary, fontSize:12}} onClick={() => setEditingRateId(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {isAdmin && editingRolesId === u.id && (
                   <div style={{marginTop:8, padding:10, background:C.surface, borderRadius:8, border:`1px solid ${C.border}`}}>
                     <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:8}}>
@@ -7531,7 +7922,7 @@ function CrewsSection({ users, isManager, tFetch }) {
             </div>
           </div>
           <div style={{display:"flex", gap:8, marginTop:14}}>
-            <button style={{...S.btnPrimary, flex:1}} onClick={saveCrew}>💾 Save</button>
+            <button style={{...S.btnPrimary, flex:1}} onClick={saveCrew}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
             <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
           </div>
         </div>
@@ -7560,8 +7951,162 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const [filterMethod,setFilterMethod]= useState("All");
   const [filterJob,   setFilterJob]   = useState("All");
   const [uploading,   setUploading]   = useState(false);
+  // Import state
+  const [showImport,    setShowImport]    = useState(false);
+  const [importRows,    setImportRows]    = useState([]); // parsed rows from spreadsheet
+  const [importMapping, setImportMapping] = useState({}); // { sheetCat: appCat }
+  const [importYear,    setImportYear]    = useState(new Date().getFullYear());
+  const [importing,     setImporting]     = useState(false);
+  const [importResult,  setImportResult]  = useState(null); // { added, skipped }
+  const [importError,   setImportError]   = useState("");
 
   // Form state
+  // ── Parse date like "29-Apr", "12-Jan", "2026-01-29", etc. ──────────────────
+  const parseExpenseDate = (raw, year) => {
+    if (!raw) return null;
+    const s = String(raw).trim();
+    // Already ISO: 2026-01-29
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // Excel serial number
+    if (/^\d{5}$/.test(s)) {
+      const d = new Date(Math.round((Number(s) - 25569) * 86400 * 1000));
+      return d.toISOString().slice(0,10);
+    }
+    // "29-Apr" or "29-Apr-26" or "Apr 29"
+    const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    const m1 = s.match(/^(\d{1,2})[- ]([A-Za-z]{3})(?:[- ](\d{2,4}))?$/);
+    if (m1) {
+      const mo = months[m1[2].toLowerCase()];
+      if (!mo) return null;
+      const yr = m1[3] ? (m1[3].length===2 ? 2000+Number(m1[3]) : Number(m1[3])) : year;
+      return `${yr}-${String(mo).padStart(2,"0")}-${String(m1[1]).padStart(2,"0")}`;
+    }
+    const m2 = s.match(/^([A-Za-z]{3})[- ](\d{1,2})(?:[, ]+(\d{2,4}))?$/);
+    if (m2) {
+      const mo = months[m2[1].toLowerCase()];
+      if (!mo) return null;
+      const yr = m2[3] ? (m2[3].length===2 ? 2000+Number(m2[3]) : Number(m2[3])) : year;
+      return `${yr}-${String(mo).padStart(2,"0")}-${String(m2[2]).padStart(2,"0")}`;
+    }
+    return null;
+  };
+
+  const parseSpreadsheet = async (file) => {
+    setImportError("");
+    try {
+      const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+      const ab = await file.arrayBuffer();
+      const wb = XLSX.read(ab, { type:"array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+
+      // Find header row (contains "Item" or "Date" or "Amount")
+      let headerIdx = -1;
+      for (let i = 0; i < Math.min(rows.length, 10); i++) {
+        const r = rows[i].map(c => String(c).trim().toLowerCase());
+        if (r.includes("date") || r.includes("amount") || r.includes("item")) {
+          headerIdx = i; break;
+        }
+      }
+      if (headerIdx < 0) { setImportError("Could not find header row. Make sure your spreadsheet has columns: Item, Date, Amount, Payee, Category."); return; }
+
+      const headers = rows[headerIdx].map(c => String(c).trim().toLowerCase());
+      const colIdx = (name) => headers.findIndex(h => h === name || h.startsWith(name));
+
+      const itemCol    = colIdx("item");
+      const dateCol    = colIdx("date");
+      const amountCol  = colIdx("amount");
+      const payeeCol   = colIdx("payee");
+      const invoiceCol = colIdx("invoice");
+      const catCol     = colIdx("category");
+
+      const parsed = [];
+      for (let i = headerIdx+1; i < rows.length; i++) {
+        const row = rows[i];
+        const rawDate   = row[dateCol];
+        const rawAmount = row[amountCol];
+        const rawCat    = catCol >= 0 ? String(row[catCol]||"").trim() : "";
+        const rawItem   = itemCol >= 0 ? String(row[itemCol]||"").trim() : "";
+        const rawPayee  = payeeCol >= 0 ? String(row[payeeCol]||"").trim() : "";
+        const rawInvoice = invoiceCol >= 0 ? String(row[invoiceCol]||"").trim() : "";
+
+        if (!rawDate && !rawAmount) continue; // blank row
+        const amount = parseFloat(String(rawAmount).replace(/[$,\s]/g,""));
+        if (isNaN(amount) || amount <= 0) continue;
+        const date = parseExpenseDate(rawDate, importYear);
+        if (!date) continue;
+
+        parsed.push({ item:rawItem, date, amount, payee:rawPayee, invoice:rawInvoice, sheetCat:rawCat });
+      }
+
+      // Find unique categories
+      const uniqueCats = [...new Set(parsed.map(r => r.sheetCat).filter(Boolean))];
+      // Auto-map exact matches to EXPENSE_CATEGORIES
+      const autoMap = {};
+      uniqueCats.forEach(c => {
+        const exact = EXPENSE_CATEGORIES.find(a => a.toLowerCase() === c.toLowerCase());
+        autoMap[c] = exact || "Other";
+      });
+      setImportMapping(autoMap);
+      setImportRows(parsed);
+      setImportResult(null);
+    } catch(e) {
+      setImportError("Failed to parse file: " + e.message);
+    }
+  };
+
+  const runImport = () => {
+    setImporting(true);
+    let added = 0, skipped = 0;
+    const newVendors = {};
+
+    importRows.forEach(row => {
+      const appCat = importMapping[row.sheetCat] || "Other";
+      const amount = row.amount;
+      const date   = row.date;
+      const notes  = [row.item, row.invoice ? "Inv#"+row.invoice : ""].filter(Boolean).join(" — ");
+
+      // Find or create vendor
+      let vendorId = "";
+      if (row.payee) {
+        const existing = vendors.find(v => v.name.toLowerCase() === row.payee.toLowerCase());
+        if (existing) {
+          vendorId = existing.id;
+        } else if (newVendors[row.payee.toLowerCase()]) {
+          vendorId = newVendors[row.payee.toLowerCase()];
+        } else {
+          const nv = { id: Date.now() + Math.random(), name: row.payee };
+          addVendor(nv);
+          newVendors[row.payee.toLowerCase()] = nv.id;
+          vendorId = nv.id;
+        }
+      }
+
+      // Duplicate check: same date + amount + category + vendor
+      const isDupe = expenses.some(e =>
+        e.date === date &&
+        Math.abs(Number(e.amount) - amount) < 0.01 &&
+        e.category === appCat &&
+        (e.vendorId === vendorId || (!e.vendorId && !vendorId))
+      );
+
+      if (isDupe) { skipped++; return; }
+
+      addExpense({
+        id: Date.now() + Math.random(),
+        date, category: appCat, amount, vendorId, vendorName: row.payee,
+        notes, paymentMethod: "Check", jobId: "", receiptUrl: "",
+      });
+      added++;
+    });
+
+    setImportResult({ added, skipped });
+    setImporting(false);
+    if (added > 0) {
+      setTimeout(() => setShowImport(false), 2000);
+    }
+  };
+
   const blankForm = () => ({
     date: new Date().toISOString().slice(0,10),
     vendorId: "", vendorName: "",
@@ -7636,8 +8181,105 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           <button style={S.btnSecondary} onClick={() => setShowVendors(v=>!v)}>
             🏢 Manage Vendors ({vendors.length})
           </button>
+          <button style={S.btnSecondary} onClick={() => { setShowImport(true); setImportRows([]); setImportResult(null); setImportError(""); }}>
+            <LucideIcons.Upload size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Import from Spreadsheet
+          </button>
         </div>
       )}
+
+      {/* Import Modal */}
+      {showImport && canEdit && createPortal(
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto"}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:600, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
+              <h2 style={{...S.h2, margin:0}}><LucideIcons.Upload size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Import Expenses</h2>
+              <button style={S.btnSmall} onClick={() => setShowImport(false)}>✕ Close</button>
+            </div>
+
+            {!importRows.length ? (
+              /* Step 1: Upload file */
+              <div>
+                <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
+                  Upload an Excel (.xlsx) or CSV file. Expected columns: <strong>Item, Date, Amount, Payee, Category</strong> (Invoice # optional).
+                </p>
+                <div style={{display:"flex", gap:10, alignItems:"center", marginBottom:12}}>
+                  <label style={{fontSize:13}}>Year (if not in spreadsheet):
+                    <input type="number" value={importYear} onChange={e => setImportYear(Number(e.target.value))}
+                      style={{...S.input, width:90, marginLeft:8, display:"inline-block"}}/>
+                  </label>
+                </div>
+                <input type="file" accept=".xlsx,.xls,.csv"
+                  onChange={e => { if (e.target.files[0]) parseSpreadsheet(e.target.files[0]); }}
+                  style={{fontSize:13, marginBottom:12}}/>
+                {importError && (
+                  <div style={{fontSize:13, color:C.danger, background:"#fef2f2", borderRadius:8, padding:"10px 14px", marginTop:8}}>{importError}</div>
+                )}
+              </div>
+            ) : importResult ? (
+              /* Step 3: Result */
+              <div style={{textAlign:"center", padding:"20px 0"}}>
+                <div style={{fontSize:32, marginBottom:8}}>✅</div>
+                <div style={{fontSize:16, fontWeight:700, marginBottom:4}}>Import Complete</div>
+                <div style={{fontSize:14, color:C.textMuted}}>{importResult.added} expense{importResult.added!==1?"s":""} added · {importResult.skipped} duplicate{importResult.skipped!==1?"s":""} skipped</div>
+              </div>
+            ) : (
+              /* Step 2: Map categories */
+              <div>
+                <div style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
+                  Found <strong>{importRows.length} rows</strong>. Map each spreadsheet category to an app category:
+                </div>
+
+                {/* Category mapping */}
+                {Object.keys(importMapping).length > 0 && (
+                  <div style={{marginBottom:16}}>
+                    <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8}}>Category Mapping</div>
+                    {Object.keys(importMapping).map(sheetCat => (
+                      <div key={sheetCat} style={{display:"flex", alignItems:"center", gap:10, marginBottom:8}}>
+                        <div style={{flex:1, fontSize:13, fontWeight:600}}>{sheetCat || "(blank)"}</div>
+                        <span style={{fontSize:12, color:C.textMuted}}>→</span>
+                        <select value={importMapping[sheetCat]}
+                          onChange={e => setImportMapping(prev => ({...prev, [sheetCat]: e.target.value}))}
+                          style={{...S.input, width:160}}>
+                          {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <div style={{fontSize:11, color:C.textMuted, flexShrink:0}}>
+                          ({importRows.filter(r=>r.sheetCat===sheetCat).length} rows)
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Preview */}
+                <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8}}>
+                  Preview (first 5 rows)
+                </div>
+                <div style={{background:C.surface2, borderRadius:8, padding:10, marginBottom:16, fontSize:12}}>
+                  {importRows.slice(0,5).map((r,i) => (
+                    <div key={i} style={{display:"flex", gap:8, padding:"4px 0", borderBottom: i<4 ? `1px solid ${C.border}` : "none"}}>
+                      <span style={{color:C.textMuted, width:80, flexShrink:0}}>{r.date}</span>
+                      <span style={{flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{r.item||r.payee||"—"}</span>
+                      <span style={{color:C.accent, flexShrink:0}}>{formatCurrency(r.amount)}</span>
+                      <span style={{color:C.textMuted, flexShrink:0}}>{importMapping[r.sheetCat]||"Other"}</span>
+                    </div>
+                  ))}
+                  {importRows.length > 5 && <div style={{fontSize:11, color:C.textMuted, marginTop:4}}>...and {importRows.length-5} more</div>}
+                </div>
+
+                <div style={{display:"flex", gap:8}}>
+                  <button style={{...S.btnPrimary, flex:1, opacity:importing?0.6:1}}
+                    disabled={importing} onClick={runImport}>
+                    {importing ? "⏳ Importing..." : `Import ${importRows.length} Expenses`}
+                  </button>
+                  <button style={{...S.btnSecondary, flex:1}} onClick={() => { setImportRows([]); setImportMapping({}); }}>
+                    ← Re-upload
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      , document.body)}
 
       {/* Log Expense Form */}
       {showForm && canEdit && (
@@ -8477,8 +9119,7 @@ ${pdfLink}` ;
                 {item.type==="overdue" ? (
                   <div style={{display:"flex", gap:6, flexShrink:0}} onClick={e => e.stopPropagation()}>
                     <button style={{...S.btnSmall, fontSize:11, background:"#dbeafe", color:"#1d4ed8", border:"1px solid #bfdbfe"}}
-                      onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("email"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}>
-                      ✉️ Email
+                      onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("email"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email
                     </button>
                     <button style={{...S.btnSmall, fontSize:11, background:"#dcfce7", color:"#15803d", border:"1px solid #86efac"}}
                       onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("text"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}>
@@ -8589,7 +9230,7 @@ ${pdfLink}` ;
       {reminderModal && createPortal(
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}>📄 Invoice Reminder</h2>
+            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.FileText size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Invoice Reminder</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
               Sending reminder for <strong>{reminderModal.job.clientName||"Unnamed"}</strong> — {reminderModal.daysPast} days past due.
             </p>
@@ -9594,7 +10235,7 @@ ${a}`.notes : "");
             <div style={S.signedBannerSub}>{currentJob.clientSignedAt}</div>
             <img src={currentJob.clientSignature} alt="Client Signature"
               style={{display:"block", maxWidth:260, marginTop:10, borderRadius:6, border:`1px solid ${C.border}`}}/>
-            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={unsign}>🔓 Remove Signature</button>
+            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={unsign}><LucideIcons.Unlock size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Remove Signature</button>
           </div>
         ) : (
           <>
@@ -9617,7 +10258,7 @@ ${a}`.notes : "");
               />
             </div>
             <div style={{display:"flex", gap:10, marginTop:10}}>
-              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearClientSig}>🗑 Clear</button>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearClientSig}><LucideIcons.Trash2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Clear</button>
               <button style={{...S.btnPrimary, flex:1}} onClick={acceptAndSign}>
                 ✍️ Accept &amp; Sign Estimate
               </button>
@@ -9644,7 +10285,7 @@ ${a}`.notes : "");
       {showTextModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}>💬 Text Estimate PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.MessageSquare size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Text Estimate PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
               The estimate PDF will be uploaded and a link sent via your phone's SMS app.
             </p>
@@ -9671,7 +10312,7 @@ ${a}`.notes : "");
       {showEmailModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}>✉️ Email Estimate PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Mail size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Email Estimate PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
               The estimate PDF will be generated and sent directly to the client's inbox.
             </p>
@@ -9700,7 +10341,7 @@ ${a}`.notes : "");
       {showSentConfirm && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}>✉️ Did you send the estimate?</h2>
+            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Send size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Did you send the estimate?</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
               Confirming will move this job to <strong>Sent</strong> status and record today as the sent date.
             </p>
@@ -9736,11 +10377,11 @@ ${a}`.notes : "");
                 setPdfLoading(false);
               }
             }} disabled={pdfLoading}>
-            {pdfLoading ? "⏳ Building PDF..." : "📄 Download PDF"}
+            {pdfLoading ? "⏳ Building PDF..." : "<LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF"}
           </button>
-          <button style={S.btnSecondary} onClick={emailEstimate}>✉️ Email PDF</button>
-          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}>💬 Text PDF</button>
-          <button style={S.btnSecondary} onClick={copyEstimate}>📋 Copy Text</button>
+          <button style={S.btnSecondary} onClick={emailEstimate}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email PDF</button>
+          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><LucideIcons.MessageSquare size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Text PDF</button>
+          <button style={S.btnSecondary} onClick={copyEstimate}><LucideIcons.Copy size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
         <div style={{marginTop:8, fontSize:11, color:C.textMuted}}>
@@ -10509,7 +11150,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       {message && <div style={{fontSize:13,color:message.startsWith("⚠️")?C.danger:C.green,padding:"0 16px 12px"}}>{message}</div>}
       <div style={{padding:"0 16px 24px"}}>
         <button style={{...S.btnPrimary,width:"100%",opacity:saving?0.6:1}} onClick={save} disabled={saving}>
-          {saving?"Saving...":"💾 Save Company Settings"}
+          {saving?"Saving...":"<LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Company Settings"}
         </button>
       </div>
     </div>
@@ -10577,7 +11218,7 @@ function EstimateRequestLinkView({ setView, currentTenantId }) {
 
   return (
     <div className="tps-page" style={S.page}>
-      <h1 style={S.h1}>📝 Estimate Request Form</h1>
+      <h1 style={S.h1}><LucideIcons.ClipboardList size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Estimate Request Form</h1>
       <p style={S.subhead}>Share this link or QR code with clients so they can submit an estimate request directly to you — no account needed.</p>
 
       <section style={S.section}>
@@ -10729,7 +11370,7 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
 
       {/* Live Chat */}
       <section style={S.section}>
-        <h2 style={S.h2}>💬 Live Chat</h2>
+        <h2 style={S.h2}><LucideIcons.MessageCircle size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Live Chat</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>
           Chat with us directly using the chat bubble in the bottom-right corner of the screen.
           Available during business hours — we'll respond as quickly as possible.
@@ -10759,7 +11400,7 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
 
       {/* Phone */}
       <section style={S.section}>
-        <h2 style={S.h2}>📞 Phone Support</h2>
+        <h2 style={S.h2}><LucideIcons.Phone size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Phone Support</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>
           Prefer to talk? Give us a call during business hours.
         </p>
@@ -10771,7 +11412,7 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
 
       {/* Bug / Feature Form */}
       <section style={S.section}>
-        <h2 style={S.h2}>📝 Submit Feedback</h2>
+        <h2 style={S.h2}><LucideIcons.ClipboardEdit size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Submit Feedback</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
           Report a bug or suggest a feature. We review every submission.
         </p>
@@ -10848,7 +11489,7 @@ function ReferralView({ setView, userId }) {
         <label style={S.formLabel}>Referral URL
           <input type="text" readOnly value={referralUrl} style={{...S.input,fontFamily:"monospace",fontSize:12}} onFocus={e=>e.target.select()}/>
         </label>
-        <button style={{...S.btnPrimary,marginTop:12,width:"100%"}} onClick={copyLink}>{copied?"✅ Copied!":"📋 Copy Referral Link"}</button>
+        <button style={{...S.btnPrimary,marginTop:12,width:"100%"}} onClick={copyLink}>{copied?<>{li("Check",14)} Copied!</>:"📋 Copy Referral Link"}</button>
         <p style={{fontSize:11,color:C.textDim,marginTop:12}}>Referral bonuses are tracked and applied when referred contractors start a paid subscription.</p>
       </section>
     </div>
@@ -12354,7 +12995,7 @@ export default function App() {
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
-        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings}/></div>}
+        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
           setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: {...t.data, servicesOffered: services}} : t));
           tFetch("tenants?id=eq." + currentTenantId, { method:"PATCH", body:JSON.stringify({ data: {...currentTenant.data, servicesOffered: services} }) });
