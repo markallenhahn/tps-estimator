@@ -2,6 +2,8 @@
 // Consolidated team/invite functions:
 //   POST ?action=invite
 //   POST ?action=redeem-tenant-invite
+//   POST ?action=public-signup           (NEW — open, unauthenticated)
+//   POST ?action=complete-public-signup  (NEW — finishes signup after email verification)
 
 const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
 const PLAN_USER_CAPS = { solo:1, solo_plus:1, crew:5, crew_plus:5, pro:25, trial:5 };
@@ -125,6 +127,102 @@ export default async function handler(req, res) {
       });
 
       return res.status(200).json({ success: true, userId, tenantId, email: email.trim() });
+    } catch(e) { return res.status(500).json({ error: e.message }); }
+  }
+
+  // ── POST public-signup ────────────────────────────────────────────────────
+  // Open, unauthenticated entry point — no token required (unlike
+  // redeem-tenant-invite above, which needs an admin-issued tenant_invites
+  // token). Because this is reachable by anyone, the account is created
+  // UNCONFIRMED via Supabase's standard /auth/v1/signup endpoint, which
+  // triggers Supabase's built-in confirmation email automatically.
+  //
+  // Deliberately does NOT create tenant/profile/tenant_users rows here —
+  // that only happens once the email is verified, in complete-public-signup
+  // below. The submitted companyName/phone are stashed in user_metadata so
+  // that handler can retrieve them without asking the user to re-enter
+  // anything after they click the confirmation link.
+  if (action === "public-signup") {
+    const { email, password, companyName, phone } = req.body || {};
+    if (!email || !password || !companyName) return res.status(400).json({ error: "Email, password, and company name are required." });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) return res.status(400).json({ error: "Enter a valid email address." });
+    if (String(password).length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
+
+    try {
+      const signupRes = await fetch(SUPABASE_URL + "/auth/v1/signup", {
+        method: "POST",
+        headers: { ...sbH, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          data: {
+            pending_company_name: companyName.trim(),
+            pending_phone: (phone || "").trim(),
+          },
+        }),
+      });
+      const signupData = await signupRes.json();
+      if (!signupRes.ok) {
+        // Supabase returns e.g. "User already registered" here for duplicates.
+        return res.status(signupRes.status).json({ error: signupData.msg || signupData.error_description || "Could not create your account." });
+      }
+      return res.status(200).json({ success: true });
+    } catch(e) { return res.status(500).json({ error: e.message }); }
+  }
+
+  // ── POST complete-public-signup ───────────────────────────────────────────
+  // Called from CompleteSignupView once the user has clicked the Supabase
+  // confirmation link and arrives back with a verified access_token
+  // (type=signup). Reads the companyName/phone stashed in user_metadata by
+  // public-signup above, then does the same tenant/profile/tenant_users
+  // creation that redeem-tenant-invite does — just gated by a verified
+  // email instead of an admin-issued token.
+  if (action === "complete-public-signup") {
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    if (!token) return res.status(401).json({ error: "Missing verification token." });
+
+    try {
+      const userRes = await fetch(SUPABASE_URL + "/auth/v1/user", {
+        headers: { "apikey": serviceKey, "Authorization": "Bearer " + token },
+      });
+      const userData = await userRes.json();
+      if (!userRes.ok || !userData?.id) return res.status(401).json({ error: "This verification link has expired. Please sign up again." });
+
+      const userId = userData.id;
+      const email = userData.email;
+      const meta = userData.user_metadata || {};
+      const companyName = meta.pending_company_name;
+      const phone = meta.pending_phone || "";
+      if (!companyName) return res.status(400).json({ error: "Missing signup details. Please contact support." });
+
+      // Idempotency guard — if this link is clicked twice (or the tab is
+      // reopened), don't create a second tenant for the same user.
+      const existingTU = await fetch(SUPABASE_URL + "/rest/v1/tenant_users?user_id=eq." + userId + "&select=tenant_id", { headers: sbH });
+      const existingTUData = await existingTU.json();
+      if (Array.isArray(existingTUData) && existingTUData.length > 0) {
+        return res.status(200).json({ success: true, userId, tenantId: existingTUData[0].tenant_id, email, alreadyCompleted: true });
+      }
+
+      await fetch(SUPABASE_URL + "/rest/v1/profiles", {
+        method: "POST", headers: { ...sbH, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: userId, email, role: "owner", roles: ["owner"] }),
+      });
+
+      const tenantRes = await fetch(SUPABASE_URL + "/rest/v1/tenants", {
+        method: "POST", headers: { ...sbH, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify({ data: { companyName, phone, plan: null, userCap: 5, subscriptionStatus: null, trialEndsAt: new Date(Date.now() + 14*24*60*60*1000).toISOString(), setupComplete: false } }),
+      });
+      const tenantRows = await tenantRes.json();
+      if (!tenantRes.ok) return res.status(500).json({ error: "Failed to create company." });
+      const tenantId = tenantRows[0]?.id;
+
+      await fetch(SUPABASE_URL + "/rest/v1/tenant_users", {
+        method: "POST", headers: { ...sbH, "Content-Type": "application/json" },
+        body: JSON.stringify({ id: Date.now(), tenant_id: tenantId, user_id: userId, role: "owner", status: "active" }),
+      });
+
+      return res.status(200).json({ success: true, userId, tenantId, email });
     } catch(e) { return res.status(500).json({ error: e.message }); }
   }
 

@@ -10917,7 +10917,150 @@ function JoinCompanyView({ token, onSuccess }) {
   );
 }
 
+// ─── Public Signup View (open, unauthenticated — the new self-serve path) ─────
+// Unlike JoinCompanyView above (which redeems an admin-issued tenant_invites
+// token), this is reachable by anyone at /?signup=1 with no token at all.
+// Because it's open to the internet, the account is created UNCONFIRMED —
+// Supabase sends a verification email, and the tenant/profile/tenant_users
+// rows aren't created until that email is confirmed (see CompleteSignupView).
+function PublicSignupView() {
+  const [companyName,     setCompanyName]     = useState("");
+  const [phone,           setPhone]           = useState("");
+  const [email,           setEmail]           = useState("");
+  const [password,        setPassword]        = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error,           setError]           = useState("");
+  const [saving,          setSaving]          = useState(false);
+  const [submitted,       setSubmitted]       = useState(false);
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!companyName.trim()) { setError("Company name is required."); return; }
+    if (!email.trim()) { setError("Email is required."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError("Enter a valid email address (e.g. name@company.com)."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords do not match."); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/team?action=public-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password, companyName: companyName.trim(), phone: phone.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not create your account.");
+      setSubmitted(true);
+    } catch(err) {
+      setError(err.message || "Something went wrong signing you up.");
+    }
+    setSaving(false);
+  };
+
+  if (submitted) {
+    return (
+      <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+        <div style={{maxWidth:380, width:"100%", padding:"0 24px", textAlign:"center"}}>
+          <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
+            style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+          <h1 style={{...S.h1, marginBottom:10}}>Check your email</h1>
+          <p style={{fontSize:14, color:C.textMuted, lineHeight:1.5}}>
+            We sent a confirmation link to <strong>{email.trim()}</strong>. Click it to activate your account and start your 14-day trial.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+      <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
+        <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
+          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+        <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Start your free trial</h1>
+        <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
+          Set up your company — no credit card required.
+        </p>
+        <form onSubmit={handleSubmit}>
+          <label style={S.formLabel}>Company Name
+            <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} placeholder="e.g. Smith Paving Co." required/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Phone
+            <input type="tel" value={phone} onChange={e => setPhone(formatPhone(e.target.value))} style={S.input}/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Your Email
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={S.input} required/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Password
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={S.input} placeholder="At least 8 characters" required/>
+          </label>
+          <label style={{...S.formLabel, marginTop:12}}>Confirm Password
+            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} style={S.input} required/>
+          </label>
+          {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
+          <button type="submit" style={{...S.btnPrimary, width:"100%", marginTop:18, opacity:saving?0.6:1}} disabled={saving}>
+            {saving ? "Creating your account..." : "🚀 Start Free Trial"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Complete Signup View (lands here after the verification-email click) ─────
+// Receives the now-verified access_token (type=signup), and finishes the job
+// PublicSignupView deferred: creating the tenant/profile/tenant_users rows.
+// Runs once on mount, then signs the user in for real via onSuccess.
+function CompleteSignupView({ accessToken, onSuccess }) {
+  const [error,  setError]  = useState("");
+  const [done,   setDone]   = useState(false);
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const res = await fetch("/api/team?action=complete-public-signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + accessToken },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not finish setting up your account.");
+
+        // The verification token's session is a real, valid Supabase session —
+        // no need to re-authenticate, just use it directly.
+        const userRes = await fetch(SUPABASE_URL + "/auth/v1/user", {
+          headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + accessToken },
+        });
+        const userData = await userRes.json();
+
+        onSuccess({
+          access_token: accessToken,
+          refresh_token: null,
+          user: userData,
+          expires_at: Math.floor(Date.now()/1000) + 3600,
+        });
+        setDone(true);
+      } catch(err) {
+        setError(err.message || "Something went wrong finishing your signup.");
+      }
+    };
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
+      <div style={{maxWidth:340, width:"100%", padding:"0 24px", textAlign:"center"}}>
+        <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
+          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+        {error ? (
+          <div style={{color:C.danger, fontSize:14}}>{error}</div>
+        ) : (
+          <p style={{fontSize:14, color:C.textMuted}}>{done ? "Redirecting..." : "Setting up your company..."}</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── Company Settings View (owner only) ────────────────────────────────────
 function CompanySettingsView({ setView, companySettings, syncCompanySettings }) {
@@ -12119,6 +12262,11 @@ export default function App() {
   // who doesn't have an account yet and is about to create a whole new company. ──
   const [joinToken,        setJoinToken]        = useState(null);
   const [requestTenantId,  setRequestTenantId]  = useState(() => new URLSearchParams(window.location.search).get("request") || null);
+  // ── Public signup (self-serve, no token) — /?signup=1 shows the form;
+  // signupToken is the verified access_token from the confirmation email
+  // link (type=signup), distinct from inviteToken/joinToken above. ──
+  const [showPublicSignup, setShowPublicSignup] = useState(false);
+  const [signupToken,      setSignupToken]      = useState(null);
 
   // ── Restore session on mount ──
   useEffect(() => {
@@ -12138,6 +12286,13 @@ export default function App() {
     }
     if (joinParam) {
       setJoinToken(joinParam);
+      setAuthChecked(true);
+      window.history.replaceState(null, "", window.location.pathname);
+      return;
+    }
+    const signupParam = new URLSearchParams(window.location.search).get("signup");
+    if (signupParam) {
+      setShowPublicSignup(true);
       setAuthChecked(true);
       window.history.replaceState(null, "", window.location.pathname);
       return;
@@ -12163,8 +12318,13 @@ export default function App() {
           });
           const data = await res.json();
           if (data?.access_token) {
-            // For recovery/invite — show the set password screen
-            setInviteToken(data.access_token);
+            if (tokenType === "signup") {
+              // Public self-serve signup, now email-verified — finish tenant creation
+              setSignupToken(data.access_token);
+            } else {
+              // For recovery/invite — show the set password screen
+              setInviteToken(data.access_token);
+            }
           } else {
             console.error("token_hash verify failed:", data);
           }
@@ -12183,8 +12343,13 @@ export default function App() {
     if (hash.includes("access_token") && (hash.includes("type=invite") || hash.includes("type=recovery") || hash.includes("type=signup"))) {
       const params = new URLSearchParams(hash.slice(1));
       const token = params.get("access_token");
+      const type = params.get("type");
       if (token) {
-        setInviteToken(token);
+        if (type === "signup") {
+          setSignupToken(token);
+        } else {
+          setInviteToken(token);
+        }
         setAuthChecked(true);
         window.history.replaceState(null, "", window.location.pathname);
         return;
@@ -12238,6 +12403,20 @@ export default function App() {
   // this just signs them in for real and clears the join flow.
   const handleJoinSuccess = async (newSession) => {
     setJoinToken(null);
+    saveSession(newSession);
+    setSession(newSession);
+    await fetchProfile(newSession.user.id, newSession.access_token);
+    await fetchTenants(newSession.user.id, newSession.access_token);
+    await fetchIsPlatformAdmin(newSession.access_token);
+  };
+
+  // After complete-public-signup creates the tenant/profile server-side,
+  // sign in with the verified session — same pattern as handleJoinSuccess.
+  // Note: this session has no refresh_token (it came from the verification
+  // link, not a real sign-in), so it will need a real re-login once it
+  // expires — acceptable since that's roughly an hour out from confirming.
+  const handleSignupComplete = async (newSession) => {
+    setSignupToken(null);
     saveSession(newSession);
     setSession(newSession);
     await fetchProfile(newSession.user.id, newSession.access_token);
@@ -12895,6 +13074,8 @@ export default function App() {
   if (inviteToken) return <SetPasswordView inviteToken={inviteToken} onSuccess={handleInvitePasswordSet}/>;
   if (requestTenantId) return <EstimateRequestForm tenantId={requestTenantId}/>;
   if (joinToken) return <JoinCompanyView token={joinToken} onSuccess={handleJoinSuccess}/>;
+  if (signupToken) return <CompleteSignupView accessToken={signupToken} onSuccess={handleSignupComplete}/>;
+  if (showPublicSignup && !session) return <PublicSignupView/>;
 
   if (!session) return <LoginView onSuccess={handleLoginSuccess}/>;
 
