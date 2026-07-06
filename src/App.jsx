@@ -10568,7 +10568,7 @@ function SetPasswordView({ inviteToken, onSuccess }) {
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome!</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
           Set a password to finish creating your account.
@@ -10886,7 +10886,7 @@ function JoinCompanyView({ token, onSuccess }) {
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Welcome to BlacktopIQ</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
           Set up your company and create your admin account.
@@ -10923,7 +10923,7 @@ function JoinCompanyView({ token, onSuccess }) {
 // Because it's open to the internet, the account is created UNCONFIRMED —
 // Supabase sends a verification email, and the tenant/profile/tenant_users
 // rows aren't created until that email is confirmed (see CompleteSignupView).
-function PublicSignupView() {
+function PublicSignupView({ onBack }) {
   const [companyName,     setCompanyName]     = useState("");
   const [phone,           setPhone]           = useState("");
   const [email,           setEmail]           = useState("");
@@ -10962,7 +10962,7 @@ function PublicSignupView() {
       <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
         <div style={{maxWidth:380, width:"100%", padding:"0 24px", textAlign:"center"}}>
           <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-            style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+            style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
           <h1 style={{...S.h1, marginBottom:10}}>Check your email</h1>
           <p style={{fontSize:14, color:C.textMuted, lineHeight:1.5}}>
             We sent a confirmation link to <strong>{email.trim()}</strong>. Click it to activate your account and start your 14-day trial.
@@ -10976,7 +10976,7 @@ function PublicSignupView() {
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{maxWidth:380, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
         <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Start your free trial</h1>
         <p style={{fontSize:13, color:C.textMuted, textAlign:"center", marginBottom:20}}>
           Set up your company — no credit card required.
@@ -11002,6 +11002,11 @@ function PublicSignupView() {
             {saving ? "Creating your account..." : "🚀 Start Free Trial"}
           </button>
         </form>
+        <button
+          onClick={onBack}
+          style={{background:"none", border:"none", color:C.accent, fontSize:13, cursor:"pointer", display:"block", margin:"14px auto 0", textAlign:"center"}}>
+          ← Back to Sign In
+        </button>
       </div>
     </div>
   );
@@ -11051,7 +11056,7 @@ function CompleteSignupView({ accessToken, onSuccess }) {
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{maxWidth:340, width:"100%", padding:"0 24px", textAlign:"center"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
         {error ? (
           <div style={{color:C.danger, fontSize:14}}>{error}</div>
         ) : (
@@ -11981,7 +11986,7 @@ function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken })
   );
 }
 
-function LoginView({ onSuccess }) {
+function LoginView({ onSuccess, onShowSignup }) {
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [error,    setError]    = useState("");
@@ -12019,7 +12024,7 @@ function LoginView({ onSuccess }) {
       <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
         <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
           <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-            style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+            style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
           {resetSent ? (
             <>
               <h1 style={{...S.h1, textAlign:"center", marginBottom:6}}>Check your email</h1>
@@ -12062,7 +12067,7 @@ function LoginView({ onSuccess }) {
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
       <div style={{maxWidth:340, width:"100%", padding:"0 24px"}}>
         <img src={"data:image/png;base64," + BLACKTOPIQ_LOGO_B64} alt="BlacktopIQ"
-          style={{width:"100%", maxWidth:240, display:"block", margin:"0 auto 28px"}}/>
+          style={{width:"100%", maxWidth:300, display:"block", margin:"0 auto 28px"}}/>
         <form onSubmit={handleLogin}>
           <label style={S.formLabel}>Email
             <input type="email" value={email} onChange={e => setEmail(e.target.value)}
@@ -12083,7 +12088,12 @@ function LoginView({ onSuccess }) {
           Forgot password?
         </button>
         <p style={{fontSize:12, color:C.textMuted, textAlign:"center", marginTop:16}}>
-          Need an account? Ask your owner to create one for you.
+          Need an account?{" "}
+          <button
+            onClick={onShowSignup}
+            style={{background:"none", border:"none", color:C.accent, fontSize:12, cursor:"pointer", padding:0, textDecoration:"underline"}}>
+            Start your free trial
+          </button>
         </p>
       </div>
     </div>
@@ -13075,9 +13085,9 @@ export default function App() {
   if (requestTenantId) return <EstimateRequestForm tenantId={requestTenantId}/>;
   if (joinToken) return <JoinCompanyView token={joinToken} onSuccess={handleJoinSuccess}/>;
   if (signupToken) return <CompleteSignupView accessToken={signupToken} onSuccess={handleSignupComplete}/>;
-  if (showPublicSignup && !session) return <PublicSignupView/>;
+  if (showPublicSignup && !session) return <PublicSignupView onBack={() => setShowPublicSignup(false)}/>;
 
-  if (!session) return <LoginView onSuccess={handleLoginSuccess}/>;
+  if (!session) return <LoginView onSuccess={handleLoginSuccess} onShowSignup={() => setShowPublicSignup(true)}/>;
 
   if (profileNeedsSetup) return (
     <ProfileSetupWizard
