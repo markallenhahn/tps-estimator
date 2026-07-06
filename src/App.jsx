@@ -3900,7 +3900,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           Estimated usage is calculated from {settings.countedStatuses.map(materialStatusLabel).join(", ")} jobs, based on the coverage rates above.
         </p>
         <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:12}}>
-          {MATERIAL_TYPES.filter(m => m.key !== "other").map(m => {
+          {BUILTIN_MATERIAL_TYPES.filter(m => m.key !== "other" && !m.key.startsWith("paint_") && !m.key.startsWith("custom_")).map(m => {
             const est = estimates[m.key] || 0;
             const purch = purchased[m.key] || { qty:0, cost:0 };
             const hasEstimate = m.key === "crackfill" ? settings.crackfillLinFtPerUnit > 0 : true;
@@ -3942,7 +3942,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           <div style={S.formGrid}>
             <label style={S.formLabel}>Material
               <select value={checkCategory} onChange={e => setCheckCategory(e.target.value)} style={S.input}>
-                {MATERIAL_TYPES.filter(m => m.key !== "other").map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                {BUILTIN_MATERIAL_TYPES.filter(m => m.key !== "other" && !m.key.startsWith("paint_")).map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
               </select>
             </label>
             <label style={S.formLabel}>Date
@@ -3958,7 +3958,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           </div>
           <button style={S.btnPrimary} onClick={addCheck}><LucideIcons.Ruler size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Log Stock Check</button>
           <div style={{marginTop:14, display:"flex", flexWrap:"wrap", gap:10}}>
-            {MATERIAL_TYPES.filter(m => m.key !== "other").map(m => {
+            {BUILTIN_MATERIAL_TYPES.filter(m => m.key !== "other" && !m.key.startsWith("paint_") && !m.key.startsWith("custom_")).map(m => {
               const lc = lastCheckFor(m.key);
               const u = m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit;
               return (
@@ -4037,7 +4037,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           </div>
         </div>
         <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:12}}>
-          {MATERIAL_TYPES.filter(m => m.key !== "other").map(m => {
+          {BUILTIN_MATERIAL_TYPES.filter(m => m.key !== "other" && !m.key.startsWith("paint_") && !m.key.startsWith("custom_")).map(m => {
             const f = forecast[m.key];
             const u = m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit;
             const hasEstimate = m.key === "crackfill" ? settings.crackfillLinFtPerUnit > 0 : true;
