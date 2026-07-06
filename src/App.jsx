@@ -3494,10 +3494,6 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   };
   const [draftSettings, setDraftSettings] = useState(settings);
   useEffect(() => { setDraftSettings(settings); }, [JSON.stringify(settings)]);
-  useEffect(() => {
-    const cur = currentCoverageValue(category);
-    setCoverage(cur ? String(cur) : "");
-  }, [materialSettings]);
 
   const toggleCountedStatus = (s) => {
     setDraftSettings(prev => ({
@@ -3529,6 +3525,11 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   // directly from job data (Patch/Stone) or have no estimate concept (Other).
   const coverageBasisFor = (key) => key==="sealcoat" ? "sqft" : key==="crackfill" ? "linft" : null;
   const currentCoverageValue = (key) => key==="sealcoat" ? settings.sealcoatSqFtPerGal : key==="crackfill" ? settings.crackfillLinFtPerUnit : null;
+
+  useEffect(() => {
+    const cur = currentCoverageValue(category);
+    setCoverage(cur ? String(cur) : "");
+  }, [materialSettings]);
 
   const onCategoryChange = (key) => {
     setCategory(key);
