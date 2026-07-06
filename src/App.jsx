@@ -3758,10 +3758,10 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                           background:"#fffbeb", border:`1px solid ${C.accent}`, color:"#000"}}>
                           {mat.label}
                           <button onClick={() => {
-                            const next = currentMapped.filter(mk => mk !== matKey);
-                            setDraftSettings(prev => ({
-                              ...prev,
-                              serviceMappings: {...(prev.serviceMappings||{}), [svcKey]: next}
+                            const nextMapped = currentMapped.filter(mk => mk !== matKey);
+                            setDraftSettings(prevDS => ({
+                              ...prevDS,
+                              serviceMappings: {...(prevDS.serviceMappings||{}), [svcKey]: nextMapped}
                             }));
                           }} style={{background:"none", border:"none", cursor:"pointer", padding:"0 0 0 2px",
                             fontSize:13, lineHeight:1, color:"#92400e", display:"flex", alignItems:"center"}}>×</button>
@@ -3772,10 +3772,10 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                       <select
                         onChange={e => {
                           if (!e.target.value) return;
-                          const next = [...currentMapped, e.target.value];
-                          setDraftSettings(prev => ({
-                            ...prev,
-                            serviceMappings: {...(prev.serviceMappings||{}), [svcKey]: next}
+                          const nextMapped = [...currentMapped, e.target.value];
+                          setDraftSettings(prevDS => ({
+                            ...prevDS,
+                            serviceMappings: {...(prevDS.serviceMappings||{}), [svcKey]: nextMapped}
                           }));
                           e.target.selectedIndex = 0;
                         }}
@@ -6053,8 +6053,8 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 
     // COGS: actuals first, then FIFO material calc, then estimated
     const actuals = j.costs?.actuals || {};
-    const hasActuals = Object.values(actuals).some(v => v !== null && v !== "" && Number(v) > 0);
-    const actualsCOGS = Object.values(actuals).reduce((s,v) => s + Number(v||0), 0);
+    const hasActuals = Object.values(actuals).some(av => av !== null && av !== "" && Number(av) > 0);
+    const actualsCOGS = Object.values(actuals).reduce((s,av) => s + Number(av||0), 0);
 
     // FIFO material cost: for each area, look up material type via serviceMappings, get FIFO unit cost × qty ÷ coverage
     const serviceMappings = materialSettings?.serviceMappings || {};
