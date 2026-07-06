@@ -7820,7 +7820,7 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
       const rateHistory = [...existing, entry].sort((a,b) => a.startDate.localeCompare(b.startDate));
       // Save to profiles table
       const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
-      const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A";
+      const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDk3MDYsImV4cCI6MjA5NjA4NTcwNn0.rTr3e4739fJpbHXgBneRTr18utum5XxMWTf2E0DtOVQ";
       await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + userId, {
         method: "PATCH",
         headers: { "apikey": anonKey, "Authorization": "Bearer " + accessToken, "Content-Type": "application/json" },
@@ -7842,7 +7842,7 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
         // Also load rate_history from profiles
         const users2 = data.users || [];
         const SUPABASE_URL = "https://elzymtqlcceouftwhcdk.supabase.co";
-        const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A";
+        const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDk3MDYsImV4cCI6MjA5NjA4NTcwNn0.rTr3e4739fJpbHXgBneRTr18utum5XxMWTf2E0DtOVQ";
         if (users2.length > 0) {
           const ids = users2.map(u => u.id).join(",");
           const rateRes = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=in.(" + ids + ")&select=id,rate_history", {
@@ -8457,7 +8457,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
       const ext  = file.name.split(".").pop().toLowerCase();
       const path = `${currentTenantId}/${Date.now()}.${ext}`;
       const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-      const sb = createClient("https://elzymtqlcceouftwhcdk.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A", {
+      const sb = createClient("https://elzymtqlcceouftwhcdk.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDk3MDYsImV4cCI6MjA5NjA4NTcwNn0.rTr3e4739fJpbHXgBneRTr18utum5XxMWTf2E0DtOVQ", {
         global: { headers: { Authorization: "Bearer " + session?.access_token } }
       });
       const { error } = await sb.storage.from("expense-receipts").upload(path, file, { upsert: true });
@@ -11813,7 +11813,7 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
       if (!submitterName) {
         try {
           const pRes = await fetch("https://elzymtqlcceouftwhcdk.supabase.co/rest/v1/profiles?id=eq." + session?.user?.id + "&select=first_name,last_name,email", {
-            headers: { "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A", "Authorization": "Bearer " + (accessToken||"") }
+            headers: { "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDk3MDYsImV4cCI6MjA5NjA4NTcwNn0.rTr3e4739fJpbHXgBneRTr18utum5XxMWTf2E0DtOVQ", "Authorization": "Bearer " + (accessToken||"") }
           });
           const pData = await pRes.json();
           const p = Array.isArray(pData) && pData[0];
@@ -12584,7 +12584,7 @@ function LoginView({ onSuccess, onShowSignup }) {
 
 // ─── Admin App (admin.blacktopiq.com) ────────────────────────────────────────
 const SUPABASE_URL_ADMIN = "https://elzymtqlcceouftwhcdk.supabase.co";
-const SUPABASE_KEY_ADMIN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A";
+const SUPABASE_KEY_ADMIN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDk3MDYsImV4cCI6MjA5NjA4NTcwNn0.rTr3e4739fJpbHXgBneRTr18utum5XxMWTf2E0DtOVQ";
 
 function AdminApp() {
   const [adminSession,   setAdminSession]   = useState(null);
