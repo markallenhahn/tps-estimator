@@ -3447,6 +3447,11 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
     crackfillLinFtPerUnit: materialSettings?.crackfillLinFtPerUnit ?? 7.5,
     crackfillUnitLabel: materialSettings?.crackfillUnitLabel || "lb",
     countedStatuses: materialSettings?.countedStatuses || ["signed","scheduled","completed","paid"],
+    serviceMappings: materialSettings?.serviceMappings || {
+      sealcoat: ["sealcoat"], crackfill: ["crackfill"], patch: ["patch"],
+      paving: ["patch"], basepaving: ["patch"], striping: [], infrared: ["patch"],
+      milling: [], overlay: ["patch"], mobilization: [], sitework: [], other: [],
+    },
   };
   const [draftSettings, setDraftSettings] = useState(settings);
   useEffect(() => { setDraftSettings(settings); }, [JSON.stringify(settings)]);
@@ -3639,6 +3644,61 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   return (
     <div className="tps-page" style={S.page}>
       <p style={S.subhead}>Log every material purchase and compare it against what the job estimates say should have been used.</p>
+
+      {/* ── Service → Material Mappings ── */}
+      {canEdit && (
+        <section style={S.section}>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+            <div>
+              <h2 style={{...S.h2, margin:0}}>Service → Material Mapping</h2>
+              <p style={{fontSize:12, color:C.textMuted, margin:"4px 0 0"}}>Map each service type to the materials it uses for cost calculations.</p>
+            </div>
+            <button style={S.btnSmall} onClick={async () => {
+              const updated = {...draftSettings};
+              setMaterialSettings(updated);
+              await syncMaterialSettings(updated);
+              alert("Mappings saved.");
+            }}>Save</button>
+          </div>
+          <div style={{display:"flex", flexDirection:"column", gap:10}}>
+            {Object.keys(DEFAULT_RATES).filter(k => !["mobilization","sitework","other"].includes(k)).map(svcKey => {
+              const svcLabel = DEFAULT_RATES[svcKey]?.label || svcKey;
+              const currentMapped = draftSettings.serviceMappings?.[svcKey] || [];
+              return (
+                <div key={svcKey} style={{display:"flex", alignItems:"center", gap:10, flexWrap:"wrap"}}>
+                  <div style={{fontWeight:600, fontSize:13, width:160, flexShrink:0}}>{svcLabel}</div>
+                  <div style={{display:"flex", gap:6, flexWrap:"wrap", flex:1}}>
+                    {MATERIAL_TYPES.filter(m => m.key !== "other").map(mat => {
+                      const checked = currentMapped.includes(mat.key);
+                      return (
+                        <button key={mat.key}
+                          onClick={() => {
+                            const next = checked
+                              ? currentMapped.filter(k => k !== mat.key)
+                              : [...currentMapped, mat.key];
+                            setDraftSettings(prev => ({
+                              ...prev,
+                              serviceMappings: {...(prev.serviceMappings||{}), [svcKey]: next}
+                            }));
+                          }}
+                          style={{fontSize:11, fontWeight:600, padding:"3px 10px", borderRadius:6, cursor:"pointer",
+                            border: `1px solid ${checked ? C.accent : C.border}`,
+                            background: checked ? "#fffbeb" : C.surface2,
+                            color: checked ? "#000" : C.textMuted}}>
+                          {mat.label}
+                        </button>
+                      );
+                    })}
+                    {currentMapped.length === 0 && (
+                      <span style={{fontSize:11, color:C.textMuted, fontStyle:"italic"}}>No material mapped</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {canEdit && (
         <section style={S.section}>
@@ -5551,8 +5611,18 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
 
 
 
+// ─── FIFO Unit Cost Helper ────────────────────────────────────────────────────
+// Returns unit cost for a material type on a given date using FIFO logic
+// i.e. the most recent purchase at or before that date
+function getFifoUnitCost(materialType, dateStr, materials) {
+  const purchases = materials
+    .filter(m => m.category === materialType && m.unitCost && m.date <= dateStr)
+    .sort((a,b) => b.date.localeCompare(a.date)); // most recent first
+  return purchases.length ? purchases[0].unitCost : null;
+}
+
 // ─── EBITDA Report ────────────────────────────────────────────────────────────
-function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, setCurrentJob, setView }) {
+function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, serviceTypeTotals={}, setCurrentJob, setView }) {
   const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
   const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
   const isDesktopLayout = useIsDesktop();
@@ -5689,6 +5759,51 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhea
           ))
         )}
       </section>
+
+      {/* Per-Service-Type Breakdown */}
+      {Object.keys(serviceTypeTotals).length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>By Service Type</h2>
+          <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:14}}>
+            Revenue, cost, and EBITDA aggregated across all jobs by service type. Labor and overhead allocated proportionally by revenue share.
+          </p>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%", borderCollapse:"collapse", fontSize:12}}>
+              <thead>
+                <tr style={{background:C.surface2, borderBottom:`2px solid ${C.border}`}}>
+                  {["Service","Revenue","COGS","Gross Profit","GP%","Labor","Overhead","EBITDA","EBITDA%"].map(h => (
+                    <th key={h} style={{padding:"8px 10px", textAlign: h==="Service" ? "left":"right", fontWeight:700, fontSize:11, color:C.textMuted, whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(serviceTypeTotals)
+                  .sort((a,b) => b[1].revenue - a[1].revenue)
+                  .map(([svcType, totals], i) => {
+                    const svcLabel = DEFAULT_RATES[svcType]?.label || svcType;
+                    const gp = totals.revenue - totals.cogs;
+                    const gpPct = totals.revenue > 0 ? (gp/totals.revenue)*100 : 0;
+                    const ebitda = gp - totals.labor - totals.overhead;
+                    const ebitdaPct = totals.revenue > 0 ? (ebitda/totals.revenue)*100 : 0;
+                    return (
+                      <tr key={svcType} style={{borderBottom:`1px solid ${C.border}`, background: i%2===0 ? C.surface : C.surface2}}>
+                        <td style={{padding:"8px 10px", fontWeight:600}}>{svcLabel}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right"}}>{fmtMoney(totals.revenue)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:"#ef4444"}}>{fmtMoney(totals.cogs)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtMoney(gp)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtPct(gpPct)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:"#f59e0b"}}>{fmtMoney(totals.labor)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:"#8b5cf6"}}>{fmtMoney(totals.overhead)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: ebitda>=0?"#10b981":"#ef4444"}}>{fmtMoney(ebitda)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: ebitdaPct>=0?"#10b981":"#ef4444"}}>{fmtPct(ebitdaPct)}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -5767,7 +5882,7 @@ function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
 }
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
-function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, laborEntries=[], expenses=[], teamUsers=[] }) {
+function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, laborEntries=[], expenses=[], teamUsers=[], materials=[], materialSettings={} }) {
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
@@ -5834,13 +5949,43 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     const fin = calcJobFinancials(j, allRatesEbitda);
     const revenue = fin.revenue;
 
-    // COGS: actuals first, then estimated
+    // COGS: actuals first, then FIFO material calc, then estimated
     const actuals = j.costs?.actuals || {};
     const hasActuals = Object.values(actuals).some(v => v !== null && v !== "" && Number(v) > 0);
     const actualsCOGS = Object.values(actuals).reduce((s,v) => s + Number(v||0), 0);
+
+    // FIFO material cost: for each area, look up material type via serviceMappings, get FIFO unit cost × qty ÷ coverage
+    const serviceMappings = materialSettings?.serviceMappings || {};
+    let fifoCOGS = 0;
+    let hasFifo = false;
+    const coverageSqFtPerGal = materialSettings?.sealcoatSqFtPerGal ?? 70;
+    const coverageLinFtPerUnit = materialSettings?.crackfillLinFtPerUnit ?? 7.5;
+    (j.areas||[]).forEach(area => {
+      const matTypes = serviceMappings[area.serviceType] || [];
+      const qty = Number(area.measurement||0);
+      matTypes.forEach(matType => {
+        const unitCost = getFifoUnitCost(matType, jobDate, materials);
+        if (unitCost && qty > 0) {
+          hasFifo = true;
+          // Calculate units needed based on coverage
+          let unitsNeeded = 0;
+          if (matType === "sealcoat") unitsNeeded = qty / coverageSqFtPerGal;
+          else if (matType === "crackfill") unitsNeeded = qty / coverageLinFtPerUnit;
+          else if (matType === "patch") {
+            // tons-based — use area's ton calc
+            const svc = allRatesEbitda[area.serviceType];
+            const tons = calcTons(qty, area.depthIn??(svc?.depthIn??3), area.density??(svc?.density??145), area.tonsFormula??(svc?.tonsFormula??"simple"));
+            unitsNeeded = tons;
+          } else unitsNeeded = qty / 100; // fallback
+          fifoCOGS += unitsNeeded * unitCost;
+        }
+      });
+    });
+
     const estimatedCOGS = fin.totalMaterials;
-    const cogs = hasActuals ? actualsCOGS : estimatedCOGS;
-    const cogsIsEstimated = !hasActuals;
+    const cogs = hasActuals ? actualsCOGS : hasFifo ? fifoCOGS : estimatedCOGS;
+    const cogsIsEstimated = !hasActuals && !hasFifo;
+    const cogsSource = hasActuals ? "actual" : hasFifo ? "fifo" : "estimated";
 
     // Labor: actual hours × rate
     const jobDate = j.date?.includes("/") ? new Date(j.date).toISOString().slice(0,10) : (j.date||"");
@@ -5861,7 +6006,16 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     const ebitda = grossProfit - jobLabor - overheadAlloc;
     const ebitdaPct = revenue > 0 ? (ebitda / revenue) * 100 : 0;
 
-    return { job:j, revenue, cogs, cogsIsEstimated, grossProfit, grossMarginPct, jobLabor, laborIsEstimated, overheadAlloc, ebitda, ebitdaPct };
+    // Per-service breakdown for this job
+    const serviceBreakdown = {};
+    (j.areas||[]).forEach(area => {
+      const svcType = area.serviceType;
+      const svcRevenue = calcLineAmt(area, allRatesEbitda);
+      if (!serviceBreakdown[svcType]) serviceBreakdown[svcType] = { revenue:0, cogs:0, labor:0, overhead:0 };
+      serviceBreakdown[svcType].revenue += svcRevenue;
+    });
+
+    return { job:j, revenue, cogs, cogsIsEstimated, cogsSource, grossProfit, grossMarginPct, jobLabor, laborIsEstimated, overheadAlloc, ebitda, ebitdaPct, serviceBreakdown };
   });
 
   const ebitdaTotals = ebitdaJobData.reduce((acc, d) => {
@@ -5873,6 +6027,22 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     acc.ebitda        += d.ebitda;
     return acc;
   }, {revenue:0, cogs:0, grossProfit:0, jobLabor:0, overheadAlloc:0, ebitda:0});
+
+  // Per-service-type aggregation
+  const serviceTypeTotals = {};
+  ebitdaJobData.forEach(d => {
+    // Allocate job-level labor and overhead to services by revenue share
+    const jobRevenue = d.revenue;
+    Object.entries(d.serviceBreakdown||{}).forEach(([svcType, svcData]) => {
+      if (!serviceTypeTotals[svcType]) serviceTypeTotals[svcType] = { revenue:0, cogs:0, labor:0, overhead:0, jobCount:0 };
+      const share = jobRevenue > 0 ? svcData.revenue / jobRevenue : 0;
+      serviceTypeTotals[svcType].revenue  += svcData.revenue;
+      serviceTypeTotals[svcType].cogs     += d.cogs * share;
+      serviceTypeTotals[svcType].labor    += d.jobLabor * share;
+      serviceTypeTotals[svcType].overhead += d.overheadAlloc * share;
+      if (svcData.revenue > 0) serviceTypeTotals[svcType].jobCount++;
+    });
+  });
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
   const STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
@@ -6093,6 +6263,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           ebitdaFrom={ebitdaFrom} setEbitdaFrom={setEbitdaFrom}
           ebitdaTo={ebitdaTo} setEbitdaTo={setEbitdaTo}
           ebitdaDateRange={ebitdaDateRange}
+          serviceTypeTotals={serviceTypeTotals}
           setCurrentJob={setCurrentJob} setView={setView}
         />
       ) : (
@@ -7945,7 +8116,7 @@ const EXPENSE_CATEGORIES = [
 ];
 const PAYMENT_METHODS = ["Company Card","Cash","Personal Card","Check","ACH/Transfer"];
 
-function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session }) {
+function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial }) {
   const canEdit = userRole === "owner" || userRole === "manager";
   const [showForm,    setShowForm]    = useState(false);
   const [showVendors, setShowVendors] = useState(false);
@@ -7958,6 +8129,13 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const [uploading,   setUploading]   = useState(false);
   // Import state
   const [showImport,    setShowImport]    = useState(false);
+  // COGS → Materials prompt state
+  const [cogsMatPrompt,    setCogsMatPrompt]    = useState(null); // pending expense entry
+  const [cogsMatType,      setCogsMatType]      = useState("sealcoat");
+  const [cogsMatName,      setCogsMatName]      = useState("");
+  const [cogsMatQty,       setCogsMatQty]       = useState("");
+  const [cogsMatUnit,      setCogsMatUnit]      = useState("gal");
+  const [cogsMatUseVendor, setCogsMatUseVendor] = useState(true);
   const [importRows,    setImportRows]    = useState([]); // parsed rows from spreadsheet
   const [importMapping, setImportMapping] = useState({}); // { sheetCat: appCat }
   const [importYear,    setImportYear]    = useState(new Date().getFullYear());
@@ -8148,6 +8326,15 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     addExpense(entry);
     setForm(blankForm());
     setShowForm(false);
+    // Prompt to add to Materials if COGS
+    if (form.category === "COGS") {
+      setCogsMatPrompt(entry);
+      setCogsMatName(form.vendorName.trim());
+      setCogsMatUseVendor(true);
+      setCogsMatQty("");
+      setCogsMatUnit(MATERIAL_TYPES[0].defaultUnit);
+      setCogsMatType(MATERIAL_TYPES[0].key);
+    }
   };
 
   const saveVendor = () => {
@@ -8191,6 +8378,82 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           </button>
         </div>
       )}
+
+      {/* COGS → Materials Prompt */}
+      {cogsMatPrompt && createPortal(
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:460, boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+            <h2 style={{...S.h2, marginTop:0}}>Add to Materials?</h2>
+            <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
+              This COGS expense of <strong>{formatCurrency(cogsMatPrompt.amount)}</strong> from <strong>{cogsMatPrompt.vendorName}</strong> — would you like to add it as a material purchase for cost tracking?
+            </p>
+
+            <label style={S.formLabel}>Material Type
+              <select value={cogsMatType} onChange={e => { setCogsMatType(e.target.value); setCogsMatUnit(MATERIAL_TYPES.find(m=>m.key===e.target.value)?.defaultUnit||"unit"); }} style={S.input}>
+                {MATERIAL_TYPES.filter(m=>m.key!=="other").map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+              </select>
+            </label>
+
+            <label style={S.formLabel}>Product Name
+              <div style={{display:"flex", gap:6, marginBottom:4}}>
+                <button style={{...S.btnSmall, fontSize:11, background: cogsMatUseVendor ? C.accent : C.surface2, color: cogsMatUseVendor ? "#000" : C.textMuted}}
+                  onClick={() => { setCogsMatUseVendor(true); setCogsMatName(cogsMatPrompt.vendorName); }}>
+                  Use "{cogsMatPrompt.vendorName}"
+                </button>
+                <button style={{...S.btnSmall, fontSize:11, background: !cogsMatUseVendor ? C.accent : C.surface2, color: !cogsMatUseVendor ? "#000" : C.textMuted}}
+                  onClick={() => { setCogsMatUseVendor(false); setCogsMatName(""); }}>
+                  Enter name
+                </button>
+              </div>
+              {!cogsMatUseVendor && (
+                <input value={cogsMatName} onChange={e => setCogsMatName(e.target.value)}
+                  placeholder="e.g. SealMaster Pro" style={S.input}/>
+              )}
+            </label>
+
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
+              <label style={S.formLabel}>Quantity *
+                <input type="number" min="0" step="0.01" value={cogsMatQty} onChange={e => setCogsMatQty(e.target.value)}
+                  placeholder="e.g. 55" style={S.input}/>
+              </label>
+              <label style={S.formLabel}>Unit
+                <input value={cogsMatUnit} onChange={e => setCogsMatUnit(e.target.value)}
+                  placeholder="gal, lb, ton..." style={S.input}/>
+              </label>
+            </div>
+
+            {cogsMatQty && Number(cogsMatQty) > 0 && (
+              <div style={{fontSize:12, color:C.accent, marginBottom:12}}>
+                Unit cost: {formatCurrency(cogsMatPrompt.amount / Number(cogsMatQty))}/{cogsMatUnit}
+              </div>
+            )}
+
+            <div style={{display:"flex", gap:8, marginTop:8}}>
+              <button style={{...S.btnPrimary, flex:1}}
+                disabled={!cogsMatQty || Number(cogsMatQty) <= 0}
+                onClick={() => {
+                  const qty = Number(cogsMatQty);
+                  const unitCost = qty > 0 ? cogsMatPrompt.amount / qty : 0;
+                  addMaterial({
+                    id: Date.now(),
+                    date: cogsMatPrompt.date,
+                    category: cogsMatType,
+                    qty, unit: cogsMatUnit,
+                    cost: cogsMatPrompt.amount,
+                    unitCost,
+                    supplier: cogsMatPrompt.vendorName,
+                    notes: cogsMatName !== cogsMatPrompt.vendorName ? cogsMatName : "",
+                    fromExpenseId: cogsMatPrompt.id,
+                  });
+                  setCogsMatPrompt(null);
+                }}>
+                Yes, Add to Materials
+              </button>
+              <button style={{...S.btnSecondary, flex:1}} onClick={() => setCogsMatPrompt(null)}>No Thanks</button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
 
       {/* Import Modal */}
       {showImport && canEdit && createPortal(
@@ -12995,12 +13258,12 @@ export default function App() {
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
-        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session}/>}
+        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
-        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers}/></div>}
+        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
           setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: {...t.data, servicesOffered: services}} : t));
           tFetch("tenants?id=eq." + currentTenantId, { method:"PATCH", body:JSON.stringify({ data: {...currentTenant.data, servicesOffered: services} }) });
