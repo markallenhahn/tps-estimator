@@ -7292,7 +7292,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}><LucideIcons.Globe size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Platform Admin</h1>
-        <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Exit</button>
+
       </div>
       <p style={S.subhead}>BlacktopIQ operator tools — not visible to any company's owner.</p>
 
@@ -12599,6 +12599,12 @@ function AdminApp() {
   const [addingAdmin,    setAddingAdmin]    = useState(false);
   const [addAdminError,  setAddAdminError]  = useState("");
   const [permissions,    setPermissions]    = useState(DEFAULT_PERMISSIONS);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileFirst,   setProfileFirst]   = useState("");
+  const [profileLast,    setProfileLast]    = useState("");
+  const [profileNewPw,   setProfileNewPw]   = useState("");
+  const [profileSaving,  setProfileSaving]  = useState(false);
+  const [profileMsg,     setProfileMsg]     = useState("");
   const sbH = (token) => ({
     "apikey": SUPABASE_KEY_ADMIN,
     "Authorization": "Bearer " + (token || SUPABASE_KEY_ADMIN),
@@ -12792,32 +12798,111 @@ function AdminApp() {
           }}
         />
 
-        {/* Admin Users Management */}
+        {/* My Profile */}
+        <section style={{background:"#fff", borderRadius:12, padding:24, marginTop:20, boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
+            <div>
+              <h2 style={{fontSize:18, fontWeight:700, margin:0}}>My Profile</h2>
+              <p style={{fontSize:13, color:"#888", margin:"4px 0 0"}}>Update your admin account name or password.</p>
+            </div>
+            <button onClick={() => { setEditingProfile(p => !p); setProfileMsg(""); }}
+              style={{fontSize:13, padding:"6px 14px", borderRadius:8, border:"1px solid #ddd", background:"#f9f9f9", cursor:"pointer"}}>
+              {editingProfile ? "Cancel" : "Edit"}
+            </button>
+          </div>
+          {!editingProfile && (
+            <div style={{fontSize:14, color:"#444"}}>
+              <div style={{fontWeight:600}}>{adminUsers.find(a => a.user_id === adminSession?.user?.id)?.name || adminSession?.user?.email}</div>
+              <div style={{fontSize:12, color:"#888", marginTop:2}}>{adminSession?.user?.email}</div>
+            </div>
+          )}
+          {editingProfile && (
+            <div style={{display:"flex", flexDirection:"column", gap:10, maxWidth:400}}>
+              <div style={{display:"flex", gap:8}}>
+                <label style={{flex:1, fontSize:12, fontWeight:600}}>First Name
+                  <input value={profileFirst} onChange={e => setProfileFirst(e.target.value)}
+                    placeholder="First" style={{display:"block", width:"100%", marginTop:4, padding:"8px 10px", borderRadius:8, border:"1px solid #ddd", fontSize:13, boxSizing:"border-box"}}/>
+                </label>
+                <label style={{flex:1, fontSize:12, fontWeight:600}}>Last Name
+                  <input value={profileLast} onChange={e => setProfileLast(e.target.value)}
+                    placeholder="Last" style={{display:"block", width:"100%", marginTop:4, padding:"8px 10px", borderRadius:8, border:"1px solid #ddd", fontSize:13, boxSizing:"border-box"}}/>
+                </label>
+              </div>
+              <label style={{fontSize:12, fontWeight:600}}>New Password (leave blank to keep current)
+                <input type="password" value={profileNewPw} onChange={e => setProfileNewPw(e.target.value)}
+                  placeholder="••••••••" style={{display:"block", width:"100%", marginTop:4, padding:"8px 10px", borderRadius:8, border:"1px solid #ddd", fontSize:13, boxSizing:"border-box"}}/>
+              </label>
+              {profileMsg && <div style={{fontSize:12, color: profileMsg.startsWith("Error") ? "#ef4444" : "#16a34a"}}>{profileMsg}</div>}
+              <button disabled={profileSaving} onClick={async () => {
+                setProfileSaving(true); setProfileMsg("");
+                try {
+                  const patch = {};
+                  if (profileFirst.trim() || profileLast.trim()) {
+                    patch.data = { full_name: [profileFirst.trim(), profileLast.trim()].filter(Boolean).join(" ") };
+                  }
+                  if (profileNewPw) patch.password = profileNewPw;
+                  if (Object.keys(patch).length === 0) { setProfileMsg("Nothing to update."); setProfileSaving(false); return; }
+                  const res = await fetch(SUPABASE_URL_ADMIN + "/auth/v1/user", {
+                    method: "PUT",
+                    headers: sbH(adminSession.access_token),
+                    body: JSON.stringify(patch),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) { setProfileMsg("Error: " + (data.msg || data.error_description || "Update failed")); }
+                  else {
+                    // Also update profiles table
+                    if (profileFirst.trim() || profileLast.trim()) {
+                      await fetch(SUPABASE_URL_ADMIN + "/rest/v1/profiles?id=eq." + adminSession.user.id, {
+                        method: "PATCH",
+                        headers: sbH(adminSession.access_token),
+                        body: JSON.stringify({ first_name: profileFirst.trim(), last_name: profileLast.trim() }),
+                      });
+                    }
+                    setProfileMsg("Saved.");
+                    setProfileFirst(""); setProfileLast(""); setProfileNewPw("");
+                    setEditingProfile(false);
+                    await loadAdminUsers(adminSession.access_token);
+                  }
+                } catch(e) { setProfileMsg("Error: " + e.message); }
+                setProfileSaving(false);
+              }} style={{padding:"8px 20px", borderRadius:8, border:"none", cursor:"pointer", fontSize:13, fontWeight:600,
+                background:"#f0ab2e", color:"#000", opacity: profileSaving ? 0.6 : 1, alignSelf:"flex-start"}}>
+                {profileSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* Platform Admins */}
         <section style={{background:"#fff", borderRadius:12, padding:24, marginTop:20, boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
           <h2 style={{fontSize:18, fontWeight:700, margin:"0 0 4px"}}>Platform Admins</h2>
           <p style={{fontSize:13, color:"#888", margin:"0 0 16px"}}>Manage who has access to this dashboard.</p>
 
-          {/* Admin list */}
-          {adminUsers.map(a => (
-            <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:"1px solid #f0f0f0"}}>
-              <div>
-                <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || a.user_id.slice(0,8)+"..."}</div>
-                <div style={{fontSize:12, color:"#888"}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
+          <div style={{display:"flex", flexDirection:"column", gap:0, border:"1px solid #f0f0f0", borderRadius:8, overflow:"hidden"}}>
+            {adminUsers.map((a, idx) => (
+              <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between",
+                padding:"12px 16px", borderBottom: idx < adminUsers.length-1 ? "1px solid #f0f0f0" : "none",
+                background: idx % 2 === 0 ? "#fff" : "#fafafa"}}>
+                <div>
+                  <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || "Admin"}</div>
+                  <div style={{fontSize:12, color:"#888", marginTop:2}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
+                </div>
+                <div style={{display:"flex", alignItems:"center", gap:8}}>
+                  {a.is_super && <span style={{fontSize:11, color:"#f0ab2e", fontWeight:700, padding:"2px 8px", border:"1px solid #f0ab2e", borderRadius:20}}>SUPER</span>}
+                  {isSuperAdmin && !a.is_super && (
+                    <button onClick={() => removeAdmin(a.user_id)}
+                      style={{fontSize:12, color:"#ef4444", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:6, padding:"4px 10px", cursor:"pointer"}}>
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
-              {isSuperAdmin && !a.is_super && (
-                <button onClick={() => removeAdmin(a.user_id)}
-                  style={{fontSize:12, color:"#ef4444", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:6, padding:"4px 10px", cursor:"pointer"}}>
-                  Remove
-                </button>
-              )}
-              {a.is_super && <span style={{fontSize:11, color:"#f0ab2e", fontWeight:700}}>SUPER</span>}
-            </div>
-          ))}
+            ))}
+          </div>
 
-          {/* Add admin */}
           {isSuperAdmin && (
-            <div style={{marginTop:16}}>
-              <div style={{fontSize:13, fontWeight:600, marginBottom:8}}>Add Admin</div>
+            <div style={{marginTop:20}}>
+              <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>Add Admin</div>
               <p style={{fontSize:12, color:"#888", marginBottom:10}}>The user must already have a BlacktopIQ account.</p>
               <div style={{display:"flex", gap:8}}>
                 <input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)}
