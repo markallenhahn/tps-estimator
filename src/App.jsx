@@ -3769,7 +3769,6 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                     })}
                     {unmapped.length > 0 && (
                       <select
-                        value=""
                         onChange={e => {
                           if (!e.target.value) return;
                           const next = [...currentMapped, e.target.value];
@@ -3777,7 +3776,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                             ...prev,
                             serviceMappings: {...(prev.serviceMappings||{}), [svcKey]: next}
                           }));
-                          e.target.value = "";
+                          e.target.selectedIndex = 0;
                         }}
                         style={{fontSize:11, padding:"3px 6px", borderRadius:6, border:`1px solid ${C.border}`,
                           background:C.surface, color:C.textMuted, cursor:"pointer"}}>
