@@ -12422,7 +12422,265 @@ function LoginView({ onSuccess }) {
   );
 }
 
-export default function App() {
+
+// ─── Admin App (admin.blacktopiq.com) ────────────────────────────────────────
+const SUPABASE_URL_ADMIN = "https://elzymtqlcceouftwhcdk.supabase.co";
+const SUPABASE_KEY_ADMIN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsenltdHFsY2Nlb3VmdHdoY2RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MDI0NTMsImV4cCI6MjA2MDQ3ODQ1M30.qniMxQzKkSMPnelj_TqxFWiVbMtDgcMSU4hSvfhmt5A";
+
+function AdminApp() {
+  const [adminSession,   setAdminSession]   = useState(null);
+  const [adminChecked,   setAdminChecked]   = useState(false);
+  const [isSuperAdmin,   setIsSuperAdmin]   = useState(false);
+  const [adminEmail,     setAdminEmail]     = useState("");
+  const [adminPassword,  setAdminPassword]  = useState("");
+  const [loginError,     setLoginError]     = useState("");
+  const [loggingIn,      setLoggingIn]      = useState(false);
+  const [adminUsers,     setAdminUsers]     = useState([]);
+  const [newAdminEmail,  setNewAdminEmail]  = useState("");
+  const [addingAdmin,    setAddingAdmin]    = useState(false);
+  const [addAdminError,  setAddAdminError]  = useState("");
+  const [permissions,    setPermissions]    = useState(DEFAULT_PERMISSIONS);
+  const sbH = (token) => ({
+    "apikey": SUPABASE_KEY_ADMIN,
+    "Authorization": "Bearer " + (token || SUPABASE_KEY_ADMIN),
+    "Content-Type": "application/json",
+  });
+
+  // Check existing session
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(SUPABASE_URL_ADMIN + "/auth/v1/user", {
+          headers: { "apikey": SUPABASE_KEY_ADMIN, "Authorization": "Bearer " + (localStorage.getItem("adminToken")||"") }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.id) {
+            await verifyAndSetAdmin(data, localStorage.getItem("adminToken"));
+            return;
+          }
+        }
+      } catch(e) {}
+      setAdminChecked(true);
+    })();
+  }, []);
+
+  const verifyAndSetAdmin = async (userData, token) => {
+    // Check platform_admins
+    const r = await fetch(SUPABASE_URL_ADMIN + "/rest/v1/platform_admins?user_id=eq." + userData.id + "&select=user_id,is_super", {
+      headers: sbH(token)
+    });
+    const data = await r.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      setLoginError("Access denied. You are not a platform admin.");
+      setAdminChecked(true);
+      return false;
+    }
+    setAdminSession({ user: userData, access_token: token });
+    setIsSuperAdmin(data[0]?.is_super === true);
+    setAdminChecked(true);
+    await loadAdminUsers(token);
+    return true;
+  };
+
+  const loadAdminUsers = async (token) => {
+    try {
+      const r = await fetch(SUPABASE_URL_ADMIN + "/rest/v1/platform_admins?select=user_id,is_super", {
+        headers: sbH(token)
+      });
+      const admins = await r.json();
+      if (!Array.isArray(admins)) return;
+      // Get profile info for each admin
+      const ids = admins.map(a => a.user_id).join(",");
+      const pr = await fetch(SUPABASE_URL_ADMIN + "/rest/v1/profiles?id=in.(" + ids + ")&select=id,first_name,last_name,email", {
+        headers: sbH(token)
+      });
+      const profiles = await pr.json();
+      const merged = admins.map(a => {
+        const p = Array.isArray(profiles) ? profiles.find(x => x.id === a.user_id) : null;
+        return { ...a, name: p ? [p.first_name, p.last_name].filter(Boolean).join(" ") : "", email: p?.email || "" };
+      });
+      setAdminUsers(merged);
+    } catch(e) { console.error("loadAdminUsers error:", e); }
+  };
+
+  const login = async () => {
+    setLoggingIn(true); setLoginError("");
+    try {
+      const res = await fetch(SUPABASE_URL_ADMIN + "/auth/v1/token?grant_type=password", {
+        method: "POST",
+        headers: { "apikey": SUPABASE_KEY_ADMIN, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: adminEmail.trim(), password: adminPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setLoginError(data.error_description || data.msg || "Login failed."); setLoggingIn(false); return; }
+      localStorage.setItem("adminToken", data.access_token);
+      const ok = await verifyAndSetAdmin(data.user, data.access_token);
+      if (!ok) localStorage.removeItem("adminToken");
+    } catch(e) { setLoginError("Error: " + e.message); }
+    setLoggingIn(false);
+  };
+
+  const logout = () => {
+    localStorage.removeItem("adminToken");
+    setAdminSession(null);
+    setAdminChecked(false);
+    setTimeout(() => setAdminChecked(true), 100);
+  };
+
+  const addAdmin = async () => {
+    if (!newAdminEmail.trim()) { setAddAdminError("Email required."); return; }
+    setAddingAdmin(true); setAddAdminError("");
+    try {
+      // Look up user by email from profiles
+      const r = await fetch(SUPABASE_URL_ADMIN + "/rest/v1/profiles?email=eq." + encodeURIComponent(newAdminEmail.trim()) + "&select=id,first_name,last_name,email", {
+        headers: sbH(adminSession.access_token)
+      });
+      const users = await r.json();
+      if (!Array.isArray(users) || users.length === 0) {
+        setAddAdminError("No user found with that email. They must have an existing account.");
+        setAddingAdmin(false); return;
+      }
+      const userId = users[0].id;
+      // Check not already admin
+      if (adminUsers.find(a => a.user_id === userId)) {
+        setAddAdminError("This user is already an admin.");
+        setAddingAdmin(false); return;
+      }
+      // Add to platform_admins
+      await fetch(SUPABASE_URL_ADMIN + "/rest/v1/platform_admins", {
+        method: "POST",
+        headers: { ...sbH(adminSession.access_token), "Prefer": "return=representation" },
+        body: JSON.stringify({ user_id: userId, is_super: false }),
+      });
+      await loadAdminUsers(adminSession.access_token);
+      setNewAdminEmail("");
+    } catch(e) { setAddAdminError("Error: " + e.message); }
+    setAddingAdmin(false);
+  };
+
+  const removeAdmin = async (userId) => {
+    if (!confirm("Remove this admin?")) return;
+    await fetch(SUPABASE_URL_ADMIN + "/rest/v1/platform_admins?user_id=eq." + userId, {
+      method: "DELETE",
+      headers: sbH(adminSession.access_token)
+    });
+    setAdminUsers(prev => prev.filter(a => a.user_id !== userId));
+  };
+
+  // ── Login screen ──
+  if (!adminChecked) {
+    return (
+      <div style={{minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#0c0c0c"}}>
+        <div style={{color:"#f0ab2e", fontSize:14}}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (!adminSession) {
+    return (
+      <div style={{minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#0c0c0c", padding:24}}>
+        <div style={{background:"#1a1a1a", borderRadius:16, padding:32, width:"100%", maxWidth:380, boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
+          <div style={{textAlign:"center", marginBottom:28}}>
+            <div style={{fontSize:28, fontWeight:800, color:"#f0ab2e", letterSpacing:"-0.5px"}}>BlacktopIQ</div>
+            <div style={{fontSize:13, color:"#888", marginTop:4}}>Platform Admin</div>
+          </div>
+          <label style={{display:"block", fontSize:13, color:"#aaa", marginBottom:6}}>Email
+            <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)}
+              style={{display:"block", width:"100%", marginTop:4, padding:"10px 12px", borderRadius:8, border:"1px solid #333", background:"#111", color:"#fff", fontSize:14, boxSizing:"border-box"}}
+              onKeyDown={e => e.key==="Enter" && login()}/>
+          </label>
+          <label style={{display:"block", fontSize:13, color:"#aaa", marginBottom:16, marginTop:12}}>Password
+            <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)}
+              style={{display:"block", width:"100%", marginTop:4, padding:"10px 12px", borderRadius:8, border:"1px solid #333", background:"#111", color:"#fff", fontSize:14, boxSizing:"border-box"}}
+              onKeyDown={e => e.key==="Enter" && login()}/>
+          </label>
+          {loginError && <div style={{fontSize:12, color:"#ef4444", background:"rgba(239,68,68,0.1)", borderRadius:6, padding:"8px 12px", marginBottom:12}}>{loginError}</div>}
+          <button onClick={login} disabled={loggingIn}
+            style={{width:"100%", padding:"11px 0", borderRadius:8, border:"none", cursor:"pointer", fontSize:14, fontWeight:700,
+              background: loggingIn ? "#555" : "#f0ab2e", color:"#000", opacity: loggingIn ? 0.7 : 1}}>
+            {loggingIn ? "Signing in..." : "Sign In"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Admin dashboard ──
+  return (
+    <div style={{minHeight:"100vh", background:"#f5f5f5"}}>
+      {/* Header */}
+      <div style={{background:"#0c0c0c", padding:"12px 24px", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+        <div style={{fontSize:18, fontWeight:800, color:"#f0ab2e"}}>BlacktopIQ Admin</div>
+        <div style={{display:"flex", alignItems:"center", gap:12}}>
+          <span style={{fontSize:12, color:"#888"}}>{adminSession.user.email}</span>
+          <button onClick={logout} style={{fontSize:12, color:"#aaa", background:"transparent", border:"1px solid #333", borderRadius:6, padding:"4px 10px", cursor:"pointer"}}>Sign Out</button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{maxWidth:1200, margin:"0 auto", padding:24}}>
+        <PlatformAdminView
+          setView={() => {}}
+          accessToken={adminSession.access_token}
+          permissions={permissions}
+          setPermissions={setPermissions}
+          syncPermissions={async (p) => {
+            setPermissions(p);
+            try {
+              await fetch(SUPABASE_URL_ADMIN + "/rest/v1/global_permissions?select=id&limit=1", { headers: sbH(adminSession.access_token) });
+            } catch(e) {}
+          }}
+        />
+
+        {/* Admin Users Management */}
+        <section style={{background:"#fff", borderRadius:12, padding:24, marginTop:20, boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+          <h2 style={{fontSize:18, fontWeight:700, margin:"0 0 4px"}}>Platform Admins</h2>
+          <p style={{fontSize:13, color:"#888", margin:"0 0 16px"}}>Manage who has access to this dashboard.</p>
+
+          {/* Admin list */}
+          {adminUsers.map(a => (
+            <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:"1px solid #f0f0f0"}}>
+              <div>
+                <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || a.user_id.slice(0,8)+"..."}</div>
+                <div style={{fontSize:12, color:"#888"}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
+              </div>
+              {isSuperAdmin && !a.is_super && (
+                <button onClick={() => removeAdmin(a.user_id)}
+                  style={{fontSize:12, color:"#ef4444", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:6, padding:"4px 10px", cursor:"pointer"}}>
+                  Remove
+                </button>
+              )}
+              {a.is_super && <span style={{fontSize:11, color:"#f0ab2e", fontWeight:700}}>SUPER</span>}
+            </div>
+          ))}
+
+          {/* Add admin */}
+          {isSuperAdmin && (
+            <div style={{marginTop:16}}>
+              <div style={{fontSize:13, fontWeight:600, marginBottom:8}}>Add Admin</div>
+              <p style={{fontSize:12, color:"#888", marginBottom:10}}>The user must already have a BlacktopIQ account.</p>
+              <div style={{display:"flex", gap:8}}>
+                <input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  style={{flex:1, padding:"8px 12px", borderRadius:8, border:"1px solid #ddd", fontSize:13}}
+                  onKeyDown={e => e.key==="Enter" && addAdmin()}/>
+                <button onClick={addAdmin} disabled={addingAdmin}
+                  style={{padding:"8px 16px", borderRadius:8, border:"none", cursor:"pointer", fontSize:13, fontWeight:600,
+                    background:"#f0ab2e", color:"#000", opacity: addingAdmin ? 0.6 : 1}}>
+                  {addingAdmin ? "Adding..." : "Add"}
+                </button>
+              </div>
+              {addAdminError && <div style={{fontSize:12, color:"#ef4444", marginTop:6}}>{addAdminError}</div>}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function App() {
   const [view,          setViewRaw]      = useState("home");
   const [viewHistory,   setViewHistory]  = useState([]); // stack of previous views, for global Back button
   // navigateTo: use this for all "go to a new screen" navigation — pushes the
@@ -13492,3 +13750,13 @@ export default function App() {
     </div>
   );
 }
+
+// ─── Root — subdomain detection ──────────────────────────────────────────────
+function Root() {
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+  const isAdmin = hostname === "admin.blacktopiq.com" || hostname.startsWith("admin.");
+  if (isAdmin) return <AdminApp/>;
+  return <App/>;
+}
+
+export default Root;
