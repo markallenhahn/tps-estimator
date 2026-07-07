@@ -5724,7 +5724,7 @@ function getFifoUnitCost(materialType, dateStr, materials) {
 }
 
 // ─── EBITDA Report ────────────────────────────────────────────────────────────
-function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, serviceTypeTotals={}, setCurrentJob, setView }) {
+function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, serviceTypeTotals={}, setCurrentJob, setView }) {
   const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
   const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
   const isDesktopLayout = useIsDesktop();
@@ -5745,6 +5745,24 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhea
               </button>
             ))}
           </div>
+          {/* Status filter */}
+          <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:8, alignItems:"center"}}>
+            <span style={{fontSize:12, color:C.textMuted, fontWeight:600, marginRight:4}}>Statuses:</span>
+            {["estimate","draft","sent","invoiced","paid","completed","scheduled","lost"].map(s => {
+              const active = ebitdaStatuses.includes(s);
+              return (
+                <button key={s} onClick={() => setEbitdaStatuses(prev =>
+                  active ? prev.filter(x => x !== s) : [...prev, s]
+                )} style={{fontSize:11, fontWeight:600, padding:"3px 10px", borderRadius:20, cursor:"pointer",
+                  border:`1px solid ${active ? C.accent : C.border}`,
+                  background: active ? "#fffbeb" : C.surface2,
+                  color: active ? "#000" : C.textMuted}}>
+                  {s.charAt(0).toUpperCase()+s.slice(1)}
+                </button>
+              );
+            })}
+          </div>
+
           {ebitdaRange === "custom" && (
             <>
               <input type="date" value={ebitdaFrom} onChange={e => setEbitdaFrom(e.target.value)}
@@ -5996,6 +6014,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const [filterStatuses, setFilterStatuses] = useState([]); // empty = all statuses
   const [pdfLoading,   setPdfLoading]   = useState(false);
   const [ebitdaRange,   setEbitdaRange]   = useState("ytd"); // "ytd" | "custom"
+  const [ebitdaStatuses, setEbitdaStatuses] = useState(["paid","completed","sent","invoiced"]);
   const [ebitdaFrom,    setEbitdaFrom]    = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10));
   const [ebitdaTo,      setEbitdaTo]      = useState(new Date().toISOString().slice(0,10));
 
@@ -6020,7 +6039,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const ebitdaJobs = jobs.filter(j => {
     if (!j.date) return false;
     const d = j.date.includes("/") ? new Date(j.date).toISOString().slice(0,10) : j.date;
-    return d >= ebitdaDateRange.from && d <= ebitdaDateRange.to && !["estimate","draft","lost"].includes(j.status);
+    return d >= ebitdaDateRange.from && d <= ebitdaDateRange.to && (ebitdaStatuses.length === 0 || ebitdaStatuses.includes(j.status));
   });
 
   // Total revenue for period (for overhead allocation %)
@@ -6365,6 +6384,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           ebitdaFrom={ebitdaFrom} setEbitdaFrom={setEbitdaFrom}
           ebitdaTo={ebitdaTo} setEbitdaTo={setEbitdaTo}
           ebitdaDateRange={ebitdaDateRange}
+          ebitdaStatuses={ebitdaStatuses} setEbitdaStatuses={setEbitdaStatuses}
           serviceTypeTotals={serviceTypeTotals}
           setCurrentJob={setCurrentJob} setView={setView}
         />
