@@ -7292,7 +7292,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}><LucideIcons.Globe size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Platform Admin</h1>
-
+        <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Exit</button>
       </div>
       <p style={S.subhead}>BlacktopIQ operator tools — not visible to any company's owner.</p>
 
@@ -8228,6 +8228,14 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const [filterCat,   setFilterCat]   = useState("All");
   const [filterMethod,setFilterMethod]= useState("All");
   const [filterJob,   setFilterJob]   = useState("All");
+  const [filterSearch,setFilterSearch]= useState("");
+  const [filterDateFrom,setFilterDateFrom]= useState("");
+  const [filterDateTo,  setFilterDateTo]  = useState("");
+  const [filterAmtMin,  setFilterAmtMin]  = useState("");
+  const [filterAmtMax,  setFilterAmtMax]  = useState("");
+  const [selectedIds,   setSelectedIds]   = useState(new Set());
+  const [sortField,     setSortField]     = useState("date");
+  const [sortDir,       setSortDir]       = useState("desc");
   const [uploading,   setUploading]   = useState(false);
   // Import state
   const [showImport,    setShowImport]    = useState(false);
@@ -8493,12 +8501,76 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     setNewVendorName(""); setNewVendorPhone(""); setNewVendorEmail("");
   };
 
-  // Filters
-  const filtered = expenses.filter(e =>
-    (filterCat    === "All" || e.category      === filterCat) &&
-    (filterMethod === "All" || e.paymentMethod === filterMethod) &&
-    (filterJob    === "All" || String(e.jobId) === String(filterJob))
-  );
+  // Filters + sort
+  const filtered = expenses.filter(e => {
+    if (filterCat    !== "All" && e.category      !== filterCat)    return false;
+    if (filterMethod !== "All" && e.paymentMethod !== filterMethod)  return false;
+    if (filterJob    !== "All" && String(e.jobId) !== String(filterJob)) return false;
+    if (filterSearch) {
+      const q = filterSearch.toLowerCase();
+      const vendorMatch = (e.vendorName||"").toLowerCase().includes(q);
+      const notesMatch  = (e.notes||"").toLowerCase().includes(q);
+      if (!vendorMatch && !notesMatch) return false;
+    }
+    if (filterDateFrom && e.date < filterDateFrom) return false;
+    if (filterDateTo   && e.date > filterDateTo)   return false;
+    if (filterAmtMin   && Number(e.amount||0) < Number(filterAmtMin)) return false;
+    if (filterAmtMax   && Number(e.amount||0) > Number(filterAmtMax)) return false;
+    return true;
+  }).sort((a, b) => {
+    let av, bv;
+    if (sortField === "date")   { av = a.date||""; bv = b.date||""; }
+    else if (sortField === "amount") { av = Number(a.amount||0); bv = Number(b.amount||0); }
+    else if (sortField === "vendor") { av = (a.vendorName||"").toLowerCase(); bv = (b.vendorName||"").toLowerCase(); }
+    else if (sortField === "category") { av = a.category||""; bv = b.category||""; }
+    else { av = a.date||""; bv = b.date||""; }
+    if (av < bv) return sortDir === "asc" ? -1 : 1;
+    if (av > bv) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("desc"); }
+  };
+
+  const allSelected = filtered.length > 0 && filtered.every(e => selectedIds.has(e.id));
+  const toggleSelectAll = () => {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map(e => e.id)));
+  };
+
+  const exportToExcel = () => {
+    const toExport = filtered.filter(e => selectedIds.size === 0 || selectedIds.has(e.id));
+    const rows = [["Date","Vendor","Category","Payment Method","Amount","Job","Notes","Receipt"]];
+    toExport.forEach(e => {
+      const linkedJob = jobs.find(j => String(j.id) === String(e.jobId));
+      rows.push([
+        e.date||"",
+        e.vendorName||"",
+        e.category||"",
+        e.paymentMethod||"",
+        Number(e.amount||0),
+        linkedJob ? (linkedJob.clientName||"Unnamed") + " · " + (linkedJob.address||"") : "",
+        e.notes||"",
+        e.receiptUrl||"",
+      ]);
+    });
+    import("https://esm.sh/xlsx@0.18.5").then(XLSX => {
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [10,24,16,16,12,30,30,30].map(w => ({wch:w}));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Expenses");
+      XLSX.writeFile(wb, "expenses.xlsx");
+    });
+  };
+
+  const massDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} expense${selectedIds.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    selectedIds.forEach(id => deleteExpense(id));
+    setSelectedIds(new Set());
+  };
 
   // Totals by category and payment method
   const totalAmt = filtered.reduce((s,e) => s + Number(e.amount||0), 0);
@@ -8890,7 +8962,10 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
 
       {/* Filters */}
       <section style={S.section}>
-        <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:12}}>
+        {/* Row 1: search + dropdowns */}
+        <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+          <input value={filterSearch} onChange={e=>setFilterSearch(e.target.value)}
+            placeholder="Search vendor or notes…" style={{...S.input, flex:2, minWidth:160}}/>
           <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{...S.input, flex:1, minWidth:120}}>
             <option value="All">All Categories</option>
             {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
@@ -8905,34 +8980,88 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
             {jobs.map(j=><option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No addr"}</option>)}
           </select>
         </div>
+        {/* Row 2: date range + amount range + clear */}
+        <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:10, alignItems:"center"}}>
+          <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} style={{...S.input, flex:1, minWidth:130}}/>
+          <span style={{fontSize:12, color:C.textMuted, flexShrink:0}}>to</span>
+          <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)} style={{...S.input, flex:1, minWidth:130}}/>
+          <input type="number" value={filterAmtMin} onChange={e=>setFilterAmtMin(e.target.value)}
+            placeholder="Min $" style={{...S.input, flex:1, minWidth:80}}/>
+          <input type="number" value={filterAmtMax} onChange={e=>setFilterAmtMax(e.target.value)}
+            placeholder="Max $" style={{...S.input, flex:1, minWidth:80}}/>
+          {(filterSearch||filterCat!=="All"||filterMethod!=="All"||filterJob!=="All"||filterDateFrom||filterDateTo||filterAmtMin||filterAmtMax) && (
+            <button style={{...S.btnSmall, flexShrink:0}} onClick={() => {
+              setFilterSearch(""); setFilterCat("All"); setFilterMethod("All"); setFilterJob("All");
+              setFilterDateFrom(""); setFilterDateTo(""); setFilterAmtMin(""); setFilterAmtMax("");
+            }}>Clear filters</button>
+          )}
+        </div>
+        {/* Row 3: count + bulk actions */}
+        <div style={{display:"flex", gap:8, alignItems:"center", marginBottom:8, flexWrap:"wrap"}}>
+          <span style={{fontSize:13, color:C.textMuted}}>
+            {filtered.length} expense{filtered.length!==1?"s":""} · {formatCurrency(filtered.reduce((s,e)=>s+Number(e.amount||0),0))}
+          </span>
+          <div style={{flex:1}}/>
+          {selectedIds.size > 0 && canEdit && (
+            <button style={{...S.btnSmall, color:C.danger, borderColor:C.danger}} onClick={massDelete}>
+              <LucideIcons.Trash2 size={13} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
+              Delete {selectedIds.size} selected
+            </button>
+          )}
+          <button style={S.btnSmall} onClick={exportToExcel}>
+            <LucideIcons.Download size={13} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
+            {selectedIds.size > 0 ? `Export ${selectedIds.size} selected` : "Export to Excel"}
+          </button>
+        </div>
+        {/* Sort + select-all header */}
+        {filtered.length > 0 && (
+          <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
+            borderBottom:`2px solid ${C.border}`, fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em"}}>
+            {canEdit && <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{flexShrink:0}}/>}
+            {[["date","Date",1],["vendor","Vendor",2],["category","Category",1],["amount","Amount",1]].map(([field,label,flex]) => (
+              <div key={field} onClick={() => toggleSort(field)}
+                style={{cursor:"pointer", flex, minWidth:0, userSelect:"none",
+                  color: sortField===field ? C.accent : C.textMuted}}>
+                {label}{sortField===field ? (sortDir==="asc" ? " ↑" : " ↓") : ""}
+              </div>
+            ))}
+            <div style={{width:28}}/>
+          </div>
+        )}
 
         {/* Expense list */}
         {filtered.length === 0 ? (
-          <p style={{fontSize:13, color:C.textMuted}}>No expenses logged yet.</p>
+          <p style={{fontSize:13, color:C.textMuted, marginTop:12}}>No expenses match your filters.</p>
         ) : filtered.map(e => {
           const linkedJob = jobs.find(j=>String(j.id)===String(e.jobId));
+          const isSelected = selectedIds.has(e.id);
           return (
-            <div key={e.id} style={{padding:"12px 0", borderBottom:`1px solid ${C.border}`}}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
-                <div style={{flex:1}}>
-                  <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
-                    <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
-                    <span style={{fontSize:12, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
-                    <span style={{fontSize:12, color:C.textMuted}}>{e.paymentMethod}</span>
-                  </div>
-                  <div style={{fontSize:13, fontWeight:600, marginTop:3}}>{e.vendorName || "Unknown vendor"}</div>
-                  <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
-                    {e.date}
-                    {linkedJob && <span style={{marginLeft:8}}>📋 {linkedJob.clientName||"Unnamed"} · {linkedJob.address||""}</span>}
-                  </div>
-                  {e.notes && <div style={{fontSize:12, color:C.textMuted, marginTop:2, fontStyle:"italic"}}>{e.notes}</div>}
-                  {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:12, color:C.accent, marginTop:2, display:"block"}}>📎 View Receipt</a>}
+            <div key={e.id} style={{display:"flex", alignItems:"flex-start", gap:8, padding:"10px 0",
+              borderBottom:`1px solid ${C.border}`, background: isSelected ? "#fffbeb" : "transparent"}}>
+              {canEdit && (
+                <input type="checkbox" checked={isSelected} style={{marginTop:3, flexShrink:0}}
+                  onChange={() => setSelectedIds(prev => {
+                    const next = new Set(prev);
+                    next.has(e.id) ? next.delete(e.id) : next.add(e.id);
+                    return next;
+                  })}/>
+              )}
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+                  <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
+                  <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
+                  <span style={{fontSize:11, color:C.textMuted}}>{e.paymentMethod}</span>
+                  <span style={{fontSize:11, color:C.textMuted}}>{e.date}</span>
                 </div>
-                {canEdit && (
-                  <button style={{...S.btnSmall, color:C.danger, marginLeft:8, flexShrink:0}}
-                    onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
-                )}
+                <div style={{fontSize:13, fontWeight:600, marginTop:2}}>{e.vendorName || "Unknown vendor"}</div>
+                {linkedJob && <div style={{fontSize:12, color:C.textMuted, marginTop:1}}>📋 {linkedJob.clientName||"Unnamed"} · {linkedJob.address||""}</div>}
+                {e.notes && <div style={{fontSize:12, color:C.textMuted, marginTop:1, fontStyle:"italic"}}>{e.notes}</div>}
+                {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:12, color:C.accent, marginTop:1, display:"block"}}>📎 View Receipt</a>}
               </div>
+              {canEdit && (
+                <button style={{...S.btnSmall, color:C.danger, flexShrink:0}}
+                  onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
+              )}
             </div>
           );
         })}
@@ -12599,13 +12728,6 @@ function AdminApp() {
   const [addingAdmin,    setAddingAdmin]    = useState(false);
   const [addAdminError,  setAddAdminError]  = useState("");
   const [permissions,    setPermissions]    = useState(DEFAULT_PERMISSIONS);
-  const [showPermissions, setShowPermissions] = useState(false);
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [profileFirst,   setProfileFirst]   = useState("");
-  const [profileLast,    setProfileLast]    = useState("");
-  const [profileNewPw,   setProfileNewPw]   = useState("");
-  const [profileSaving,  setProfileSaving]  = useState(false);
-  const [profileMsg,     setProfileMsg]     = useState("");
   const sbH = (token) => ({
     "apikey": SUPABASE_KEY_ADMIN,
     "Authorization": "Bearer " + (token || SUPABASE_KEY_ADMIN),
@@ -12656,23 +12778,16 @@ function AdminApp() {
       });
       const admins = await r.json();
       if (!Array.isArray(admins)) return;
+      // Get profile info for each admin
       const ids = admins.map(a => a.user_id).join(",");
-      // Try profiles table first
       const pr = await fetch(SUPABASE_URL_ADMIN + "/rest/v1/profiles?id=in.(" + ids + ")&select=id,first_name,last_name,email", {
         headers: sbH(token)
       });
       const profiles = await pr.json();
-      const merged = await Promise.all(admins.map(async (a) => {
+      const merged = admins.map(a => {
         const p = Array.isArray(profiles) ? profiles.find(x => x.id === a.user_id) : null;
-        let name = p ? [p.first_name, p.last_name].filter(Boolean).join(" ") : "";
-        let email = p?.email || "";
-        // If no profile found, pull email directly from auth session email (for admin-created users)
-        if (!email && a.user_id === adminSession?.user?.id) {
-          email = adminSession.user.email || "";
-          if (!name) name = email.split("@")[0];
-        }
-        return { ...a, name, email };
-      }));
+        return { ...a, name: p ? [p.first_name, p.last_name].filter(Boolean).join(" ") : "", email: p?.email || "" };
+      });
       setAdminUsers(merged);
     } catch(e) { console.error("loadAdminUsers error:", e); }
   };
@@ -12794,7 +12909,7 @@ function AdminApp() {
       {/* Content */}
       <div style={{maxWidth:1200, margin:"0 auto", padding:24}}>
         <PlatformAdminView
-          setView={(v) => { if (v === "global-permissions") setShowPermissions(true); }}
+          setView={() => {}}
           accessToken={adminSession.access_token}
           permissions={permissions}
           setPermissions={setPermissions}
@@ -12806,139 +12921,32 @@ function AdminApp() {
           }}
         />
 
-        {/* Global Permissions Modal */}
-        {showPermissions && (
-          <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"40px 16px", overflowY:"auto"}}>
-            <div style={{background:"#fff", borderRadius:12, width:"100%", maxWidth:860, boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"20px 24px", borderBottom:"1px solid #f0f0f0"}}>
-                <h2 style={{margin:0, fontSize:18, fontWeight:700}}>Global Permissions</h2>
-                <button onClick={() => setShowPermissions(false)} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:"#888"}}>×</button>
-              </div>
-              <div style={{padding:24}}>
-                <PermissionsView
-                  permissions={permissions}
-                  setPermissions={setPermissions}
-                  syncPermissions={async (p) => {
-                    setPermissions(p);
-                    try {
-                      const existing = await fetch(SUPABASE_URL_ADMIN + "/rest/v1/global_permissions?select=id&limit=1", { headers: sbH(adminSession.access_token) });
-                      const rows = await existing.json();
-                      const method = Array.isArray(rows) && rows.length > 0 ? "PATCH" : "POST";
-                      const url = method === "PATCH"
-                        ? SUPABASE_URL_ADMIN + "/rest/v1/global_permissions?id=eq." + rows[0].id
-                        : SUPABASE_URL_ADMIN + "/rest/v1/global_permissions";
-                      await fetch(url, {
-                        method,
-                        headers: { ...sbH(adminSession.access_token), "Prefer": "return=representation" },
-                        body: JSON.stringify({ data: p }),
-                      });
-                    } catch(e) { console.error("syncPermissions error:", e); }
-                  }}
-                  setView={() => setShowPermissions(false)}
-                  readOnly={false}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* My Profile */}
-        <section style={{background:"#fff", borderRadius:12, padding:24, marginTop:20, boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
-            <div>
-              <h2 style={{fontSize:18, fontWeight:700, margin:0}}>My Profile</h2>
-              <p style={{fontSize:13, color:"#888", margin:"4px 0 0"}}>Update your admin account name or password.</p>
-            </div>
-            <button onClick={() => { setEditingProfile(pr => !pr); setProfileMsg(""); }}
-              style={{fontSize:13, padding:"6px 14px", borderRadius:8, border:"1px solid #ddd", background:"#f9f9f9", cursor:"pointer"}}>
-              {editingProfile ? "Cancel" : "Edit"}
-            </button>
-          </div>
-          {!editingProfile && (
-            <div style={{fontSize:14, color:"#444"}}>
-              <div style={{fontWeight:600}}>{adminUsers.find(au => au.user_id === adminSession?.user?.id)?.name || adminSession?.user?.email}</div>
-              <div style={{fontSize:12, color:"#888", marginTop:2}}>{adminSession?.user?.email}</div>
-            </div>
-          )}
-          {editingProfile && (
-            <div style={{display:"flex", flexDirection:"column", gap:10, maxWidth:400}}>
-              <div style={{display:"flex", gap:8}}>
-                <label style={{flex:1, fontSize:12, fontWeight:600}}>First Name
-                  <input value={profileFirst} onChange={e => setProfileFirst(e.target.value)}
-                    placeholder="First" style={{display:"block", width:"100%", marginTop:4, padding:"8px 10px", borderRadius:8, border:"1px solid #ddd", fontSize:13, boxSizing:"border-box"}}/>
-                </label>
-                <label style={{flex:1, fontSize:12, fontWeight:600}}>Last Name
-                  <input value={profileLast} onChange={e => setProfileLast(e.target.value)}
-                    placeholder="Last" style={{display:"block", width:"100%", marginTop:4, padding:"8px 10px", borderRadius:8, border:"1px solid #ddd", fontSize:13, boxSizing:"border-box"}}/>
-                </label>
-              </div>
-              <label style={{fontSize:12, fontWeight:600}}>New Password (leave blank to keep current)
-                <input type="password" value={profileNewPw} onChange={e => setProfileNewPw(e.target.value)}
-                  placeholder="••••••••" style={{display:"block", width:"100%", marginTop:4, padding:"8px 10px", borderRadius:8, border:"1px solid #ddd", fontSize:13, boxSizing:"border-box"}}/>
-              </label>
-              {profileMsg && <div style={{fontSize:12, color: profileMsg.startsWith("Error") ? "#ef4444" : "#16a34a"}}>{profileMsg}</div>}
-              <button disabled={profileSaving} onClick={async () => {
-                setProfileSaving(true); setProfileMsg("");
-                try {
-                  const patch = {};
-                  if (profileFirst.trim() || profileLast.trim()) patch.data = { full_name: [profileFirst.trim(), profileLast.trim()].filter(Boolean).join(" ") };
-                  if (profileNewPw) patch.password = profileNewPw;
-                  if (Object.keys(patch).length === 0) { setProfileMsg("Nothing to update."); setProfileSaving(false); return; }
-                  const res = await fetch(SUPABASE_URL_ADMIN + "/auth/v1/user", {
-                    method: "PUT", headers: sbH(adminSession.access_token), body: JSON.stringify(patch),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) { setProfileMsg("Error: " + (data.msg || data.error_description || "Update failed")); }
-                  else {
-                    if (profileFirst.trim() || profileLast.trim()) {
-                      await fetch(SUPABASE_URL_ADMIN + "/rest/v1/profiles?id=eq." + adminSession.user.id, {
-                        method: "PATCH", headers: sbH(adminSession.access_token),
-                        body: JSON.stringify({ first_name: profileFirst.trim(), last_name: profileLast.trim() }),
-                      });
-                    }
-                    setProfileMsg("Saved.");
-                    setProfileFirst(""); setProfileLast(""); setProfileNewPw("");
-                    setEditingProfile(false);
-                    await loadAdminUsers(adminSession.access_token);
-                  }
-                } catch(e) { setProfileMsg("Error: " + e.message); }
-                setProfileSaving(false);
-              }} style={{padding:"8px 20px", borderRadius:8, border:"none", cursor:"pointer", fontSize:13, fontWeight:600,
-                background:"#f0ab2e", color:"#000", opacity: profileSaving ? 0.6 : 1, alignSelf:"flex-start"}}>
-                {profileSaving ? "Saving..." : "Save Changes"}
-              </button>
-            </div>
-          )}
-        </section>
-
-        {/* Platform Admins */}
+        {/* Admin Users Management */}
         <section style={{background:"#fff", borderRadius:12, padding:24, marginTop:20, boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
           <h2 style={{fontSize:18, fontWeight:700, margin:"0 0 4px"}}>Platform Admins</h2>
           <p style={{fontSize:13, color:"#888", margin:"0 0 16px"}}>Manage who has access to this dashboard.</p>
-          <div style={{display:"flex", flexDirection:"column", gap:0, border:"1px solid #f0f0f0", borderRadius:8, overflow:"hidden"}}>
-            {adminUsers.map((au, idx) => (
-              <div key={au.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between",
-                padding:"12px 16px", borderBottom: idx < adminUsers.length-1 ? "1px solid #f0f0f0" : "none",
-                background: idx % 2 === 0 ? "#fff" : "#fafafa"}}>
-                <div>
-                  <div style={{fontWeight:600, fontSize:14}}>{au.name || au.email || "Admin"}</div>
-                  <div style={{fontSize:12, color:"#888", marginTop:2}}>{au.email}{au.is_super ? " · Super Admin" : ""}</div>
-                </div>
-                <div style={{display:"flex", alignItems:"center", gap:8}}>
-                  {au.is_super && <span style={{fontSize:11, color:"#f0ab2e", fontWeight:700, padding:"2px 8px", border:"1px solid #f0ab2e", borderRadius:20}}>SUPER</span>}
-                  {isSuperAdmin && !au.is_super && (
-                    <button onClick={() => removeAdmin(au.user_id)}
-                      style={{fontSize:12, color:"#ef4444", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:6, padding:"4px 10px", cursor:"pointer"}}>
-                      Remove
-                    </button>
-                  )}
-                </div>
+
+          {/* Admin list */}
+          {adminUsers.map(a => (
+            <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:"1px solid #f0f0f0"}}>
+              <div>
+                <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || a.user_id.slice(0,8)+"..."}</div>
+                <div style={{fontSize:12, color:"#888"}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
               </div>
-            ))}
-          </div>
+              {isSuperAdmin && !a.is_super && (
+                <button onClick={() => removeAdmin(a.user_id)}
+                  style={{fontSize:12, color:"#ef4444", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:6, padding:"4px 10px", cursor:"pointer"}}>
+                  Remove
+                </button>
+              )}
+              {a.is_super && <span style={{fontSize:11, color:"#f0ab2e", fontWeight:700}}>SUPER</span>}
+            </div>
+          ))}
+
+          {/* Add admin */}
           {isSuperAdmin && (
-            <div style={{marginTop:20}}>
-              <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>Add Admin</div>
+            <div style={{marginTop:16}}>
+              <div style={{fontSize:13, fontWeight:600, marginBottom:8}}>Add Admin</div>
               <p style={{fontSize:12, color:"#888", marginBottom:10}}>The user must already have a BlacktopIQ account.</p>
               <div style={{display:"flex", gap:8}}>
                 <input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)}
