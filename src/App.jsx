@@ -9033,30 +9033,38 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           const linkedJob = jobs.find(j=>String(j.id)===String(e.jobId));
           const isSelected = selectedIds.has(e.id);
           return (
-            <div key={e.id} style={{display:"flex", alignItems:"flex-start", gap:8, padding:"10px 0",
+            <div key={e.id} style={{display:"flex", alignItems:"center", gap:8, padding:"10px 4px",
               borderBottom:`1px solid ${C.border}`, background: isSelected ? "#fffbeb" : "transparent"}}>
               {canEdit && (
-                <input type="checkbox" checked={isSelected} style={{marginTop:3, flexShrink:0}}
+                <input type="checkbox" checked={isSelected} style={{flexShrink:0}}
                   onChange={() => setSelectedIds(prev => {
                     const next = new Set(prev);
                     next.has(e.id) ? next.delete(e.id) : next.add(e.id);
                     return next;
                   })}/>
               )}
+              {/* Date col */}
               <div style={{flex:1, minWidth:0}}>
-                <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
-                  <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
-                  <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
-                  <span style={{fontSize:11, color:C.textMuted}}>{e.paymentMethod}</span>
-                  <span style={{fontSize:11, color:C.textMuted}}>{e.date}</span>
-                </div>
-                <div style={{fontSize:13, fontWeight:600, marginTop:2}}>{e.vendorName || "Unknown vendor"}</div>
-                {linkedJob && <div style={{fontSize:12, color:C.textMuted, marginTop:1}}>📋 {linkedJob.clientName||"Unnamed"} · {linkedJob.address||""}</div>}
-                {e.notes && <div style={{fontSize:12, color:C.textMuted, marginTop:1, fontStyle:"italic"}}>{e.notes}</div>}
-                {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:12, color:C.accent, marginTop:1, display:"block"}}>📎 View Receipt</a>}
+                <div style={{fontSize:12, color:C.textMuted}}>{e.date}</div>
+                {e.paymentMethod && <div style={{fontSize:11, color:C.textMuted}}>{e.paymentMethod}</div>}
+              </div>
+              {/* Vendor col */}
+              <div style={{flex:2, minWidth:0}}>
+                <div style={{fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{e.vendorName || "Unknown vendor"}</div>
+                {e.notes && <div style={{fontSize:11, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontStyle:"italic"}}>{e.notes}</div>}
+                {linkedJob && <div style={{fontSize:11, color:C.textMuted}}>📋 {linkedJob.clientName||"Unnamed"}</div>}
+                {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:11, color:C.accent}}>📎 Receipt</a>}
+              </div>
+              {/* Category col */}
+              <div style={{flex:1, minWidth:0}}>
+                <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"2px 7px"}}>{e.category}</span>
+              </div>
+              {/* Amount col */}
+              <div style={{flex:1, minWidth:0, textAlign:"right"}}>
+                <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
               </div>
               {canEdit && (
-                <button style={{...S.btnSmall, color:C.danger, flexShrink:0}}
+                <button style={{...S.btnSmall, color:C.danger, flexShrink:0, width:28}}
                   onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
               )}
             </div>
