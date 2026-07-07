@@ -5748,7 +5748,7 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhea
           {/* Status filter */}
           <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:8, alignItems:"center"}}>
             <span style={{fontSize:12, color:C.textMuted, fontWeight:600, marginRight:4}}>Statuses:</span>
-            {["estimate","draft","sent","invoiced","paid","completed","scheduled","lost"].map(s => {
+            {["estimate","draft","sent","scheduled","pending_review","completed","paid","lost"].map(s => {
               const active = ebitdaStatuses.includes(s);
               return (
                 <button key={s} onClick={() => setEbitdaStatuses(prev =>
@@ -6014,7 +6014,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const [filterStatuses, setFilterStatuses] = useState([]); // empty = all statuses
   const [pdfLoading,   setPdfLoading]   = useState(false);
   const [ebitdaRange,   setEbitdaRange]   = useState("ytd"); // "ytd" | "custom"
-  const [ebitdaStatuses, setEbitdaStatuses] = useState(["paid","completed","sent","invoiced"]);
+  const [ebitdaStatuses, setEbitdaStatuses] = useState(["paid","completed","sent","scheduled"]);
   const [ebitdaFrom,    setEbitdaFrom]    = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10));
   const [ebitdaTo,      setEbitdaTo]      = useState(new Date().toISOString().slice(0,10));
 
@@ -10005,6 +10005,9 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
           )}
           {!job.assignedTo && ["estimate","draft"].includes(job.status) && (
             <div style={{fontSize:9, fontWeight:700, color:"#6b7280", background:"#f3f4f6", borderRadius:4, padding:"1px 5px", flexShrink:0}}>!</div>
+          )}
+          {job.invoiceSentDate && job.status === "completed" && (
+            <div style={{fontSize:9, fontWeight:700, color:"#0e7490", background:"#e0f2fe", borderRadius:4, padding:"1px 5px", flexShrink:0}}>INV</div>
           )}
         </div>
         <div style={{fontSize:11, color:C.textMuted, textTransform:"capitalize", marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
