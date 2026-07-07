@@ -8290,7 +8290,6 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const parseSpreadsheet = async (file) => {
     setImportError("");
     try {
-      const XLSX = await import("https://esm.sh/xlsx@0.18.5");
       const ab = await file.arrayBuffer();
       const wb = XLSX.read(ab, { type:"array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -8556,13 +8555,11 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         e.receiptUrl||"",
       ]);
     });
-    import("https://esm.sh/xlsx@0.18.5").then(XLSX => {
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws["!cols"] = [10,24,16,16,12,30,30,30].map(w => ({wch:w}));
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Expenses");
-      XLSX.writeFile(wb, "expenses.xlsx");
-    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = [10,24,16,16,12,30,30,30].map(w => ({wch:w}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Expenses");
+    XLSX.writeFile(wb, "expenses.xlsx");
   };
 
   const massDelete = () => {
