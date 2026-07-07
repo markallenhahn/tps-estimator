@@ -9040,11 +9040,11 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
             {[["date","Date",1],["vendor","Vendor",2],["category","Category",1],["amount","Amount",1]].map(([field,label,flex]) => (
               <div key={field} onClick={() => toggleSort(field)}
                 style={{cursor:"pointer", flex, minWidth:0, userSelect:"none",
+                  textAlign: field==="amount" ? "right" : "left",
                   color: sortField===field ? C.accent : C.textMuted}}>
                 {label}{sortField===field ? (sortDir==="asc" ? " ↑" : " ↓") : ""}
               </div>
             ))}
-            <div style={{width:28}}/>
           </div>
         )}
 
