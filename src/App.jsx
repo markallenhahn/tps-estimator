@@ -9037,14 +9037,19 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
             borderBottom:`2px solid ${C.border}`, fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em"}}>
             {canEdit && <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{flexShrink:0}}/>}
-            {[["date","Date",1],["vendor","Vendor",2],["category","Category",1],["amount","Amount",1]].map(([field,label,flex]) => (
+            {[["date","Date",1],["vendor","Vendor",2],["category","Category",1]].map(([field,label,flex]) => (
               <div key={field} onClick={() => toggleSort(field)}
                 style={{cursor:"pointer", flex, minWidth:0, userSelect:"none",
-                  textAlign: field==="amount" ? "right" : "left",
                   color: sortField===field ? C.accent : C.textMuted}}>
                 {label}{sortField===field ? (sortDir==="asc" ? " ↑" : " ↓") : ""}
               </div>
             ))}
+            <div onClick={() => toggleSort("amount")}
+              style={{cursor:"pointer", flex:1, minWidth:0, userSelect:"none", display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8,
+                color: sortField==="amount" ? C.accent : C.textMuted}}>
+              {"Amount"}{sortField==="amount" ? (sortDir==="asc" ? " ↑" : " ↓") : ""}
+              {canEdit && <div style={{width:24, flexShrink:0}}/>}
+            </div>
           </div>
         )}
 
