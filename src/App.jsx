@@ -8392,8 +8392,9 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     setImporting(true);
     let added = 0, skipped = 0;
     const newVendors = {};
+    const baseId = Date.now();
 
-    importRows.forEach(row => {
+    importRows.forEach((row, idx) => {
       const appCat = importMapping[row.sheetCat] || "Other";
       const amount = row.amount;
       const date   = row.date;
@@ -8408,10 +8409,11 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         } else if (newVendors[row.payee.toLowerCase()]) {
           vendorId = newVendors[row.payee.toLowerCase()];
         } else {
-          const nv = { id: Date.now() + Math.random(), name: row.payee };
+          const nvId = baseId * 1000 + idx * 2;
+          const nv = { id: nvId, name: row.payee };
           addVendor(nv);
-          newVendors[row.payee.toLowerCase()] = nv.id;
-          vendorId = nv.id;
+          newVendors[row.payee.toLowerCase()] = nvId;
+          vendorId = nvId;
         }
       }
 
@@ -8429,7 +8431,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         ? (payMethodMap[row.paidBy] || "Check")
         : "Check";
       addExpense({
-        id: Date.now() + Math.random(),
+        id: baseId * 1000 + idx * 2 + 1,
         date, category: appCat, amount, vendorId, vendorName: row.payee,
         notes, paymentMethod: payMethod, jobId: "", receiptUrl: "",
       });
@@ -9079,14 +9081,14 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
               <div style={{flex:1, minWidth:0}}>
                 <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"2px 7px"}}>{e.category}</span>
               </div>
-              {/* Amount col */}
-              <div style={{flex:1, minWidth:0, textAlign:"right"}}>
+              {/* Amount + delete col */}
+              <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8}}>
                 <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
+                {canEdit && (
+                  <button style={{...S.btnSmall, color:C.danger, flexShrink:0, width:24, padding:0}}
+                    onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
+                )}
               </div>
-              {canEdit && (
-                <button style={{...S.btnSmall, color:C.danger, flexShrink:0, width:28}}
-                  onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
-              )}
             </div>
           );
         })}
