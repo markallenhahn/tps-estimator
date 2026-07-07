@@ -5748,7 +5748,7 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhea
           {/* Status filter */}
           <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:8, alignItems:"center"}}>
             <span style={{fontSize:12, color:C.textMuted, fontWeight:600, marginRight:4}}>Statuses:</span>
-            {["estimate","draft","sent","scheduled","pending_review","completed","paid","lost"].map(s => {
+            {["estimate","draft","sent","scheduled","completed","paid","lost"].map(s => {
               const active = ebitdaStatuses.includes(s);
               return (
                 <button key={s} onClick={() => setEbitdaStatuses(prev =>
