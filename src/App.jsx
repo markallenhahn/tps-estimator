@@ -7050,7 +7050,92 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
 // ─── Permissions View (read-only for owner) ─────────────────────────────────────────────
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
 // ─── Owner Hub — company owner's settings (no platform-level features) ─────
-function OwnerHubView({ setView, iconStyle, syncIconStyle }) {
+function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
+  const defaults = { laborPct:16, fuelPct:5, cogsPct:25, overheadPct:15, ebitdaTargetPct:20, ebitdaTargetDollars:"" };
+  const rs = { ...defaults, ...reportSettings };
+  const [draft, setDraft] = useState({...rs});
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
+  const setD = (k, v) => setDraft(p => ({...p, [k]: v}));
+
+  const save = async () => {
+    setSaving(true);
+    await syncReportSettings(draft);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <section style={S.section}>
+      <h2 style={S.h2}>Report Settings</h2>
+      <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:16}}>
+        Set your estimated cost percentages and EBITDA targets. These are used in the Profitability and EBITDA reports when actual data isn't available.
+      </p>
+
+      <div style={{display:"flex", flexDirection:"column", gap:16}}>
+        {/* Estimated cost %s */}
+        <div>
+          <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10}}>Estimated Cost Percentages</div>
+          <div style={{display:"flex", gap:12, flexWrap:"wrap"}}>
+            {[
+              ["laborPct",    "Labor %"],
+              ["cogsPct",     "Materials/COGS %"],
+              ["fuelPct",     "Fuel %"],
+              ["overheadPct", "Overhead %"],
+            ].map(([key, label]) => (
+              <label key={key} style={{fontSize:12, fontWeight:600, flex:1, minWidth:120}}>
+                {label}
+                <div style={{display:"flex", alignItems:"center", marginTop:4}}>
+                  <input type="number" min="0" max="100" step="0.5"
+                    value={draft[key]}
+                    onChange={e => setD(key, Number(e.target.value))}
+                    style={{...S.input, width:"100%"}}/>
+                  <span style={{marginLeft:6, fontSize:13, color:C.textMuted}}>%</span>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* EBITDA targets */}
+        <div>
+          <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10}}>EBITDA Target</div>
+          <div style={{display:"flex", gap:12, flexWrap:"wrap"}}>
+            <label style={{fontSize:12, fontWeight:600, flex:1, minWidth:120}}>
+              Target %
+              <div style={{display:"flex", alignItems:"center", marginTop:4}}>
+                <input type="number" min="0" max="100" step="0.5"
+                  value={draft.ebitdaTargetPct}
+                  onChange={e => setD("ebitdaTargetPct", Number(e.target.value))}
+                  style={{...S.input, width:"100%"}}/>
+                <span style={{marginLeft:6, fontSize:13, color:C.textMuted}}>%</span>
+              </div>
+            </label>
+            <label style={{fontSize:12, fontWeight:600, flex:1, minWidth:120}}>
+              Target $ (annual)
+              <div style={{display:"flex", alignItems:"center", marginTop:4}}>
+                <span style={{marginRight:6, fontSize:13, color:C.textMuted}}>$</span>
+                <input type="number" min="0" step="1000"
+                  value={draft.ebitdaTargetDollars}
+                  onChange={e => setD("ebitdaTargetDollars", e.target.value)}
+                  placeholder="e.g. 150000"
+                  style={{...S.input, width:"100%"}}/>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <button onClick={save} disabled={saving}
+          style={{...S.btnPrimary, alignSelf:"flex-start", opacity: saving ? 0.6 : 1}}>
+          {saving ? "Saving…" : saved ? "✓ Saved" : "Save Settings"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, syncReportSettings }) {
   const cards = [
     { key:"company-settings", icon:"🏢", lucide:"Building2",    title:"Company Settings",      desc:"Update your company name, contact info, logo, and legal terms." },
     { key:"permissions",      icon:"🔐", lucide:"Lock",         title:"Permissions",           desc:"View what each role can see. Contact BlacktopIQ support to change." },
@@ -7093,6 +7178,9 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle }) {
           </button>
         </div>
       </section>
+
+      {/* Report Settings card */}
+      <ReportSettingsCard reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>
 
       {cards.map(c => (
         <button key={c.key} onClick={() => openCard(c.key)}
@@ -13036,6 +13124,10 @@ function App() {
     street: "", city: "", state: "", zip: "", website: "", googleReviewUrl: "",
   });
   const [iconStyle,     setIconStyle]    = useState("emoji"); // "emoji" | "lucide" — global, admin-set
+  const [reportSettings, setReportSettings] = useState({
+    laborPct: 16, fuelPct: 5, cogsPct: 25, overheadPct: 15,
+    ebitdaTargetPct: 20, ebitdaTargetDollars: "",
+  });
   const [teamUsers,     setTeamUsers]    = useState([]);
   const [crews,         setCrews]        = useState([]);
   const [materials,         setMaterials]         = useState([]);
@@ -13410,7 +13502,10 @@ function App() {
 
         const sr = await tFetch("appsettings?select=data&order=id.desc&limit=1");
         const sd = await sr.json();
-        if (Array.isArray(sd) && sd.length > 0 && sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
+        if (Array.isArray(sd) && sd.length > 0) {
+          if (sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
+          if (sd[0].data?.reportSettings) setReportSettings(prev => ({...prev, ...sd[0].data.reportSettings}));
+        }
 
         const mr = await tFetch("materials?select=id,data&order=id.desc");
         const md = await mr.json();
@@ -13545,6 +13640,17 @@ function App() {
         body: JSON.stringify({ data: { iconStyle: style } }),
       });
     } catch(e) { console.error("syncIconStyle error:", e); }
+  };
+
+  const syncReportSettings = async (settings) => {
+    setReportSettings(settings);
+    try {
+      await tFetch("appsettings?on_conflict=tenant_id", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ data: { reportSettings: settings } }),
+      });
+    } catch(e) { console.error("syncReportSettings error:", e); }
   };
 
   // Assign a newly created/edited job to its nearest existing zone centroid
@@ -14087,7 +14193,7 @@ function App() {
         {view==="help" && getAccessLevel(permissions,"help",userRoles)!=="hidden" && <HelpView tFetch={tFetch} currentTenantId={currentTenantId} session={session} userRole={userRole} accessToken={session?.access_token} currentUserName={currentUserName} currentTenant={currentTenant}/>}
         {view==="request-form"  && userRole==="owner" && <EstimateRequestLinkView setView={navigateTo} currentTenantId={currentTenantId}/>}
         {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data}/>}
-        {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
+        {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle} reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>}
         {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token} permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions}/>}
         {view==="global-permissions" && isPlatformAdmin && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={false}/>}
         {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
