@@ -7750,7 +7750,7 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
           <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
             Used when actual expense data isn't available. EBITDA % is calculated automatically.
           </p>
-          <div style={{display:"flex", gap:12, flexWrap:"wrap", marginBottom:10}}>
+          <div style={{display:"flex", gap:12, flexWrap:"wrap", marginBottom:10, alignItems:"flex-end"}}>
             {[
               ["cogsPct",     "COGS %",     "#ef4444"],
               ["laborPct",    "Labor %",    "#f59e0b"],
@@ -7761,7 +7761,11 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
                 <div style={{display:"flex", alignItems:"center", gap:4}}>
                   <input type="number" min="0" max="100" step="0.5"
                     value={draft[key]}
-                    onChange={e => setD(key, Number(e.target.value))}
+                    onChange={e => {
+                      const val = Number(e.target.value);
+                      setD(key, val);
+                      setD("ebitdaTargetPct", Math.max(0, 100 - (key==="cogsPct"?val:draft.cogsPct||0) - (key==="laborPct"?val:draft.laborPct||0) - (key==="overheadPct"?val:draft.overheadPct||0)));
+                    }}
                     style={{...S.input, flex:1}}/>
                   <span style={{fontSize:13, color:C.textMuted}}>%</span>
                 </div>
@@ -7770,7 +7774,7 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
             <div style={{flex:1, minWidth:100}}>
               <div style={{fontSize:12, fontWeight:600, marginBottom:4, color:"#10b981"}}>EBITDA % (calc)</div>
               <div style={{display:"flex", alignItems:"center", gap:4, height:42,
-                padding:"0 10px", background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8}}>
+                padding:"0 10px", background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, boxSizing:"border-box"}}>
                 <span style={{fontSize:15, fontWeight:800, color: calcEbitdaPct >= 0 ? "#10b981" : "#ef4444"}}>{calcEbitdaPct.toFixed(1)}%</span>
               </div>
             </div>
