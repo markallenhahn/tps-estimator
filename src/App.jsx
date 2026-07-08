@@ -5249,6 +5249,27 @@ function calcJobFinancials(job, rates) {
   const ASPHALT_PER_TON        = 80;
   const STONE_PER_TON          = 20;
   const FUEL_PCT               = 0.05;
+
+  // Calculate actual labor cost from labor tab entries linked to this job
+  const jobLaborEntries = laborEntries.filter(e => String(e.jobId) === String(currentJob.id));
+  const laborFromEntries = jobLaborEntries.reduce((s, e) => {
+    // Find rate: check teamUsers then offAppWorkers rateHistory
+    const userId = e.userId;
+    const entryDate = e.date || "";
+    let rate = 0;
+    if (userId) {
+      const user = teamUsers.find(u => u.id === userId);
+      const hist = (user?.rateHistory || []).filter(r => r.startDate <= entryDate).sort((a,b) => b.startDate.localeCompare(a.startDate));
+      rate = hist[0]?.rate || 0;
+    }
+    if (!rate) {
+      const oaw = offAppWorkers.find(w => w.name === e.name);
+      const hist = (oaw?.rateHistory || []).filter(r => r.startDate <= entryDate).sort((a,b) => b.startDate.localeCompare(a.startDate));
+      rate = hist[0]?.rate || 0;
+    }
+    return s + (Number(e.hours||0) * rate);
+  }, 0);
+  const hasLaborEntries = jobLaborEntries.length > 0 && laborFromEntries > 0;
   const TARGET_MARGIN          = 0.52;
 
   const areas = job.areas || [];
@@ -6914,10 +6935,16 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     // Labor: actual hours × rate (job-linked entries)
     const jobLaborEntries = laborEntries.filter(e => String(e.jobId) === String(j.id));
     const jobLabor = jobLaborEntries.reduce((s,e) => {
-      const rate = getRateForUser(e.userId, e.date || jobDate);
+      let rate = getRateForUser(e.userId, e.date || jobDate);
+      // Also check offAppWorkers by name if no userId rate found
+      if (!rate && e.name) {
+        const oaw = (offAppWorkers||[]).find(w => w.name === e.name);
+        const hist = (oaw?.rateHistory||[]).filter(r => r.startDate <= (e.date||jobDate)).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+        rate = hist[0]?.rate || 0;
+      }
       return s + (Number(e.hours||0) * (rate||0));
     }, 0);
-    const laborIsEstimated = jobLabor === 0;
+    const laborIsEstimated = jobLaborEntries.length === 0;
 
     // Overhead: allocate by revenue %
     const revenueShare = periodRevenue > 0 ? revenue / periodRevenue : 0;
@@ -7310,7 +7337,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 }
 
 // ─── Costs View ───────────────────────────────────────────────────────────────
-function CostsView({ currentJob, updateJob, rates, expenses }) {
+function CostsView({ currentJob, updateJob, rates, expenses, laborEntries=[], teamUsers=[], offAppWorkers=[] }) {
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const SEALCOAT_PRICE_PER_GAL = 4.33;
@@ -7319,6 +7346,27 @@ function CostsView({ currentJob, updateJob, rates, expenses }) {
   const ASPHALT_PER_TON        = 80;
   const STONE_PER_TON          = 20;
   const FUEL_PCT               = 0.05;
+
+  // Calculate actual labor cost from labor tab entries linked to this job
+  const jobLaborEntries = laborEntries.filter(e => String(e.jobId) === String(currentJob.id));
+  const laborFromEntries = jobLaborEntries.reduce((s, e) => {
+    // Find rate: check teamUsers then offAppWorkers rateHistory
+    const userId = e.userId;
+    const entryDate = e.date || "";
+    let rate = 0;
+    if (userId) {
+      const user = teamUsers.find(u => u.id === userId);
+      const hist = (user?.rateHistory || []).filter(r => r.startDate <= entryDate).sort((a,b) => b.startDate.localeCompare(a.startDate));
+      rate = hist[0]?.rate || 0;
+    }
+    if (!rate) {
+      const oaw = offAppWorkers.find(w => w.name === e.name);
+      const hist = (oaw?.rateHistory || []).filter(r => r.startDate <= entryDate).sort((a,b) => b.startDate.localeCompare(a.startDate));
+      rate = hist[0]?.rate || 0;
+    }
+    return s + (Number(e.hours||0) * rate);
+  }, 0);
+  const hasLaborEntries = jobLaborEntries.length > 0 && laborFromEntries > 0;
   const TARGET_MARGIN          = 0.52;
 
   const sealcoatSqFt   = (currentJob.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
@@ -7448,7 +7496,24 @@ function CostsView({ currentJob, updateJob, rates, expenses }) {
           `${patchTons.toFixed(2)} tons × $${ASPHALT_PER_TON}/ton`
         )}
         {costRow("Fuel (5%)", estFuel, "fuel", `${formatCurrency(revenue)} × 5%`)}
-        {costRow("Labor (16%)", estLabor, "labor", `${formatCurrency(revenue)} × 16%`)}
+        {hasLaborEntries ? (
+          <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
+              <div>
+                <div style={{fontSize:13, color:C.text, fontWeight:600}}>Labor</div>
+                <div style={{fontSize:11, color:C.textMuted, marginTop:1}}>
+                  {jobLaborEntries.length} entr{jobLaborEntries.length===1?"y":"ies"} from Labor tab · {jobLaborEntries.reduce((s,e)=>s+Number(e.hours||0),0).toFixed(1)} hrs
+                </div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:11, color:C.textMuted}}>Est: {formatCurrency(estLabor)}</div>
+                <div style={{fontSize:12, fontWeight:700, color: laborFromEntries > estLabor ? C.danger : C.green}}>
+                  Act: {formatCurrency(laborFromEntries)} ({laborFromEntries > estLabor ? "+" : ""}{formatCurrency(laborFromEntries - estLabor)})
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : costRow("Labor (16%)", estLabor, "labor", `${formatCurrency(revenue)} × 16%`)}
 
         {/* Stone */}
         <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
@@ -15364,7 +15429,7 @@ function App() {
         }
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} laborEntries={laborEntries} teamUsers={teamUsers} offAppWorkers={offAppWorkers}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
