@@ -6243,7 +6243,7 @@ function getFifoUnitCost(materialType, dateStr, materials) {
 }
 
 // ─── EBITDA Report ────────────────────────────────────────────────────────────
-function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCOGS=0, periodExpLabor=0, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
+function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCOGS=0, periodExpLabor=0, cogsBySubcat={}, overheadBySubcat={}, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
   const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
   const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
   const isDesktopLayout = useIsDesktop();
@@ -6374,6 +6374,28 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
 
         {periodRevenue === 0 && (
           <div style={{fontSize:12, color:C.danger, marginBottom:12}}>No revenue in period — overhead not allocated per job.</div>
+        )}
+
+        {/* Subcategory breakdowns */}
+        {(Object.keys(cogsBySubcat).length > 0 || Object.keys(overheadBySubcat).length > 0) && (
+          <div style={{display:"flex", gap:12, flexWrap:"wrap", marginBottom:16}}>
+            {[["COGS Breakdown", cogsBySubcat, "#ef4444"], ["Overhead Breakdown", overheadBySubcat, "#8b5cf6"]].map(([title, breakdown, color]) => (
+              Object.keys(breakdown).length > 0 && (
+                <div key={title} style={{flex:1, minWidth:220, background:C.surface2, borderRadius:8, padding:"12px 14px", border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:11, fontWeight:700, color, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10}}>{title}</div>
+                  {Object.entries(breakdown).sort((a,b) => b[1]-a[1]).map(([subcat, amt]) => (
+                    <div key={subcat} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0", borderBottom:`1px solid ${C.border}`, fontSize:12}}>
+                      <span style={{color:C.text}}>{subcat}</span>
+                      <div style={{textAlign:"right"}}>
+                        <span style={{fontWeight:600}}>{fmtMoney(amt)}</span>
+                        {periodRevenue > 0 && <span style={{fontSize:10, color:C.textMuted, marginLeft:6}}>{(amt/periodRevenue*100).toFixed(1)}%</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ))}
+          </div>
         )}
       </section>
 
@@ -6635,6 +6657,19 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const periodOverhead   = periodExpByBucket("overhead");
   const periodExpCOGS    = periodExpByBucket("cogs");
   const periodExpLabor   = periodExpByBucket("labor");
+
+  // Subcategory breakdown for period
+  const periodSubcatBreakdown = (bucket) => {
+    const bucketExps = expenses.filter(e => catBuckets[e.category] === bucket && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to);
+    const breakdown = {};
+    bucketExps.forEach(e => {
+      const key = e.subcategory || e.category || "Other";
+      breakdown[key] = (breakdown[key] || 0) + Number(e.amount||0);
+    });
+    return breakdown;
+  };
+  const cogsBySubcat     = periodSubcatBreakdown("cogs");
+  const overheadBySubcat = periodSubcatBreakdown("overhead");
 
   // Also get full year overhead for context
   const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10);
@@ -6965,6 +7000,8 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           periodOverhead={periodOverhead}
           periodExpCOGS={periodExpCOGS}
           periodExpLabor={periodExpLabor}
+          cogsBySubcat={cogsBySubcat}
+          overheadBySubcat={overheadBySubcat}
           yearOverhead={yearOverhead}
           periodRevenue={periodRevenue}
           yearRevenue={yearRevenue}
@@ -7640,6 +7677,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
 // ─── Owner Hub — company owner's settings (no platform-level features) ─────
 function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
+  const DEFAULT_SUBCATS = { "COGS": [], "Overhead": [] };
   const DEFAULT_BUCKETS = {
     "COGS":"cogs","Subcontractors":"cogs","Job Supplies":"cogs","Crew Supplies":"cogs","Fuel":"cogs",
     "Equipment":"overhead","Overhead":"overhead","Labor":"labor","Other":"exclude",
@@ -7649,8 +7687,10 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
     ebitdaTargetPct:20, ebitdaTargetDollars:"",
     categoryBuckets: DEFAULT_BUCKETS,
   };
-  const rs = { ...defaults, ...reportSettings, categoryBuckets: {...DEFAULT_BUCKETS, ...(reportSettings.categoryBuckets||{})} };
+  const rs = { ...defaults, ...reportSettings, categoryBuckets: {...DEFAULT_BUCKETS, ...(reportSettings.categoryBuckets||{})}, customSubcategories: {...DEFAULT_SUBCATS, ...(reportSettings.customSubcategories||{})} };
   const [draft, setDraft] = useState({...rs});
+  const [newSubcatName, setNewSubcatName] = useState("");
+  const [newSubcatCat, setNewSubcatCat] = useState("COGS");
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [newCatName, setNewCatName] = useState("");
@@ -7698,14 +7738,14 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
             {allCats.map((cat, idx) => {
               const bucket = draft.categoryBuckets[cat];
               return (
-                <div key={cat} style={{display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                <div key={cat} style={{padding:"10px 14px",
                   borderBottom: idx < allCats.length-1 ? `1px solid ${C.border}` : "none",
                   background: idx%2===0 ? C.surface : C.surface2}}>
-                  <div style={{flex:1, fontSize:13, fontWeight:600}}>{cat}</div>
-                  <div style={{display:"flex", gap:4}}>
+                  <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>{cat}</div>
+                  <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center"}}>
                     {BUCKET_OPTS.map(opt => (
                       <button key={opt.value} onClick={() => setBucket(cat, opt.value)}
-                        style={{fontSize:11, fontWeight:600, padding:"3px 10px", borderRadius:20, cursor:"pointer",
+                        style={{fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, cursor:"pointer",
                           border:`1px solid ${bucket===opt.value ? opt.color : C.border}`,
                           background: bucket===opt.value ? opt.color+"20" : C.surface,
                           color: bucket===opt.value ? opt.color : C.textMuted}}>
@@ -7717,7 +7757,7 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
                         const next = {...draft.categoryBuckets};
                         delete next[cat];
                         setDraft(p => ({...p, categoryBuckets: next}));
-                      }} style={{fontSize:11, color:C.danger, background:"none", border:"none", cursor:"pointer", padding:"3px 6px"}}>✕</button>
+                      }} style={{fontSize:11, color:C.danger, background:"none", border:"none", cursor:"pointer", padding:"4px 6px"}}>✕</button>
                     )}
                   </div>
                 </div>
@@ -7738,6 +7778,64 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
               if (!newCatName.trim()) return;
               setBucket(newCatName.trim(), "exclude");
               setNewCatName("");
+            }}>+ Add</button>
+          </div>
+        </div>
+
+        {/* Custom Subcategories */}
+        <div>
+          <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8}}>
+            Custom Subcategories
+          </div>
+          <p style={{fontSize:12, color:C.textMuted, marginTop:-4, marginBottom:12}}>
+            Add your own subcategories under COGS or Overhead. They'll appear in the expense form and EBITDA report.
+          </p>
+          {["COGS","Overhead"].map(cat => {
+            const customList = draft.customSubcategories?.[cat] || [];
+            return (
+              <div key={cat} style={{marginBottom:12}}>
+                <div style={{fontSize:12, fontWeight:600, marginBottom:6}}>{cat}</div>
+                {customList.length > 0 && (
+                  <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:8}}>
+                    {customList.map(s => (
+                      <span key={s} style={{display:"inline-flex", alignItems:"center", gap:4,
+                        fontSize:11, fontWeight:600, padding:"3px 8px 3px 10px", borderRadius:20,
+                        background:C.surface2, border:`1px solid ${C.border}`, color:C.text}}>
+                        {s}
+                        <button onClick={() => setDraft(p => ({...p, customSubcategories:{
+                          ...p.customSubcategories,
+                          [cat]: (p.customSubcategories[cat]||[]).filter(x => x !== s)
+                        }}))} style={{background:"none", border:"none", cursor:"pointer", fontSize:13, color:C.textMuted}}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div style={{display:"flex", gap:8, maxWidth:420}}>
+            <select value={newSubcatCat} onChange={e=>setNewSubcatCat(e.target.value)} style={{...S.input, width:120, flexShrink:0}}>
+              <option value="COGS">COGS</option>
+              <option value="Overhead">Overhead</option>
+            </select>
+            <input value={newSubcatName} onChange={e=>setNewSubcatName(e.target.value)}
+              placeholder="Subcategory name…" style={{...S.input, flex:1}}
+              onKeyDown={e => {
+                if (e.key==="Enter" && newSubcatName.trim()) {
+                  setDraft(p => ({...p, customSubcategories:{
+                    ...p.customSubcategories,
+                    [newSubcatCat]: [...new Set([...(p.customSubcategories[newSubcatCat]||[]), newSubcatName.trim()])]
+                  }}));
+                  setNewSubcatName("");
+                }
+              }}/>
+            <button style={{...S.btnSmall, flexShrink:0}} onClick={() => {
+              if (!newSubcatName.trim()) return;
+              setDraft(p => ({...p, customSubcategories:{
+                ...p.customSubcategories,
+                [newSubcatCat]: [...new Set([...(p.customSubcategories[newSubcatCat]||[]), newSubcatName.trim()])]
+              }}));
+              setNewSubcatName("");
             }}>+ Add</button>
           </div>
         </div>
@@ -9127,13 +9225,15 @@ function CrewsSection({ users, isManager, tFetch }) {
 // ─── Export View (secret) ──────────────────────────────────────────────────────
 
 // ─── Expenses View ─────────────────────────────────────────────────────────────
-const EXPENSE_CATEGORIES = [
-  "Overhead","Labor","Fuel","COGS",
-  "Subcontractors","Equipment","Job Supplies","Crew Supplies","Other",
-];
+const EXPENSE_CATEGORY_MAP = {
+  "COGS":     ["Materials","Subcontractors","Equipment Rental","Job Supplies","Crew Supplies","Fuel"],
+  "Overhead": ["Insurance","Office & Software","Vehicle Payments/Lease","Equipment Payments/Lease","Equipment Maintenance & Repairs","Marketing & Advertising","Phone & Utilities","Accounting & Legal","Owner Salary/Draw","Other G&A"],
+  "Labor":    [],
+};
+const EXPENSE_CATEGORIES = ["COGS","Overhead","Labor"];
 const PAYMENT_METHODS = ["Company Card","Cash","Personal Card","Check","ACH/Transfer"];
 
-function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial }) {
+function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial, customSubcategories={} }) {
   const canEdit = userRole === "owner" || userRole === "manager";
   const [showForm,    setShowForm]    = useState(false);
   const [showVendors, setShowVendors] = useState(false);
@@ -9367,7 +9467,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const blankForm = () => ({
     date: new Date().toISOString().slice(0,10),
     vendorId: "", vendorName: "",
-    category: "Overhead", amount: "", paymentMethod: "Company Card",
+    category: "COGS", subcategory: "", amount: "", paymentMethod: "Company Card",
     jobId: "", notes: "", receiptUrl: "",
   });
   const [form, setForm] = useState(blankForm());
@@ -9488,9 +9588,18 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
 
   // Totals by category and payment method
   const totalAmt = filtered.reduce((s,e) => s + Number(e.amount||0), 0);
-  const byCat    = EXPENSE_CATEGORIES.map(cat => ({
+  const byCatRaw = EXPENSE_CATEGORIES.map(cat => ({
     cat, amt: filtered.filter(e=>e.category===cat).reduce((s,e)=>s+Number(e.amount||0),0)
   })).filter(r=>r.amt>0);
+  const byCat = [];
+  byCatRaw.forEach(({cat, amt}) => {
+    byCat.push({cat, amt});
+    const subcats = {};
+    filtered.filter(e=>e.category===cat && e.subcategory).forEach(e => {
+      subcats[e.subcategory] = (subcats[e.subcategory]||0) + Number(e.amount||0);
+    });
+    Object.entries(subcats).sort((a,b)=>b[1]-a[1]).forEach(([sub, tot]) => byCat.push({cat:"  "+sub, amt:tot, isSub:true}));
+  });
   const byMethod = PAYMENT_METHODS.map(m => ({
     method: m, amt: filtered.filter(e=>e.paymentMethod===m).reduce((s,e)=>s+Number(e.amount||0),0)
   })).filter(r=>r.amt>0);
@@ -9789,10 +9898,20 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 style={{...S.input, marginTop:4}} placeholder="Or type vendor name (one-time)"/>
             </label>
             <label style={S.formLabel}>Category *
-              <select value={form.category} onChange={e=>setF({category:e.target.value})} style={S.input}>
+              <select value={form.category} onChange={e=>setF({category:e.target.value, subcategory:""})} style={S.input}>
                 {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </label>
+            {(EXPENSE_CATEGORY_MAP[form.category]||[]).length > 0 && (
+              <label style={S.formLabel}>Subcategory
+                <select value={form.subcategory} onChange={e=>setF({subcategory:e.target.value})} style={S.input}>
+                  <option value="">— Select subcategory —</option>
+                  {[...(EXPENSE_CATEGORY_MAP[form.category]||[]), ...(customSubcategories?.[form.category]||[])].map(s=>(
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label style={S.formLabel}>Payment Method
               <select value={form.paymentMethod} onChange={e=>setF({paymentMethod:e.target.value})} style={S.input}>
                 {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
@@ -9857,8 +9976,11 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
             <div>
               <div style={{fontSize:11, fontWeight:700, color:C.textMuted, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em"}}>By Category</div>
               {byCat.map(r=>(
-                <div key={r.cat} style={{display:"flex", justifyContent:"space-between", fontSize:13, padding:"3px 0"}}>
-                  <span>{r.cat}</span><span style={{fontWeight:600}}>{formatCurrency(r.amt)}</span>
+                <div key={r.cat} style={{display:"flex", justifyContent:"space-between",
+                  fontSize: r.isSub ? 11 : 13, padding:"3px 0",
+                  color: r.isSub ? C.textMuted : C.text}}>
+                  <span>{r.cat}</span>
+                  <span style={{fontWeight: r.isSub ? 400 : 600}}>{formatCurrency(r.amt)}</span>
                 </div>
               ))}
             </div>
@@ -9980,6 +10102,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
               {/* Category col */}
               <div style={{flex:1, minWidth:0}}>
                 <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"2px 7px"}}>{e.category}</span>
+                {e.subcategory && <span style={{fontSize:10, color:C.textMuted, marginLeft:4}}>{e.subcategory}</span>}
               </div>
               {/* Amount + delete col */}
               <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8}}>
@@ -13951,6 +14074,7 @@ function App() {
   const [reportSettings, setReportSettings] = useState({
     laborPct: 16, fuelPct: 5, cogsPct: 25, overheadPct: 15,
     ebitdaTargetPct: 20, ebitdaTargetDollars: "",
+    customSubcategories: { "COGS": [], "Overhead": [] },
     categoryBuckets: {
       "COGS":          "cogs",
       "Subcontractors":"cogs",
@@ -15066,7 +15190,7 @@ function App() {
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
-        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial}/>}
+        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
