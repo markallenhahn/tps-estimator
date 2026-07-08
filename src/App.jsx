@@ -6325,7 +6325,7 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
           const totalActCosts = ebitdaTotals.cogs + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
           const actEbitda   = ebitdaTotals.revenue - totalActCosts;
           const actEbitdaPct = ebitdaTotals.revenue > 0 ? (actEbitda / ebitdaTotals.revenue) * 100 : 0;
-          const targetPct   = reportSettings.ebitdaTargetPct || 20;
+          const targetPct   = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
 
           const SummaryRow = ({label, actual, estimated, color, pct}) => (
             <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
