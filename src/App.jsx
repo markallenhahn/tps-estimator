@@ -5533,6 +5533,7 @@ function buildCustomerGroups(jobs, customers, rates) {
 }
 
 function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJobById, crmLogs, addCrmLog, deleteCrmLog, setCurrentJob, setView, userRole }) {
+  const isDesktop = useIsDesktop();
   const canEdit = userRole === "estimator" || userRole === "manager" || userRole === "owner";
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
@@ -5652,7 +5653,10 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
             <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
               borderBottom:`2px solid ${C.border}`, fontSize:11, fontWeight:700,
               color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em"}}>
-              {[["name","Name",2],["phone","Phone",1],["email","Email",2],["address","Address",2],["city","City",1],["state","State","60px"],["lastJobDate","Date",1],["status","Status",1]].map(([field,label,flex]) => (
+              {(isDesktop
+                ? [["name","Name",2],["phone","Phone",1],["email","Email",2],["address","Address",2],["city","City",1],["state","State","60px"],["lastJobDate","Date",1],["status","Status",1]]
+                : [["name","Name",2],["phone","Phone",1],["status","Status",1]]
+              ).map(([field,label,flex]) => (
                 <div key={field} onClick={() => toggleSort(field)}
                   style={{cursor:"pointer", flex: typeof flex==="number"?flex:undefined, width:typeof flex==="string"?flex:undefined,
                     flexShrink:0, userSelect:"none", color: sortField===field ? C.accent : C.textMuted}}>
@@ -5687,11 +5691,13 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                 <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>
                   {c.phone ? (() => { const d = c.phone.replace(/\D/g,""); return d.length===10 ? `(${d.slice(0,3)}) ${d.slice(3,6)} ${d.slice(6)}` : c.phone; })() : "—"}
                 </div>
-                <div style={{flex:2, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.email||"—"}</div>
-                <div style={{flex:2, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.address||"—"}</div>
-                <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.city||"—"}</div>
-                <div style={{width:60, flexShrink:0, fontSize:12, color:C.textMuted}}>{c.state||"—"}</div>
-                <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted}}>{c.lastJobDate||"—"}</div>
+                {isDesktop && <>
+                  <div style={{flex:2, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.email||"—"}</div>
+                  <div style={{flex:2, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.address||"—"}</div>
+                  <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.city||"—"}</div>
+                  <div style={{width:60, flexShrink:0, fontSize:12, color:C.textMuted}}>{c.state||"—"}</div>
+                  <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted}}>{c.lastJobDate||"—"}</div>
+                </>}
                 <div style={{flex:1, minWidth:0}}>
                   {c.jobs[0]?.status ? (
                     <span style={{fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:20,
