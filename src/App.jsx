@@ -689,7 +689,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
   return (
     <nav style={S.nav}>
       <div style={S.navBrand}>
-        <img src={currentLogo} alt={currentCompanyAlt} style={{height:24, width:"auto", display:"block"}}/>
+        <img src={currentLogo} alt={currentCompanyAlt} style={{height:18, width:"auto", display:"block"}}/>
         {myTenants && myTenants.length > 1 && (
           <select value={currentTenantId||""} onChange={e => switchTenant(e.target.value)}
             style={{fontSize:11, padding:"3px 6px", borderRadius:6, border:`1px solid ${C.border}`, background:C.surface, color:C.text, marginLeft:8}}>
