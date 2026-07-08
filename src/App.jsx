@@ -7774,8 +7774,9 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
             <div style={{flex:1, minWidth:100}}>
               <div style={{fontSize:12, fontWeight:600, marginBottom:4, color:"#10b981"}}>EBITDA % (calc)</div>
               <div style={{display:"flex", alignItems:"center", gap:4}}>
-                <div style={{flex:1, height:42, display:"flex", alignItems:"center",
-                  padding:"0 10px", background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden"}}>
+                <div style={{flex:1, height:42, minHeight:42, maxHeight:42, display:"flex", alignItems:"center",
+                  padding:"0 10px", background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8,
+                  boxSizing:"border-box", overflow:"hidden"}}>
                   <span style={{fontSize:15, fontWeight:800, color: calcEbitdaPct >= 0 ? "#10b981" : "#ef4444"}}>{calcEbitdaPct.toFixed(1)}%</span>
                 </div>
                 <span style={{fontSize:13, color:C.textMuted}}>%</span>
