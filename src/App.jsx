@@ -5559,6 +5559,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
 
   // ── Import flow ──
   const [showImport, setShowImport] = useState(false);
+  const [showImportInfo, setShowImportInfo] = useState(false);
   const [importStep, setImportStep] = useState("upload");
   const [importRows, setImportRows] = useState([]);
   const [importHeaders, setImportHeaders] = useState([]);
@@ -5853,9 +5854,37 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
 
             {importStep === "upload" && (
               <div>
-                <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
-                  Upload an Excel or CSV file. Required columns: Name, and Phone or Email. Recommended: Address, City, State. Optional: Zip, Amount, Job Type, Notes.
-                </p>
+                <div style={{display:"flex", alignItems:"flex-start", gap:10, marginBottom:12}}>
+                  <p style={{fontSize:12, color:C.textMuted, margin:0, flex:1}}>
+                    Upload an Excel or CSV file. Column names will be auto-detected. Click the info icon to see field descriptions.
+                  </p>
+                  <div style={{position:"relative", flexShrink:0}}>
+                    <LucideIcons.Info size={18} strokeWidth={2} style={{color: showImportInfo ? C.accent : C.textMuted, cursor:"pointer"}}
+                      onClick={() => setShowImportInfo(p => !p)}/>
+                    <div style={{display: showImportInfo ? "block" : "none", position:"absolute", right:0, top:24, zIndex:100,
+                      background:"#fff", border:`1px solid ${C.border}`, borderRadius:10, padding:16,
+                      boxShadow:"0 4px 20px rgba(0,0,0,0.12)", width:300}}>
+                      <div style={{fontSize:12, fontWeight:700, marginBottom:10, color:C.text}}>Import Field Reference</div>
+                      {[
+                        ["Name","Required. Full name of the contact."],
+                        ["Phone","Required if no email. Customer's phone number — any format."],
+                        ["Email","Required if no phone. Customer's email address."],
+                        ["Address","Required. Street address (e.g. 123 Main St)."],
+                        ["City","Required. City name."],
+                        ["State","Required. 2-letter state code (e.g. NJ). Missing states can be assigned during import."],
+                        ["Zip","Optional. 5-digit zip code."],
+                        ["Amount","Optional. Dollar value of their prior job (e.g. 1500 or $1,500)."],
+                        ["Job Type","Optional. Type of work done (e.g. Sealcoating, Crack Fill)."],
+                        ["Notes","Optional. Any notes about the contact or prior job."],
+                      ].map(([field, desc]) => (
+                        <div key={field} style={{marginBottom:8}}>
+                          <div style={{fontSize:12, fontWeight:700, color:C.text}}>{field}</div>
+                          <div style={{fontSize:11, color:C.textMuted}}>{desc}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
                 <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={handleImportFile}/>
                 <button style={S.btnPrimary} onClick={() => importFileRef.current?.click()}>
                   <LucideIcons.Upload size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
