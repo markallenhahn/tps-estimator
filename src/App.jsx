@@ -5537,6 +5537,12 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [logType, setLogType] = useState("note");
+  const [sortField, setSortField] = useState("lastJobDate");
+  const [sortDir, setSortDir] = useState("desc");
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
   const [logText, setLogText] = useState("");
   const [callOutcome, setCallOutcome] = useState("");
   const [editingContact, setEditingContact] = useState(false);
@@ -5640,24 +5646,62 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
         </div>
 
         {/* Customer list — hidden on mobile when detail is open */}
-        <div style={{display: selected ? "none" : "block"}}>
-          {filtered.length === 0 ? (
-            <p style={{fontSize:12, color:C.textMuted}}>No customers match that search.</p>
-          ) : filtered.map(c => (
-            <div key={c.id} onClick={() => setSelectedId(c.id)}
-              style={{
-                padding:"12px 14px", borderRadius:8, marginBottom:8, cursor:"pointer",
-                background: C.surface2,
-                border:`1px solid ${C.border}`,
-              }}>
-              <div style={{fontWeight:700, fontSize:14}}>{c.name || "Unnamed"}</div>
-              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>{c.phone || c.email || "no contact info"}</div>
-              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
-                {c.jobCount} job{c.jobCount!==1?"s":""} · {formatCurrency(c.totalRevenue)}
-              </div>
+        {!selected && (
+          <div>
+            {/* Column headers */}
+            <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
+              borderBottom:`2px solid ${C.border}`, fontSize:11, fontWeight:700,
+              color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em"}}>
+              {[["name","Name",2],["address","Address",2],["city","City",1],["state","State","60px"],["phone","Phone",1],["lastJobDate","Date",1],["status","Status",1]].map(([field,label,flex]) => (
+                <div key={field} onClick={() => toggleSort(field)}
+                  style={{cursor:"pointer", flex: typeof flex==="number"?flex:undefined, width:typeof flex==="string"?flex:undefined,
+                    flexShrink:0, userSelect:"none", color: sortField===field ? C.accent : C.textMuted}}>
+                  {label}{sortField===field ? (sortDir==="asc"?" ↑":" ↓"):""}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+
+            {filtered.length === 0 ? (
+              <p style={{fontSize:12, color:C.textMuted, marginTop:12}}>No customers match that search.</p>
+            ) : [...filtered].sort((a,b) => {
+              let av, bv;
+              if (sortField==="name")        { av=a.name||""; bv=b.name||""; }
+              else if (sortField==="address") { av=a.address||""; bv=b.address||""; }
+              else if (sortField==="city")    { av=a.city||""; bv=b.city||""; }
+              else if (sortField==="state")   { av=a.state||""; bv=b.state||""; }
+              else if (sortField==="phone")   { av=a.phone||""; bv=b.phone||""; }
+              else if (sortField==="lastJobDate") { av=a.lastJobDate||""; bv=b.lastJobDate||""; }
+              else if (sortField==="status")  { av=a.jobs[0]?.status||""; bv=b.jobs[0]?.status||""; }
+              else { av=""; bv=""; }
+              const cmp = av<bv?-1:av>bv?1:0;
+              return sortDir==="asc" ? cmp : -cmp;
+            }).map(c => (
+              <div key={c.id} onClick={() => setSelectedId(c.id)}
+                style={{display:"flex", alignItems:"center", gap:8, padding:"10px 4px",
+                  borderBottom:`1px solid ${C.border}`, cursor:"pointer"}}
+                onMouseEnter={e => e.currentTarget.style.background=C.surface2}
+                onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                <div style={{flex:2, minWidth:0}}>
+                  <div style={{fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.name||"Unnamed"}</div>
+                  {c.email && <div style={{fontSize:11, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.email}</div>}
+                </div>
+                <div style={{flex:2, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.address||"—"}</div>
+                <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.city||"—"}</div>
+                <div style={{width:60, flexShrink:0, fontSize:12, color:C.textMuted}}>{c.state||"—"}</div>
+                <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted}}>{c.phone||"—"}</div>
+                <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted}}>{c.lastJobDate||"—"}</div>
+                <div style={{flex:1, minWidth:0}}>
+                  {c.jobs[0]?.status ? (
+                    <span style={{fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:20,
+                      ...(S[`status_${c.jobs[0].status}`]||{background:C.surface2, color:C.textMuted})}}>
+                      {pipelineStatusLabel(c.jobs[0].status)}
+                    </span>
+                  ) : <span style={{fontSize:12, color:C.textMuted}}>—</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Customer detail — full screen on mobile */}
         {selected && (
