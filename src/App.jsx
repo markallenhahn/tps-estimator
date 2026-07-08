@@ -250,7 +250,7 @@ const S = {
   navTabIcon:{ fontSize:15 }, navTabLabel:{whiteSpace:"nowrap"},
   // Desktop sidebar nav
   sidebar:{ width:220, flexShrink:0, background:C.surface, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", overflowY:"auto" },
-  sidebarBrand:{ padding:"12px 20px 10px" },
+  sidebarBrand:{ padding:"12px 20px 10px", display:"flex", justifyContent:"center" },
   sidebarTabs:{ display:"flex", flexDirection:"column", gap:2, padding:"0 12px 20px" },
   sidebarTab:{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:8, background:"none", border:"none", outline:"none", color:C.textMuted, cursor:"pointer", fontSize:14, fontWeight:500, textAlign:"left", transition:"all .15s", WebkitTapHighlightColor:"transparent" },
   sidebarTabActive:{ background:C.surface2, color:C.accent, fontWeight:700 },
