@@ -5986,7 +5986,7 @@ ${noContactInfo.slice(0,5).join("
               color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em"}}>
               {(isDesktop
                 ? [["name","Name",2],["phone","Phone",1],["email","Email",2],["address","Address",2],["city","City",1],["state","State","60px"],["lastJobDate","Date",1],["status","Status",1]]
-                : [["name","Name",2],["phone","Phone",1],["status","Status",1]]
+                : [["name","Name",2],["phone","Phone",1]]
               ).map(([field,label,flex]) => (
                 <div key={field} onClick={() => toggleSort(field)}
                   style={{cursor:"pointer", flex: typeof flex==="number"?flex:undefined, width:typeof flex==="string"?flex:undefined,
@@ -6028,15 +6028,15 @@ ${noContactInfo.slice(0,5).join("
                   <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.city||"—"}</div>
                   <div style={{width:60, flexShrink:0, fontSize:12, color:C.textMuted}}>{c.state||"—"}</div>
                   <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted}}>{c.lastJobDate||"—"}</div>
+                  <div style={{flex:1, minWidth:0}}>
+                    {c.jobs[0]?.status ? (
+                      <span style={{fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:20,
+                        ...(S[`status_${c.jobs[0].status}`]||{background:C.surface2, color:C.textMuted})}}>
+                        {pipelineStatusLabel(c.jobs[0].status)}
+                      </span>
+                    ) : <span style={{fontSize:12, color:C.textMuted}}>—</span>}
+                  </div>
                 </>}
-                <div style={{flex:1, minWidth:0}}>
-                  {c.jobs[0]?.status ? (
-                    <span style={{fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:20,
-                      ...(S[`status_${c.jobs[0].status}`]||{background:C.surface2, color:C.textMuted})}}>
-                      {pipelineStatusLabel(c.jobs[0].status)}
-                    </span>
-                  ) : <span style={{fontSize:12, color:C.textMuted}}>—</span>}
-                </div>
               </div>
             ))}
           </div>
