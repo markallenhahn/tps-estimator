@@ -7345,27 +7345,6 @@ function CostsView({ currentJob, updateJob, rates, expenses, laborEntries=[], te
     return s + (Number(e.hours||0) * rate);
   }, 0);
   const hasLaborEntries = jobLaborEntries.length > 0 && laborFromEntries > 0;
-
-  // Calculate actual labor cost from labor tab entries linked to this job
-  const jobLaborEntries = laborEntries.filter(e => String(e.jobId) === String(currentJob.id));
-  const laborFromEntries = jobLaborEntries.reduce((s, e) => {
-    // Find rate: check teamUsers then offAppWorkers rateHistory
-    const userId = e.userId;
-    const entryDate = e.date || "";
-    let rate = 0;
-    if (userId) {
-      const user = teamUsers.find(u => u.id === userId);
-      const hist = (user?.rateHistory || []).filter(r => r.startDate <= entryDate).sort((a,b) => b.startDate.localeCompare(a.startDate));
-      rate = hist[0]?.rate || 0;
-    }
-    if (!rate) {
-      const oaw = offAppWorkers.find(w => w.name === e.name);
-      const hist = (oaw?.rateHistory || []).filter(r => r.startDate <= entryDate).sort((a,b) => b.startDate.localeCompare(a.startDate));
-      rate = hist[0]?.rate || 0;
-    }
-    return s + (Number(e.hours||0) * rate);
-  }, 0);
-  const hasLaborEntries = jobLaborEntries.length > 0 && laborFromEntries > 0;
   const TARGET_MARGIN          = 0.52;
 
   const sealcoatSqFt   = (currentJob.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
