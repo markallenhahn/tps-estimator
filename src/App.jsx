@@ -13928,6 +13928,19 @@ function AdminApp() {
 }
 
 function App() {
+  // Prevent browser back navigation on backspace when not in an input field
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Backspace") return;
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      const isEditable = tag === "input" || tag === "textarea" || tag === "select" ||
+        document.activeElement?.isContentEditable;
+      if (!isEditable) e.preventDefault();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const [view,          setViewRaw]      = useState("home");
   const [viewHistory,   setViewHistory]  = useState([]); // stack of previous views, for global Back button
   // navigateTo: use this for all "go to a new screen" navigation — pushes the
