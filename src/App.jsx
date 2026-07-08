@@ -5688,10 +5688,8 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
       });
       added++;
     });
-    if (noContactInfo.length > 0) alert(`Skipped ${noContactInfo.length} contact(s) with no phone or email:
-${noContactInfo.slice(0,5).join("
-")}${noContactInfo.length>5?"...":""}`);
-    alert(`Done! ${added} contact${added!==1?"s":""} imported, ${skipped} skipped.`);
+    if (noContactInfo.length > 0) alert("Skipped " + noContactInfo.length + " with no phone or email: " + noContactInfo.slice(0,5).join(", ") + (noContactInfo.length>5?"...":""));
+    alert("Done! " + added + " contact" + (added!==1?"s":"") + " imported, " + skipped + " skipped.");
     resetImport();
   };
 
