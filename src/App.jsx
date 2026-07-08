@@ -5550,6 +5550,170 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
   const [contactDraft, setContactDraft] = useState(null);
   const backfilledRef = useRef(new Set());
 
+  // ── Add contact manually ──
+  const [showAddContact, setShowAddContact] = useState(false);
+  const blankContact = {name:"",phone:"",email:"",address:"",city:"",state:"",zip:""};
+  const [newContact, setNewContact] = useState({...blankContact});
+  const [addContactError, setAddContactError] = useState("");
+  const setNC = (k,v) => setNewContact(p => ({...p,[k]:v}));
+
+  // ── Import flow ──
+  const [showImport, setShowImport] = useState(false);
+  const [importStep, setImportStep] = useState("upload");
+  const [importRows, setImportRows] = useState([]);
+  const [importHeaders, setImportHeaders] = useState([]);
+  const [importMapping, setImportMapping] = useState({name:"",phone:"",email:"",address:"",city:"",state:"",zip:"",amount:"",jobType:"",notes:""});
+  const [missingStateRows, setMissingStateRows] = useState([]);
+  const [sameStateForAll, setSameStateForAll] = useState(null);
+  const [globalState, setGlobalState] = useState("");
+  const [stateGroups, setStateGroups] = useState([]);
+  const [pendingStateRows, setPendingStateRows] = useState([]);
+  const [stateGroupInput, setStateGroupInput] = useState("");
+  const [stateGroupSelected, setStateGroupSelected] = useState(new Set());
+  const importFileRef = useRef(null);
+
+  const resetImport = () => {
+    setShowImport(false); setImportStep("upload");
+    setImportRows([]); setImportHeaders([]);
+    setImportMapping({name:"",phone:"",email:"",address:"",city:"",state:"",zip:"",amount:"",jobType:"",notes:""});
+    setMissingStateRows([]); setSameStateForAll(null);
+    setGlobalState(""); setStateGroups([]); setPendingStateRows([]);
+    setStateGroupInput(""); setStateGroupSelected(new Set());
+  };
+
+  const handleImportFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target.result, {type:"array"});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+      if (rows.length < 2) { alert("File appears empty."); return; }
+      const headers = rows[0].map(h => String(h).trim());
+      setImportHeaders(headers);
+      setImportRows(rows.slice(1).filter(r => r.some(c => String(c).trim())));
+      const autoMap = {name:"",phone:"",email:"",address:"",city:"",state:"",zip:"",amount:"",jobType:"",notes:""};
+      headers.forEach(h => {
+        const hl = h.toLowerCase();
+        if (/name/.test(hl)) autoMap.name = h;
+        else if (/phone|cell|mobile/.test(hl)) autoMap.phone = h;
+        else if (/email/.test(hl)) autoMap.email = h;
+        else if (/address|street/.test(hl)) autoMap.address = h;
+        else if (/city/.test(hl)) autoMap.city = h;
+        else if (/state/.test(hl)) autoMap.state = h;
+        else if (/zip|postal/.test(hl)) autoMap.zip = h;
+        else if (/amount|revenue|price|total/.test(hl)) autoMap.amount = h;
+        else if (/type|service|job.?type/.test(hl)) autoMap.jobType = h;
+        else if (/note|comment/.test(hl)) autoMap.notes = h;
+      });
+      setImportMapping(autoMap);
+      setImportStep("map");
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+  };
+
+  const getCell = (row, headerName) => {
+    if (!headerName) return "";
+    const idx = importHeaders.indexOf(headerName);
+    return idx >= 0 ? String(row[idx]||"").trim() : "";
+  };
+
+  const proceedFromMap = () => {
+    if (!importMapping.name) { alert("Name column is required."); return; }
+    const mapped = importRows.map((row, i) => ({
+      _idx: i,
+      name: getCell(row, importMapping.name),
+      phone: getCell(row, importMapping.phone),
+      email: getCell(row, importMapping.email),
+      address: getCell(row, importMapping.address),
+      city: getCell(row, importMapping.city),
+      state: getCell(row, importMapping.state),
+      zip: getCell(row, importMapping.zip),
+      amount: getCell(row, importMapping.amount),
+      jobType: getCell(row, importMapping.jobType),
+      notes: getCell(row, importMapping.notes),
+    })).filter(r => r.name);
+    setImportRows(mapped);
+    const noState = mapped.filter(r => !r.state);
+    if (noState.length > 0) {
+      setMissingStateRows(noState.map(r => r._idx));
+      setPendingStateRows(noState.map(r => r._idx));
+      setImportStep("state");
+    } else {
+      setImportStep("preview");
+    }
+  };
+
+  const applyGlobalState = () => {
+    if (!globalState.trim()) { alert("Enter a state."); return; }
+    const st = globalState.trim().toUpperCase().slice(0,2);
+    setImportRows(prev => prev.map(r => missingStateRows.includes(r._idx) ? {...r, state: st} : r));
+    setImportStep("preview");
+  };
+
+  const applyStateGroup = () => {
+    if (!stateGroupInput.trim()) { alert("Enter a state."); return; }
+    if (stateGroupSelected.size === 0) { alert("Select at least one contact."); return; }
+    const st = stateGroupInput.trim().toUpperCase().slice(0,2);
+    setImportRows(prev => prev.map(r => stateGroupSelected.has(r._idx) ? {...r, state: st} : r));
+    setPendingStateRows(prev => prev.filter(idx => !stateGroupSelected.has(idx)));
+    setStateGroups(prev => [...prev, {state: st, count: stateGroupSelected.size}]);
+    setStateGroupSelected(new Set());
+    setStateGroupInput("");
+  };
+
+  const runImportContacts = () => {
+    let added = 0, skipped = 0, noContactInfo = [];
+    importRows.forEach((r, i) => {
+      if (!r.phone && !r.email) { noContactInfo.push(r.name); skipped++; return; }
+      const isDupe = customers.some(c =>
+        (r.phone && c.phone && r.phone.replace(/[^0-9]/g,"") === (c.phone||"").replace(/[^0-9]/g,"")) ||
+        (r.email && c.email && r.email.toLowerCase() === c.email.toLowerCase())
+      );
+      if (isDupe) { skipped++; return; }
+      const jobHistory = (r.amount || r.jobType || r.notes) ? [{
+        id: Date.now() + i,
+        amount: r.amount ? Number(String(r.amount).replace(/[^0-9.]/g,"")) || 0 : 0,
+        jobType: r.jobType || "",
+        notes: r.notes || "",
+        importedAt: new Date().toISOString().slice(0,10),
+      }] : [];
+      addCustomer({
+        id: Date.now() * 1000 + i,
+        name: r.name, phone: r.phone, email: r.email,
+        address: r.address, city: r.city, state: r.state, zip: r.zip,
+        jobHistory, importedAt: new Date().toISOString().slice(0,10),
+      });
+      added++;
+    });
+    if (noContactInfo.length > 0) alert(`Skipped ${noContactInfo.length} contact(s) with no phone or email:
+${noContactInfo.slice(0,5).join("
+")}${noContactInfo.length>5?"...":""}`);
+    alert(`Done! ${added} contact${added!==1?"s":""} imported, ${skipped} skipped.`);
+    resetImport();
+  };
+
+  const saveNewContact = () => {
+    setAddContactError("");
+    if (!newContact.name.trim()) { setAddContactError("Name is required."); return; }
+    if (!newContact.phone.trim() && !newContact.email.trim()) { setAddContactError("Phone or email is required."); return; }
+    if (!newContact.address.trim()) { setAddContactError("Address is required."); return; }
+    if (!newContact.city.trim()) { setAddContactError("City is required."); return; }
+    if (!newContact.state.trim()) { setAddContactError("State is required."); return; }
+    addCustomer({
+      id: Date.now() + Math.floor(Math.random()*1000),
+      name: newContact.name.trim(), phone: newContact.phone.trim(),
+      email: newContact.email.trim(), address: newContact.address.trim(),
+      city: newContact.city.trim(), state: newContact.state.trim().toUpperCase().slice(0,2),
+      zip: newContact.zip.trim(), jobHistory: [],
+      importedAt: new Date().toISOString().slice(0,10),
+    });
+    setNewContact({...blankContact});
+    setShowAddContact(false);
+  };
+
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
 
   // One-time backfill: any job without a customerId yet gets matched against
@@ -5643,8 +5807,175 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
         <div style={{display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", marginBottom:14}}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, email, address..."
             style={{...S.input, flex:1, minWidth:200}}/>
-          <button style={S.btnSecondary} onClick={exportToExcel}><LucideIcons.Table2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Export to Excel</button>
+          {canEdit && (
+            <button style={S.btnPrimary} onClick={() => { setShowAddContact(p=>!p); setShowImport(false); }}>
+              <LucideIcons.UserPlus size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
+              Add Contact
+            </button>
+          )}
+          {canEdit && (
+            <button style={S.btnSecondary} onClick={() => { setShowImport(p=>!p); setShowAddContact(false); if (!showImport) setImportStep("upload"); }}>
+              <LucideIcons.Upload size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
+              Import
+            </button>
+          )}
+          <button style={S.btnSecondary} onClick={exportToExcel}><LucideIcons.Table2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Export</button>
         </div>
+
+        {/* ── Manual Add Contact Form ── */}
+        {showAddContact && canEdit && (
+          <div style={{background:C.surface2, borderRadius:10, padding:16, marginBottom:16, border:`1px solid ${C.border}`}}>
+            <h3 style={{fontSize:14, fontWeight:700, margin:"0 0 12px"}}>Add Contact</h3>
+            <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+              <input value={newContact.name} onChange={e=>setNC("name",e.target.value)} placeholder="Full Name *" style={{...S.input, flex:2, minWidth:140}}/>
+              <input value={newContact.phone} onChange={e=>setNC("phone",e.target.value)} placeholder="Phone" style={{...S.input, flex:1, minWidth:120}}/>
+              <input value={newContact.email} onChange={e=>setNC("email",e.target.value)} placeholder="Email" style={{...S.input, flex:2, minWidth:160}}/>
+            </div>
+            <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+              <input value={newContact.address} onChange={e=>setNC("address",e.target.value)} placeholder="Address *" style={{...S.input, flex:3, minWidth:180}}/>
+              <input value={newContact.city} onChange={e=>setNC("city",e.target.value)} placeholder="City *" style={{...S.input, flex:2, minWidth:120}}/>
+              <input value={newContact.state} onChange={e=>setNC("state",e.target.value)} placeholder="ST *" style={{...S.input, flex:"0 0 60px"}} maxLength={2}/>
+              <input value={newContact.zip} onChange={e=>setNC("zip",e.target.value)} placeholder="Zip" style={{...S.input, flex:"0 0 80px"}}/>
+            </div>
+            {addContactError && <div style={{fontSize:12, color:C.danger, marginBottom:8}}>{addContactError}</div>}
+            <div style={{display:"flex", gap:8}}>
+              <button style={S.btnPrimary} onClick={saveNewContact}>Save Contact</button>
+              <button style={S.btnSecondary} onClick={() => { setShowAddContact(false); setNewContact({...blankContact}); setAddContactError(""); }}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Import Flow ── */}
+        {showImport && canEdit && (
+          <div style={{background:C.surface2, borderRadius:10, padding:16, marginBottom:16, border:`1px solid ${C.border}`}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+              <h3 style={{fontSize:14, fontWeight:700, margin:0}}>Import Contacts</h3>
+              <button style={S.btnSmall} onClick={resetImport}>✕ Cancel</button>
+            </div>
+
+            {importStep === "upload" && (
+              <div>
+                <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
+                  Upload an Excel or CSV file. Required columns: Name, and Phone or Email. Recommended: Address, City, State. Optional: Zip, Amount, Job Type, Notes.
+                </p>
+                <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={handleImportFile}/>
+                <button style={S.btnPrimary} onClick={() => importFileRef.current?.click()}>
+                  <LucideIcons.Upload size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
+                  Choose File
+                </button>
+              </div>
+            )}
+
+            {importStep === "map" && (
+              <div>
+                <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
+                  Match your spreadsheet columns to contact fields. We've auto-detected what we can.
+                </p>
+                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:12}}>
+                  {[["name","Name *"],["phone","Phone"],["email","Email"],["address","Address"],["city","City"],["state","State"],["zip","Zip"],["amount","Job Amount"],["jobType","Job Type"],["notes","Notes"]].map(([key,label]) => (
+                    <label key={key} style={{fontSize:12, fontWeight:600, flex:1, minWidth:120}}>
+                      {label}
+                      <select value={importMapping[key]} onChange={e => setImportMapping(p=>({...p,[key]:e.target.value}))}
+                        style={{...S.input, marginTop:4, display:"block", width:"100%"}}>
+                        <option value="">— skip —</option>
+                        {importHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <button style={S.btnPrimary} onClick={proceedFromMap}>Next →</button>
+              </div>
+            )}
+
+            {importStep === "state" && (
+              <div>
+                <p style={{fontSize:13, fontWeight:600, marginBottom:8}}>
+                  {missingStateRows.length} contact{missingStateRows.length!==1?"s":""} {missingStateRows.length!==1?"are":"is"} missing a state.
+                </p>
+                {sameStateForAll === null && (
+                  <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+                    <button style={S.btnPrimary} onClick={() => setSameStateForAll(true)}>Yes — same state for all</button>
+                    <button style={S.btnSecondary} onClick={() => setSameStateForAll(false)}>No — different states</button>
+                  </div>
+                )}
+                {sameStateForAll === true && (
+                  <div style={{display:"flex", gap:8, alignItems:"center", marginTop:10}}>
+                    <input value={globalState} onChange={e=>setGlobalState(e.target.value.toUpperCase().slice(0,2))}
+                      placeholder="ST" maxLength={2} style={{...S.input, width:70}}/>
+                    <button style={S.btnPrimary} onClick={applyGlobalState}>Apply to All</button>
+                    <button style={S.btnSecondary} onClick={() => setSameStateForAll(null)}>Back</button>
+                  </div>
+                )}
+                {sameStateForAll === false && (
+                  <div style={{marginTop:10}}>
+                    <p style={{fontSize:12, color:C.textMuted, marginBottom:8}}>
+                      {pendingStateRows.length} remaining. Select contacts, enter their state, and click Apply.
+                    </p>
+                    <div style={{maxHeight:200, overflowY:"auto", border:`1px solid ${C.border}`, borderRadius:8, marginBottom:8}}>
+                      {importRows.filter(r => pendingStateRows.includes(r._idx)).map(r => (
+                        <div key={r._idx} onClick={() => setStateGroupSelected(prev => {
+                          const next = new Set(prev);
+                          next.has(r._idx) ? next.delete(r._idx) : next.add(r._idx);
+                          return next;
+                        })} style={{display:"flex", alignItems:"center", gap:8, padding:"8px 12px",
+                          borderBottom:`1px solid ${C.border}`, cursor:"pointer",
+                          background: stateGroupSelected.has(r._idx) ? "#fffbeb" : "transparent"}}>
+                          <input type="checkbox" readOnly checked={stateGroupSelected.has(r._idx)} style={{flexShrink:0}}/>
+                          <div style={{flex:1, fontSize:13}}>
+                            <strong>{r.name}</strong>
+                            <span style={{fontSize:11, color:C.textMuted, marginLeft:8}}>{r.city||""}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
+                      <button style={{...S.btnSmall}} onClick={() => setStateGroupSelected(new Set(pendingStateRows))}>Select All Remaining</button>
+                      <input value={stateGroupInput} onChange={e=>setStateGroupInput(e.target.value.toUpperCase().slice(0,2))}
+                        placeholder="ST" maxLength={2} style={{...S.input, width:70}}/>
+                      <button style={S.btnPrimary} onClick={applyStateGroup} disabled={stateGroupSelected.size===0}>
+                        Apply to {stateGroupSelected.size} selected
+                      </button>
+                    </div>
+                    {pendingStateRows.length === 0 && (
+                      <button style={{...S.btnPrimary, marginTop:10}} onClick={() => setImportStep("preview")}>Continue →</button>
+                    )}
+                    {stateGroups.length > 0 && (
+                      <div style={{fontSize:11, color:C.textMuted, marginTop:8}}>
+                        Applied: {stateGroups.map(g => `${g.state} (${g.count})`).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {importStep === "preview" && (
+              <div>
+                <p style={{fontSize:13, marginBottom:10}}>
+                  Ready to import <strong>{importRows.filter(r=>r.phone||r.email).length}</strong> contacts.
+                  {importRows.filter(r=>!r.phone&&!r.email).length > 0 && (
+                    <span style={{color:C.danger}}> {importRows.filter(r=>!r.phone&&!r.email).length} will be skipped (no phone or email).</span>
+                  )}
+                </p>
+                <div style={{maxHeight:200, overflowY:"auto", border:`1px solid ${C.border}`, borderRadius:8, marginBottom:12}}>
+                  {importRows.slice(0,20).map((r,i) => (
+                    <div key={i} style={{display:"flex", gap:8, padding:"6px 12px", borderBottom:`1px solid ${C.border}`,
+                      fontSize:12, opacity:(!r.phone&&!r.email)?0.4:1}}>
+                      <span style={{flex:2, fontWeight:600}}>{r.name}</span>
+                      <span style={{flex:1, color:C.textMuted}}>{r.phone||r.email||"⚠️ missing"}</span>
+                      <span style={{flex:1, color:C.textMuted}}>{[r.city,r.state].filter(Boolean).join(", ")}</span>
+                    </div>
+                  ))}
+                  {importRows.length > 20 && <div style={{padding:"6px 12px", fontSize:11, color:C.textMuted}}>...and {importRows.length-20} more</div>}
+                </div>
+                <div style={{display:"flex", gap:8}}>
+                  <button style={S.btnPrimary} onClick={runImportContacts}>Import Contacts</button>
+                  <button style={S.btnSecondary} onClick={() => setImportStep("map")}>← Back</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Customer list — hidden on mobile when detail is open */}
         {!selected && (
@@ -5764,6 +6095,21 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                     </span>
                   </div>
                 ))}
+                {(selected.jobHistory||[]).length > 0 && (
+                  <>
+                    <h3 style={{fontSize:13, fontWeight:700, margin:"12px 0 8px"}}>Pre-App Job History</h3>
+                    {selected.jobHistory.map((h,i) => (
+                      <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+                        padding:"8px 10px", borderRadius:6, background:C.surface2, marginBottom:4, fontSize:12}}>
+                        <span style={{color:C.textMuted}}>{h.importedAt||""}{h.jobType ? ` · ${h.jobType}` : ""}</span>
+                        <span style={{display:"flex", alignItems:"center", gap:8}}>
+                          {h.notes && <span style={{color:C.textMuted, fontStyle:"italic", fontSize:11}}>{h.notes}</span>}
+                          {h.amount > 0 && <strong>{formatCurrency(h.amount)}</strong>}
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
 
               {canEdit && (
