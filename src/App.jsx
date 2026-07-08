@@ -13834,37 +13834,34 @@ function App() {
     } catch(e) { console.error("syncCompanySettings error:", e); }
   };
 
-  const syncIconStyle = async (style) => {
-    setIconStyle(style);
+  // Single writer for appsettings — always merges all keys so no field overwrites another
+  const syncAppSettings = async (patch) => {
     try {
+      // Fetch current data first so we can merge
+      const r = await tFetch("appsettings?select=data&order=id.desc&limit=1");
+      const rows = await r.json();
+      const current = (Array.isArray(rows) && rows[0]?.data) || {};
       await tFetch("appsettings?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ data: { iconStyle: style } }),
+        body: JSON.stringify({ data: { ...current, ...patch } }),
       });
-    } catch(e) { console.error("syncIconStyle error:", e); }
+    } catch(e) { console.error("syncAppSettings error:", e); }
+  };
+
+  const syncIconStyle = async (style) => {
+    setIconStyle(style);
+    await syncAppSettings({ iconStyle: style });
   };
 
   const syncOffAppWorkers = async (workers) => {
     setOffAppWorkers(workers);
-    try {
-      await tFetch("appsettings?on_conflict=tenant_id", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ data: { offAppWorkers: workers } }),
-      });
-    } catch(e) { console.error("syncOffAppWorkers error:", e); }
+    await syncAppSettings({ offAppWorkers: workers });
   };
 
   const syncReportSettings = async (settings) => {
     setReportSettings(settings);
-    try {
-      await tFetch("appsettings?on_conflict=tenant_id", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ data: { reportSettings: settings } }),
-      });
-    } catch(e) { console.error("syncReportSettings error:", e); }
+    await syncAppSettings({ reportSettings: settings });
   };
 
   // Assign a newly created/edited job to its nearest existing zone centroid
