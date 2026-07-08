@@ -619,7 +619,7 @@ function TrialBanner({ tenantData, userRole, onGoToAccount }) {
 
 function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant, isPlatformAdmin, companySettings={} }) {
   const currentTenant = (myTenants||[]).find(t => t.tenantId === currentTenantId);
-  const currentLogo = companySettings?.logoB64 ? "data:image/png;base64," + companySettings.logoB64 : (currentTenant?.data?.logoUrl || ("data:image/png;base64," + B_LOGO_B64));
+  const currentLogo = "data:image/png;base64," + B_LOGO_B64;
   const currentCompanyAlt = currentTenant?.companyName || "Company logo";
 
   const tabsRef = useRef(null);
