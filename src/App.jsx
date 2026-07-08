@@ -7750,7 +7750,7 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
           <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
             Used when actual expense data isn't available. EBITDA % is calculated automatically.
           </p>
-          <div style={{display:"flex", gap:12, flexWrap:"wrap", marginBottom:10, alignItems:"flex-end"}}>
+          <div style={{display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end"}}>
             {[
               ["cogsPct",     "COGS %",     "#ef4444"],
               ["laborPct",    "Labor %",    "#f59e0b"],
@@ -7761,59 +7761,26 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
                 <div style={{display:"flex", alignItems:"center", gap:4}}>
                   <input type="number" min="0" max="100" step="0.5"
                     value={draft[key]}
-                    onChange={e => {
-                      const val = Number(e.target.value);
-                      setD(key, val);
-                      setD("ebitdaTargetPct", Math.max(0, 100 - (key==="cogsPct"?val:draft.cogsPct||0) - (key==="laborPct"?val:draft.laborPct||0) - (key==="overheadPct"?val:draft.overheadPct||0)));
-                    }}
+                    onChange={e => setD(key, Number(e.target.value))}
                     style={{...S.input, flex:1}}/>
                   <span style={{fontSize:13, color:C.textMuted}}>%</span>
                 </div>
               </div>
             ))}
             <div style={{flex:1, minWidth:100}}>
-              <div style={{fontSize:12, fontWeight:600, marginBottom:4, color:"#10b981"}}>EBITDA % (calc)</div>
+              <div style={{fontSize:12, fontWeight:600, marginBottom:4, color:"#10b981"}}>EBITDA %</div>
               <div style={{display:"flex", alignItems:"center", gap:4}}>
-                <div style={{flex:1, height:42, minHeight:42, maxHeight:42, display:"flex", alignItems:"center",
-                  padding:"8px 10px", background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
-                  boxSizing:"border-box", overflow:"hidden"}}>
-                  <span style={{fontSize:14, fontWeight:800, color: calcEbitdaPct >= 0 ? "#10b981" : "#ef4444"}}>{calcEbitdaPct.toFixed(1)}%</span>
-                </div>
+                <input readOnly value={calcEbitdaPct.toFixed(1)}
+                  style={{...S.input, flex:1, fontWeight:800,
+                    color: calcEbitdaPct >= 0 ? "#10b981" : "#ef4444",
+                    background:C.surface2, cursor:"default"}}/>
                 <span style={{fontSize:13, color:C.textMuted}}>%</span>
               </div>
             </div>
           </div>
           {totalEstPct > 100 && (
-            <div style={{fontSize:12, color:C.danger}}>⚠️ Percentages add up to {totalEstPct}% — exceeds 100%</div>
+            <div style={{fontSize:12, color:C.danger, marginTop:6}}>⚠️ Percentages exceed 100%</div>
           )}
-        </div>
-
-        {/* EBITDA targets */}
-        <div>
-          <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10}}>EBITDA Target</div>
-          <div style={{display:"flex", gap:12, flexWrap:"wrap"}}>
-            <div style={{flex:1, minWidth:120}}>
-              <div style={{fontSize:12, fontWeight:600, marginBottom:4}}>Target %</div>
-              <div style={{display:"flex", alignItems:"center", gap:4}}>
-                <input type="number" min="0" max="100" step="0.5"
-                  value={draft.ebitdaTargetPct}
-                  onChange={e => setD("ebitdaTargetPct", Number(e.target.value))}
-                  style={{...S.input, flex:1}}/>
-                <span style={{fontSize:13, color:C.textMuted}}>%</span>
-              </div>
-            </div>
-            <div style={{flex:1, minWidth:120}}>
-              <div style={{fontSize:12, fontWeight:600, marginBottom:4}}>Target $ (annual)</div>
-              <div style={{display:"flex", alignItems:"center", gap:4}}>
-                <span style={{fontSize:13, color:C.textMuted}}>$</span>
-                <input type="number" min="0" step="1000"
-                  value={draft.ebitdaTargetDollars}
-                  onChange={e => setD("ebitdaTargetDollars", e.target.value)}
-                  placeholder="e.g. 150000"
-                  style={{...S.input, flex:1}}/>
-              </div>
-            </div>
-          </div>
         </div>
 
         <button onClick={save} disabled={saving}
