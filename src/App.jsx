@@ -5652,7 +5652,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
             <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
               borderBottom:`2px solid ${C.border}`, fontSize:11, fontWeight:700,
               color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em"}}>
-              {[["name","Name",2],["phone","Phone",1],["address","Address",2],["city","City",1],["state","State","60px"],["lastJobDate","Date",1],["status","Status",1]].map(([field,label,flex]) => (
+              {[["name","Name",2],["phone","Phone",1],["email","Email",2],["address","Address",2],["city","City",1],["state","State","60px"],["lastJobDate","Date",1],["status","Status",1]].map(([field,label,flex]) => (
                 <div key={field} onClick={() => toggleSort(field)}
                   style={{cursor:"pointer", flex: typeof flex==="number"?flex:undefined, width:typeof flex==="string"?flex:undefined,
                     flexShrink:0, userSelect:"none", color: sortField===field ? C.accent : C.textMuted}}>
@@ -5683,11 +5683,11 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                 onMouseLeave={e => e.currentTarget.style.background="transparent"}>
                 <div style={{flex:2, minWidth:0}}>
                   <div style={{fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.name||"Unnamed"}</div>
-                  {c.email && <div style={{fontSize:11, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.email}</div>}
                 </div>
                 <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>
                   {c.phone ? (() => { const d = c.phone.replace(/\D/g,""); return d.length===10 ? `(${d.slice(0,3)}) ${d.slice(3,6)} ${d.slice(6)}` : c.phone; })() : "—"}
                 </div>
+                <div style={{flex:2, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.email||"—"}</div>
                 <div style={{flex:2, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.address||"—"}</div>
                 <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.city||"—"}</div>
                 <div style={{width:60, flexShrink:0, fontSize:12, color:C.textMuted}}>{c.state||"—"}</div>
