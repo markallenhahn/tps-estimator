@@ -2909,12 +2909,17 @@ ${email}`:""}`;
 }
 
 // ─── Labor View ───────────────────────────────────────────────────────────────
-function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId, offAppWorkers=[] }) {
+function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId, offAppWorkers=[], jobs=[] }) {
   const isDesktop = useIsDesktop();
   const today = new Date().toISOString().slice(0,10);
   const [selectedDate, setSelectedDate] = useState(today);
   const [newName,      setNewName]      = useState("");
   const [newHours,     setNewHours]     = useState("");
+  const [newJobId,     setNewJobId]     = useState("");
+  const [allocMode,    setAllocMode]    = useState(false); // multi-job allocation mode
+  const [allocName,    setAllocName]    = useState("");
+  const [allocRows,    setAllocRows]    = useState([]); // [{jobId, jobLabel, hours}]
+  const [allocUnalloc, setAllocUnalloc] = useState(""); // unallocated hours
   const [editingId,    setEditingId]    = useState(null);
   const [editName,     setEditName]     = useState("");
   const [editHours,    setEditHours]    = useState("");
@@ -3089,8 +3094,50 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
       hours: Number(newHours),
       userId: matched?.id || null,
       linked: !!matched,
+      jobId: newJobId || null,
     });
-    setNewName(""); setNewHours("");
+    setNewName(""); setNewHours(""); setNewJobId("");
+  };
+
+  // Jobs scheduled for the selected date
+  const scheduledJobsForDate = (jobs||[]).filter(j => {
+    const days = j.scheduleDays?.filter(d=>d.date) || (j.scheduledDate ? [{date:j.scheduledDate}] : []);
+    return days.some(d => d.date === selectedDate);
+  });
+
+  const submitAllocation = () => {
+    if (!allocName.trim()) { alert("Enter a name."); return; }
+    const totalAlloc = allocRows.reduce((s,r) => s + Number(r.hours||0), 0) + Number(allocUnalloc||0);
+    if (totalAlloc <= 0) { alert("Enter hours for at least one job or unallocated."); return; }
+    if (totalAlloc > 24) { alert("Total hours exceed 24. Please check your entries."); return; }
+    const nameLower = allocName.trim().toLowerCase();
+    const matched = (teamUsers||[]).find(u => [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase() === nameLower);
+    // Add one entry per job
+    allocRows.filter(r => Number(r.hours||0) > 0).forEach(r => {
+      addLaborEntry({
+        id: Date.now() + Math.random(),
+        date: selectedDate,
+        name: allocName.trim(),
+        hours: Number(r.hours),
+        userId: matched?.id || null,
+        linked: !!matched,
+        jobId: r.jobId || null,
+      });
+    });
+    // Add unallocated entry if any
+    if (Number(allocUnalloc||0) > 0) {
+      addLaborEntry({
+        id: Date.now() + Math.random(),
+        date: selectedDate,
+        name: allocName.trim(),
+        hours: Number(allocUnalloc),
+        userId: matched?.id || null,
+        linked: !!matched,
+        jobId: null,
+        unallocated: true,
+      });
+    }
+    setAllocName(""); setAllocRows([]); setAllocUnalloc(""); setAllocMode(false);
   };
 
   const startEdit = (e) => { setEditingId(e.id); setEditName(e.name); setEditHours(String(e.hours)); };
@@ -3232,39 +3279,129 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
           {new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
         </h2>
         {canManualEntry && (
-          <div style={{display:"flex", gap:8, marginBottom:10}}>
-            {canFreeTypeName ? (
-              <>
-                <input type="text" list="laborNamesList" value={newName} onChange={e => setNewName(e.target.value)}
-                  placeholder="Name (pick or type any name)" style={{...S.input, flex:2}}/>
-                <datalist id="laborNamesList">
-                  {(teamUsers||[]).map(u => {
-                    const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
-                    return <option key={u.id} value={label}/>;
-                  })}
-                  {(offAppWorkers||[]).map(w => (
-                    <option key={"oaw-"+w.id} value={w.name}/>
-                  ))}
-                </datalist>
-              </>
-            ) : (
-              <select value={newName} onChange={e => setNewName(e.target.value)}
-                style={{...S.input, flex:2}}>
-                <option value="">Select name...</option>
-                {(teamUsers||[]).map(u => {
-                  const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
-                  return <option key={u.id} value={label}>{label}</option>;
-                })}
-                {(offAppWorkers||[]).length > 0 && <option disabled>── Off-App Workers ──</option>}
-                {(offAppWorkers||[]).map(w => (
-                  <option key={"oaw-"+w.id} value={w.name}>{w.name}</option>
+          <div style={{marginBottom:12}}>
+            {/* Scheduled jobs for this date */}
+            {scheduledJobsForDate.length > 0 && (
+              <div style={{fontSize:12, color:C.textMuted, marginBottom:8, padding:"8px 12px",
+                background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+                <span style={{fontWeight:600, color:C.text}}>Scheduled today: </span>
+                {scheduledJobsForDate.map(j => (
+                  <span key={j.id} style={{marginRight:10}}>{j.clientName||"Unnamed"} · {j.address||""}</span>
                 ))}
-              </select>
+              </div>
             )}
-            <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
-              min="0" step="0.5" style={{...S.input, flex:1}} placeholder="Hrs"
-              onKeyDown={e => e.key==="Enter" && addEntry()}/>
-            <button style={{...S.btnPrimary, whiteSpace:"nowrap", padding:"8px 14px"}} onClick={addEntry}>+ Add</button>
+
+            {/* Mode toggle */}
+            <div style={{display:"flex", gap:8, marginBottom:8}}>
+              <button onClick={() => setAllocMode(false)}
+                style={{...S.btnSmall, background: !allocMode ? C.accent : C.surface2,
+                  color: !allocMode ? "#000" : C.textMuted, border:`1px solid ${!allocMode ? C.accent : C.border}`}}>
+                Single Entry
+              </button>
+              <button onClick={() => { setAllocMode(true); setAllocRows(scheduledJobsForDate.map(j=>({jobId:String(j.id), jobLabel:(j.clientName||"Unnamed")+" · "+(j.address||""), hours:""}))); }}
+                style={{...S.btnSmall, background: allocMode ? C.accent : C.surface2,
+                  color: allocMode ? "#000" : C.textMuted, border:`1px solid ${allocMode ? C.accent : C.border}`}}>
+                Split Hours Across Jobs
+              </button>
+            </div>
+
+            {!allocMode ? (
+              <div style={{display:"flex", gap:8}}>
+                {canFreeTypeName ? (
+                  <>
+                    <input type="text" list="laborNamesList" value={newName} onChange={e => setNewName(e.target.value)}
+                      placeholder="Name" style={{...S.input, flex:2}}/>
+                    <datalist id="laborNamesList">
+                      {(teamUsers||[]).map(u => { const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email; return <option key={u.id} value={label}/>; })}
+                      {(offAppWorkers||[]).map(w => <option key={"oaw-"+w.id} value={w.name}/>)}
+                    </datalist>
+                  </>
+                ) : (
+                  <select value={newName} onChange={e => setNewName(e.target.value)} style={{...S.input, flex:2}}>
+                    <option value="">Select name...</option>
+                    {(teamUsers||[]).map(u => { const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email; return <option key={u.id} value={label}>{label}</option>; })}
+                    {(offAppWorkers||[]).length > 0 && <option disabled>── Off-App Workers ──</option>}
+                    {(offAppWorkers||[]).map(w => <option key={"oaw-"+w.id} value={w.name}>{w.name}</option>)}
+                  </select>
+                )}
+                <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
+                  min="0" step="0.5" style={{...S.input, flex:1}} placeholder="Hrs"
+                  onKeyDown={e => e.key==="Enter" && addEntry()}/>
+                <select value={newJobId} onChange={e => setNewJobId(e.target.value)} style={{...S.input, flex:2}}>
+                  <option value="">Unallocated</option>
+                  {scheduledJobsForDate.length > 0 && <option disabled>── Today's Jobs ──</option>}
+                  {scheduledJobsForDate.map(j=>(
+                    <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
+                  ))}
+                  {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).length > 0 && <option disabled>── Other Jobs ──</option>}
+                  {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).map(j=>(
+                    <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
+                  ))}
+                </select>
+                <button style={{...S.btnPrimary, whiteSpace:"nowrap", padding:"8px 14px"}} onClick={addEntry}>+ Add</button>
+              </div>
+            ) : (
+              <div style={{background:C.surface2, borderRadius:10, padding:14, border:`1px solid ${C.border}`}}>
+                <div style={{marginBottom:10}}>
+                  {canFreeTypeName ? (
+                    <>
+                      <input type="text" list="laborNamesList2" value={allocName} onChange={e => setAllocName(e.target.value)}
+                        placeholder="Worker name" style={{...S.input, maxWidth:280}}/>
+                      <datalist id="laborNamesList2">
+                        {(teamUsers||[]).map(u => { const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email; return <option key={u.id} value={label}/>; })}
+                        {(offAppWorkers||[]).map(w => <option key={"oaw-"+w.id} value={w.name}/>)}
+                      </datalist>
+                    </>
+                  ) : (
+                    <select value={allocName} onChange={e => setAllocName(e.target.value)} style={{...S.input, maxWidth:280}}>
+                      <option value="">Select worker...</option>
+                      {(teamUsers||[]).map(u => { const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email; return <option key={u.id} value={label}>{label}</option>; })}
+                      {(offAppWorkers||[]).map(w => <option key={"oaw-"+w.id} value={w.name}>{w.name}</option>)}
+                    </select>
+                  )}
+                </div>
+
+                {/* Job rows */}
+                {allocRows.map((row, idx) => (
+                  <div key={row.jobId} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
+                    <div style={{flex:1, fontSize:13, color:C.text}}>{row.jobLabel}</div>
+                    <div style={{width:100, flexShrink:0}}>
+                      <input type="number" value={row.hours} onChange={e => setAllocRows(prev => prev.map((r,i) => i===idx ? {...r, hours:e.target.value} : r))}
+                        min="0" step="0.5" placeholder="Hrs" style={{...S.input}}/>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Add extra job not on schedule */}
+                <button style={{...S.btnSmall, fontSize:11, marginBottom:10}} onClick={() => {
+                  const allScheduledIds = new Set(allocRows.map(r=>r.jobId));
+                  const extra = (jobs||[]).find(j => !allScheduledIds.has(String(j.id)) && !["lost","draft"].includes(j.status));
+                  if (extra) setAllocRows(prev => [...prev, {jobId:String(extra.id), jobLabel:(extra.clientName||"Unnamed")+" · "+(extra.address||""), hours:""}]);
+                }}>+ Add another job</button>
+
+                {/* Unallocated */}
+                <div style={{display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderTop:`1px solid ${C.border}`}}>
+                  <div style={{flex:1, fontSize:13, color:C.textMuted, fontStyle:"italic"}}>Unallocated (drive time, shop, etc.)</div>
+                  <div style={{width:100, flexShrink:0}}>
+                    <input type="number" value={allocUnalloc} onChange={e => setAllocUnalloc(e.target.value)}
+                      min="0" step="0.5" placeholder="Hrs" style={{...S.input}}/>
+                  </div>
+                </div>
+
+                {/* Total */}
+                {(() => {
+                  const total = allocRows.reduce((s,r)=>s+Number(r.hours||0),0) + Number(allocUnalloc||0);
+                  return (
+                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:8, paddingTop:8, borderTop:`1px solid ${C.border}`}}>
+                      <span style={{fontSize:12, color: total > 10 ? C.danger : C.textMuted}}>
+                        Total: {total.toFixed(1)} hrs {total > 10 ? "⚠️ Over 10 hours" : ""}
+                      </span>
+                      <button style={S.btnPrimary} onClick={submitAllocation}>Save All Entries</button>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         )}
 
@@ -3273,6 +3410,8 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
             {dayEntries.map(e => (
               <div key={e.id} style={{background:C.surface2, borderRadius:8, marginBottom:6,
                 border: editingId===e.id ? `1px solid ${C.accent}` : `1px solid transparent`, padding:"10px 12px"}}>
+                {e.jobId && (() => { const j = (jobs||[]).find(x=>String(x.id)===String(e.jobId)); return j ? <div style={{fontSize:10, color:C.textMuted, marginBottom:4}}>📋 {j.clientName||"Unnamed"} · {j.address||""}</div> : null; })()}
+                {!e.jobId && e.unallocated && <div style={{fontSize:10, color:C.textMuted, marginBottom:4, fontStyle:"italic"}}>⏱ Unallocated (COGS)</div>}
                 {editingId === e.id ? (
                   <div>
                     <div style={{display:"flex", gap:8, marginBottom:8}}>
@@ -6772,13 +6911,12 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     const cogsIsEstimated = !hasActuals && !hasFifo;
     const cogsSource = hasActuals ? "actual" : hasFifo ? "fifo" : "estimated";
 
-    // Labor: actual hours × rate
-    const jobLabor = laborEntries
-      .filter(e => e.jobId === j.id || (e.date && e.date === jobDate)) // by jobId or date match
-      .reduce((s,e) => {
-        const rate = getRateForUser(e.userId, e.date || jobDate);
-        return s + (Number(e.hours||0) * (rate||0));
-      }, 0);
+    // Labor: actual hours × rate (job-linked entries)
+    const jobLaborEntries = laborEntries.filter(e => String(e.jobId) === String(j.id));
+    const jobLabor = jobLaborEntries.reduce((s,e) => {
+      const rate = getRateForUser(e.userId, e.date || jobDate);
+      return s + (Number(e.hours||0) * (rate||0));
+    }, 0);
     const laborIsEstimated = jobLabor === 0;
 
     // Overhead: allocate by revenue %
@@ -15229,7 +15367,7 @@ function App() {
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers}/></div>}
+        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings} reportSettings={reportSettings}/></div>}
