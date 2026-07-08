@@ -6214,7 +6214,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   });
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
-  const STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
+  const STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
   const statusLabel = (s) => s==="pending_review" ? "Pending Review" : s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
   // Filter jobs that have any revenue
