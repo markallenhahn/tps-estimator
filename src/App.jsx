@@ -4213,9 +4213,10 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
 
   // ── Which job status categories get geocoded/clustered/shown on the map ──
   // Defaults to Signed + Scheduled — the statuses you'd actually drive a route to.
-  const ZONE_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
+  const ZONE_STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
   const zoneStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
   const [filterStatuses, setFilterStatuses] = useState(zones?.filterStatuses || ["signed","scheduled"]);
+  const [showRoutingImportInfo, setShowRoutingImportInfo] = useState(false);
   const filterInitRef = useRef(false);
   useEffect(() => {
     if (!filterInitRef.current && zones?.filterStatuses) {
@@ -4267,9 +4268,27 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
     const file = e.target.files[0];
     if (!file) return;
     setCsvFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setCsvRows(parseCSV(ev.target.result));
-    reader.readAsText(file);
+    const ext = file.name.split(".").pop().toLowerCase();
+    if (ext === "csv") {
+      const reader = new FileReader();
+      reader.onload = (ev) => setCsvRows(parseCSV(ev.target.result));
+      reader.readAsText(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const wb = XLSX.read(ev.target.result, {type:"array"});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, {defval:""});
+        // Normalize keys to lowercase
+        const normalized = rows.map(r => {
+          const out = {};
+          Object.keys(r).forEach(k => { out[k.toLowerCase().trim()] = String(r[k]||"").trim(); });
+          return out;
+        });
+        setCsvRows(normalized);
+      };
+      reader.readAsArrayBuffer(file);
+    }
   };
 
   const importHistorical = async () => {
@@ -4667,13 +4686,40 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
         <section style={S.section}>
           <h2 style={S.h2}>Import Historical Addresses</h2>
           <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
-            Upload a CSV with columns: <strong>address, city, state, zip</strong> (header row required, extra columns are ignored).
+            Upload a CSV or Excel file with columns: <strong>address, city, state, zip</strong> (header row required, extra columns are ignored).
             These are used only to weight zone calculation — they won't appear as live jobs.
           </p>
-          <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileSelect} style={{display:"none"}}/>
-          <button style={S.btnSecondary} onClick={() => fileInputRef.current?.click()}>
-            📄 Choose CSV File
-          </button>
+          <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} style={{display:"none"}}/>
+          <div style={{display:"flex", alignItems:"center", gap:10}}>
+            <button style={S.btnSecondary} onClick={() => fileInputRef.current?.click()}>
+              <LucideIcons.Upload size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
+              Choose File (CSV or Excel)
+            </button>
+            <div style={{position:"relative"}}>
+              <LucideIcons.Info size={18} strokeWidth={2}
+                style={{color: showRoutingImportInfo ? C.accent : C.textMuted, cursor:"pointer", display:"block"}}
+                onClick={() => setShowRoutingImportInfo(p => !p)}/>
+              <div style={{display: showRoutingImportInfo ? "block" : "none", position:"absolute", left:0, top:24, zIndex:100,
+                background:"#fff", border:`1px solid ${C.border}`, borderRadius:10, padding:16,
+                boxShadow:"0 4px 20px rgba(0,0,0,0.12)", width:280}}>
+                <div style={{fontSize:12, fontWeight:700, marginBottom:10, color:C.text}}>Address Import Fields</div>
+                {[
+                  ["address","Required. Street address (e.g. 123 Main St)."],
+                  ["city","Required. City name."],
+                  ["state","Required. 2-letter state code (e.g. NJ)."],
+                  ["zip","Optional. 5-digit zip code."],
+                ].map(([field, desc]) => (
+                  <div key={field} style={{marginBottom:8}}>
+                    <div style={{fontSize:12, fontWeight:700, color:C.text}}>{field}</div>
+                    <div style={{fontSize:11, color:C.textMuted}}>{desc}</div>
+                  </div>
+                ))}
+                <div style={{fontSize:11, color:C.textMuted, marginTop:8, paddingTop:8, borderTop:`1px solid ${C.border}`}}>
+                  Column names must match exactly (case-insensitive). Extra columns are ignored.
+                </div>
+              </div>
+            </div>
+          </div>
           {csvFile && (
             <div style={{marginTop:10, fontSize:13, color:C.textMuted}}>
               {csvFile.name} — {csvRows.length} addresses found
