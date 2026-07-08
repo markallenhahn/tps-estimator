@@ -1046,7 +1046,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   const [stream,    setStream]    = useState(null);
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const fileInputRef  = useRef(null);
+  const cameraRollRef = useRef(null);
   const sigCanvasRef = useRef(null);
   const sigDrawing   = useRef(false);
   const [lightbox, setLightbox] = useState(null);
@@ -1131,20 +1132,42 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     } catch { alert("Camera permission denied or not available."); }
   };
 
-  // Desktop fallback: upload existing photo files instead of capturing live
+  // Save photo to job immediately as base64, then upload to Storage in background
+  const addPhotoOptimistic = (dataUrl, file, label) => {
+    const photoId = Date.now() + "-" + Math.random().toString(36).slice(2);
+    const path = `${tenantId}/${currentJob.id}/${photoId}.jpg`;
+    // Add base64 version immediately so it shows up even with no signal
+    updateJob(j => ({...j, photos:[...(j.photos||[]), {
+      id: photoId, url: dataUrl, storagePath: path, label,
+      ts: new Date().toLocaleTimeString(), pending: true,
+    }]}));
+    // Upload in background and swap URL when done
+    const doUpload = async () => {
+      try {
+        const blob = file || dataUrlToBlob(dataUrl);
+        const url = await storageUpload(path, blob, accessToken, file?.type || "image/jpeg");
+        // Swap pending base64 with real Storage URL
+        updateJob(j => ({...j, photos:(j.photos||[]).map(p =>
+          p.id === photoId ? {...p, url, pending: false} : p
+        )}));
+      } catch(err) {
+        console.error("Photo upload failed, keeping base64:", err);
+        // Leave the base64 version in place — it will persist with the job
+        updateJob(j => ({...j, photos:(j.photos||[]).map(p =>
+          p.id === photoId ? {...p, pending: false, uploadFailed: true} : p
+        )}));
+      }
+    };
+    doUpload();
+  };
+
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     for (const file of files) {
       const label = prompt("Label for " + file.name + ":", "") || "Area of concern";
-      const photoId = Date.now() + "-" + Math.random().toString(36).slice(2);
-      const path = `${tenantId}/${currentJob.id}/${photoId}.jpg`;
-      try {
-        const url = await storageUpload(path, file, accessToken, file.type);
-        updateJob(j => ({...j, photos:[...j.photos, {id: photoId, url, storagePath: path, label, ts: new Date().toLocaleTimeString()}]}));
-      } catch(err) {
-        console.error("Photo upload failed:", err);
-        alert("Failed to upload photo. Please try again.");
-      }
+      const reader = new FileReader();
+      reader.onload = (ev) => addPhotoOptimistic(ev.target.result, file, label);
+      reader.readAsDataURL(file);
     }
     e.target.value = "";
   };
@@ -1155,17 +1178,9 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
     const label = prompt("Label for this photo:", "") || "Area of concern";
-    const photoId = Date.now() + "-" + Math.random().toString(36).slice(2);
-    const path = `${tenantId}/${currentJob.id}/${photoId}.jpg`;
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     stopStream();
-    try {
-      const blob = dataUrlToBlob(canvas.toDataURL("image/jpeg", 0.85));
-      const url = await storageUpload(path, blob, accessToken);
-      updateJob(j => ({...j, photos:[...j.photos, {id: photoId, url, storagePath: path, label, ts: new Date().toLocaleTimeString()}]}));
-    } catch(err) {
-      console.error("Photo upload failed:", err);
-      alert("Failed to upload photo. Please try again.");
-    }
+    addPhotoOptimistic(dataUrl, null, label);
   };
 
   const removePhoto = (id) => {
@@ -2047,19 +2062,30 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {/* ── MEDIA ── */}
       <section style={S.section}>
         <h2 style={S.h2}>Photos</h2>
+        {/* Hidden file inputs */}
+        <input ref={fileInputRef} type="file" accept="image/*" multiple style={{display:"none"}}
+          onChange={handleFileUpload}/>
+        <input ref={cameraRollRef} type="file" accept="image/*" multiple style={{display:"none"}}
+          onChange={handleFileUpload}/>
+
         {isDesktop ? (
           <>
-            <input ref={fileInputRef} type="file" accept="image/*" multiple style={{display:"none"}}
-              onChange={handleFileUpload}/>
             <button style={{...S.btnCapture, maxWidth:220}} onClick={() => fileInputRef.current?.click()}>
-              📁 Upload Photo
+              <LucideIcons.Upload size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Upload Photo
             </button>
             <p style={{fontSize:11, color:C.textDim, marginTop:8, marginBottom:0}}>
-              Camera capture is for the mobile app — upload existing photo files here instead.
+              Camera capture is available in the mobile app — upload photo files here instead.
             </p>
           </>
         ) : !capturing ? (
-          <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}><LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Take Photo</button>
+          <div style={{display:"flex", gap:10}}>
+            <button style={{...S.btnCapture, flex:1}} onClick={startCamera}>
+              <LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Take Photo
+            </button>
+            <button style={{...S.btnCapture, flex:1}} onClick={() => cameraRollRef.current?.click()}>
+              <LucideIcons.Upload size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Upload Photo
+            </button>
+          </div>
         ) : (
           <div style={S.cameraBox}>
             <video ref={videoRef} autoPlay muted playsInline style={S.cameraPreview}/>
@@ -2078,7 +2104,19 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           <div style={S.mediaPhotoGrid}>
             {(currentJob.photos||[]).map(p => (
               <div key={p.id} style={S.mediaPhotoCard} onClick={() => setLightbox({type:'photo', item:p})}>
-                <img src={p.url || p.dataUrl} alt={p.label} style={S.mediaPhotoImg}/>
+                <img src={p.url || p.dataUrl} alt={p.label} style={{...S.mediaPhotoImg, opacity: p.pending ? 0.7 : 1}}/>
+                {p.pending && (
+                  <div style={{position:"absolute", top:6, left:6, background:"rgba(0,0,0,0.6)",
+                    color:"#fff", fontSize:9, fontWeight:700, borderRadius:4, padding:"2px 6px"}}>
+                    UPLOADING…
+                  </div>
+                )}
+                {p.uploadFailed && (
+                  <div style={{position:"absolute", top:6, left:6, background:"#ef4444",
+                    color:"#fff", fontSize:9, fontWeight:700, borderRadius:4, padding:"2px 6px"}}>
+                    SAVED OFFLINE
+                  </div>
+                )}
                 <div style={S.mediaPhotoOverlay}>
                   <div style={S.mediaPhotoLabel}>{p.label}</div>
                   <div style={S.mediaPhotoTime}>{p.ts}</div>
@@ -13114,6 +13152,9 @@ function App() {
   const [currentJobId,  setCurrentJobId] = useState(null);
   const [loading,       setLoading]      = useState(true);
   const [syncStatus,    setSyncStatus]   = useState("");
+  const [offlineQueue,  setOfflineQueue]  = useState(() => {
+    try { return JSON.parse(localStorage.getItem("biq_offline_jobs") || "[]"); } catch(e) { return []; }
+  });
   const [laborEntries,  setLaborEntries] = useState([]);
   const [zones,         setZones]        = useState(null);
   const [permissions,   setPermissions]  = useState(null);
@@ -13913,14 +13954,47 @@ function App() {
     } catch(e) {
       console.error("syncJob error:", e);
       if (!isRetry) {
-        // One automatic retry after a short delay — covers transient
-        // network blips and the tenant-not-yet-resolved race above.
         setTimeout(() => syncJob(job, true), 1000);
       } else {
-        setSyncStatus("⚠️ Save failed");
+        // Queue for retry when back online
+        setSyncStatus("⚠️ Saved offline");
+        setOfflineQueue(prev => {
+          const next = [...prev.filter(j => j.id !== job.id), job];
+          try { localStorage.setItem("biq_offline_jobs", JSON.stringify(next)); } catch(e) {}
+          return next;
+        });
       }
     }
   };
+
+  // Flush offline queue when connectivity returns
+  const flushOfflineQueue = async () => {
+    const queue = (() => { try { return JSON.parse(localStorage.getItem("biq_offline_jobs") || "[]"); } catch(e) { return []; } })();
+    if (!queue.length) return;
+    setSyncStatus("Syncing offline changes...");
+    let remaining = [...queue];
+    for (const job of queue) {
+      try {
+        const res = await tFetch("jobs", {
+          method: "POST",
+          headers: { "Prefer": "resolution=merge-duplicates" },
+          body: JSON.stringify({ id: job.id, data: job }),
+        });
+        if (res.ok) remaining = remaining.filter(j => j.id !== job.id);
+      } catch(e) { /* keep in queue */ }
+    }
+    try { localStorage.setItem("biq_offline_jobs", JSON.stringify(remaining)); } catch(e) {}
+    setOfflineQueue(remaining);
+    setSyncStatus(remaining.length === 0 ? "✓ All changes synced" : `⚠️ ${remaining.length} changes still pending`);
+    setTimeout(() => setSyncStatus(""), 3000);
+  };
+
+  // Auto-flush when coming back online
+  useEffect(() => {
+    const handler = () => { if (offlineQueue.length > 0) flushOfflineQueue(); };
+    window.addEventListener("online", handler);
+    return () => window.removeEventListener("online", handler);
+  }, [offlineQueue]);
 
   // ── Upsert rates ──
   const syncRates = async (r) => {
@@ -14134,6 +14208,18 @@ function App() {
       {!isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
+        {offlineQueue.length > 0 && (
+          <div style={{background:"#fef3c7", color:"#92400e", fontSize:12, textAlign:"center",
+            padding:"6px 12px", display:"flex", alignItems:"center", justifyContent:"center", gap:10}}>
+            <LucideIcons.WifiOff size={13} strokeWidth={2}/>
+            {offlineQueue.length} unsaved change{offlineQueue.length!==1?"s":""} — waiting for connection
+            <button onClick={flushOfflineQueue}
+              style={{fontSize:11, fontWeight:700, padding:"2px 10px", borderRadius:6,
+                background:"#92400e", color:"#fff", border:"none", cursor:"pointer"}}>
+              Retry Now
+            </button>
+          </div>
+        )}
         {syncStatus && (
           <div style={{
             background: syncStatus.startsWith("⚠️") ? "#fee2e2" : "#dcfce7",
