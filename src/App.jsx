@@ -6578,7 +6578,7 @@ function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
 }
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
-function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, laborEntries=[], expenses=[], teamUsers=[], materials=[], materialSettings={} }) {
+function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, laborEntries=[], expenses=[], teamUsers=[], materials=[], materialSettings={}, reportSettings={} }) {
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
@@ -15083,7 +15083,7 @@ function App() {
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
-        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings}/></div>}
+        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings} reportSettings={reportSettings}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
           setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: {...t.data, servicesOffered: services}} : t));
           tFetch("tenants?id=eq." + currentTenantId, { method:"PATCH", body:JSON.stringify({ data: {...currentTenant.data, servicesOffered: services} }) });
