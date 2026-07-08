@@ -6645,8 +6645,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 
   // Category bucket assignments from report settings
   const catBuckets = reportSettings?.categoryBuckets || {
-    "COGS":"cogs","Subcontractors":"cogs","Job Supplies":"cogs","Crew Supplies":"cogs","Fuel":"cogs",
-    "Equipment":"overhead","Overhead":"overhead","Labor":"labor","Other":"exclude",
+    "COGS":"cogs","Overhead":"overhead","Labor":"labor",
   };
 
   // Expenses grouped by bucket for the period
@@ -7679,8 +7678,9 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
 function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
   const DEFAULT_SUBCATS = { "COGS": [], "Overhead": [] };
   const DEFAULT_BUCKETS = {
-    "COGS":"cogs","Subcontractors":"cogs","Job Supplies":"cogs","Crew Supplies":"cogs","Fuel":"cogs",
-    "Equipment":"overhead","Overhead":"overhead","Labor":"labor","Other":"exclude",
+    "COGS":     "cogs",
+    "Overhead": "overhead",
+    "Labor":    "labor",
   };
   const defaults = {
     laborPct:16, fuelPct:5, cogsPct:25, overheadPct:15,
@@ -14076,15 +14076,9 @@ function App() {
     ebitdaTargetPct: 20, ebitdaTargetDollars: "",
     customSubcategories: { "COGS": [], "Overhead": [] },
     categoryBuckets: {
-      "COGS":          "cogs",
-      "Subcontractors":"cogs",
-      "Job Supplies":  "cogs",
-      "Crew Supplies": "cogs",
-      "Fuel":          "cogs",
-      "Equipment":     "overhead",
-      "Overhead":      "overhead",
-      "Labor":         "labor",
-      "Other":         "exclude",
+      "COGS":     "cogs",
+      "Overhead": "overhead",
+      "Labor":    "labor",
     },
   });
   const [teamUsers,     setTeamUsers]    = useState([]);
