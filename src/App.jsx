@@ -6713,7 +6713,30 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     // COGS: actuals first, then FIFO material calc, then estimated
     const actuals = j.costs?.actuals || {};
     const hasActuals = Object.values(actuals).some(av => av !== null && av !== "" && Number(av) > 0);
-    const actualsCOGS = Object.values(actuals).reduce((s,av) => s + Number(av||0), 0);
+    // For each cost key, use actual if entered, else fall back to estimated value
+    const estByKey = {
+      sealcoat:  fin.totalMaterials > 0 ? (fin.totalMaterials - (fin.fuelCost||0) - (fin.laborCost||0)) / Math.max(1, Object.keys(actuals).length) : 0,
+    };
+    // Use calcJobFinancials actVal pattern: blend actuals with estimates per line
+    const blendedCost = (() => {
+      const a = j.costs?.actuals || {};
+      const revenue_ = fin.revenue;
+      const areas_ = j.areas || [];
+      const sealcoatSqFt_ = areas_.filter(ar=>ar.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+      const crackFillLinFt_ = areas_.filter(ar=>ar.serviceType==="crackfill").reduce((s,ar)=>s+Number(ar.measurement||0),0);
+      const patchTons_ = calcPatchTons(areas_.filter(ar=>ar.serviceType==="patch").reduce((s,ar)=>s+Number(ar.measurement||0),0));
+      const estSealcoat_ = (sealcoatSqFt_/70)*4.33;
+      const estCrackFill_ = crackFillLinFt_*0.14;
+      const estAsphalt_ = patchTons_*80;
+      const estFuel_ = revenue_*0.05;
+      const estStone_ = Number(j.costs?.stoneTons||0)*20;
+      const estOther_ = Number(j.costs?.otherCost||0);
+      const estLabor_ = revenue_*0.16;
+      const av = (key, est) => (a[key]!=null && a[key]!=="" ? Number(a[key]) : est);
+      return av("sealcoat",estSealcoat_) + av("crackfill",estCrackFill_) + av("asphalt",estAsphalt_) +
+             av("fuel",estFuel_) + av("stone",estStone_) + av("other",estOther_) + av("labor",estLabor_);
+    })();
+    const actualsCOGS = hasActuals ? blendedCost : 0;
 
     // FIFO material cost: for each area, look up material type via serviceMappings, get FIFO unit cost × qty ÷ coverage
     const jobDate = j.date?.includes("/") ? new Date(j.date).toISOString().slice(0,10) : (j.date||"");
