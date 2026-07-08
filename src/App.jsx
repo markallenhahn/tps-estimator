@@ -3115,7 +3115,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
     // Add one entry per job
     allocRows.filter(r => Number(r.hours||0) > 0).forEach(r => {
       addLaborEntry({
-        id: Date.now() + Math.random(),
+        id: Date.now() * 1000 + Math.floor(Math.random() * 999),
         date: selectedDate,
         name: allocName.trim(),
         hours: Number(r.hours),
@@ -3127,7 +3127,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
     // Add unallocated entry if any
     if (Number(allocUnalloc||0) > 0) {
       addLaborEntry({
-        id: Date.now() + Math.random(),
+        id: Date.now() * 1000 + Math.floor(Math.random() * 999) + 1,
         date: selectedDate,
         name: allocName.trim(),
         hours: Number(allocUnalloc),
