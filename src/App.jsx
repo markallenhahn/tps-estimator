@@ -5854,14 +5854,19 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
 
             {importStep === "upload" && (
               <div>
-                <div style={{display:"flex", alignItems:"flex-start", gap:10, marginBottom:12}}>
-                  <p style={{fontSize:12, color:C.textMuted, margin:0, flex:1}}>
-                    Upload an Excel or CSV file. Column names will be auto-detected. Click the info icon to see field descriptions.
-                  </p>
-                  <div style={{position:"relative", flexShrink:0}}>
-                    <LucideIcons.Info size={18} strokeWidth={2} style={{color: showImportInfo ? C.accent : C.textMuted, cursor:"pointer"}}
+                <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
+                  Upload an Excel or CSV file. Column names will be auto-detected.
+                </p>
+                <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={handleImportFile}/>
+                <div style={{display:"flex", alignItems:"center", gap:10}}>
+                  <button style={S.btnPrimary} onClick={() => importFileRef.current?.click()}>
+                    <LucideIcons.Upload size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
+                    Choose File
+                  </button>
+                  <div style={{position:"relative"}}>
+                    <LucideIcons.Info size={18} strokeWidth={2} style={{color: showImportInfo ? C.accent : C.textMuted, cursor:"pointer", display:"block"}}
                       onClick={() => setShowImportInfo(p => !p)}/>
-                    <div style={{display: showImportInfo ? "block" : "none", position:"absolute", right:0, top:24, zIndex:100,
+                    <div style={{display: showImportInfo ? "block" : "none", position:"absolute", left:0, top:24, zIndex:100,
                       background:"#fff", border:`1px solid ${C.border}`, borderRadius:10, padding:16,
                       boxShadow:"0 4px 20px rgba(0,0,0,0.12)", width:300}}>
                       <div style={{fontSize:12, fontWeight:700, marginBottom:10, color:C.text}}>Import Field Reference</div>
@@ -5885,11 +5890,6 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                     </div>
                   </div>
                 </div>
-                <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={handleImportFile}/>
-                <button style={S.btnPrimary} onClick={() => importFileRef.current?.click()}>
-                  <LucideIcons.Upload size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
-                  Choose File
-                </button>
               </div>
             )}
 
