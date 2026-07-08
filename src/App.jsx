@@ -2909,7 +2909,7 @@ ${email}`:""}`;
 }
 
 // ─── Labor View ───────────────────────────────────────────────────────────────
-function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId }) {
+function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId, offAppWorkers=[] }) {
   const isDesktop = useIsDesktop();
   const today = new Date().toISOString().slice(0,10);
   const [selectedDate, setSelectedDate] = useState(today);
@@ -3242,6 +3242,9 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                     const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
                     return <option key={u.id} value={label}/>;
                   })}
+                  {(offAppWorkers||[]).map(w => (
+                    <option key={"oaw-"+w.id} value={w.name}/>
+                  ))}
                 </datalist>
               </>
             ) : (
@@ -3252,6 +3255,10 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                   const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
                   return <option key={u.id} value={label}>{label}</option>;
                 })}
+                {(offAppWorkers||[]).length > 0 && <option disabled>── Off-App Workers ──</option>}
+                {(offAppWorkers||[]).map(w => (
+                  <option key={"oaw-"+w.id} value={w.name}>{w.name}</option>
+                ))}
               </select>
             )}
             <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
@@ -3278,6 +3285,9 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                               const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
                               return <option key={u.id} value={label}/>;
                             })}
+                            {(offAppWorkers||[]).map(w => (
+                              <option key={"oaw-"+w.id} value={w.name}/>
+                            ))}
                           </datalist>
                         </>
                       ) : (
@@ -7909,7 +7919,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
 }
 
 // ─── Team View (owner/manager only) ────────────────────────────────────────────────────
-function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
+function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData, offAppWorkers=[], syncOffAppWorkers }) {
   const isManager = userRole === "manager";
   const [users,     setUsers]     = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -8205,6 +8215,155 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
       </section>
 
       <CrewsSection users={users} isManager={isManager} tFetch={tFetch}/>
+
+      {/* ── Off-App Workers ── */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Off-App Workers</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:14}}>
+          Add workers who don't have a phone or email. They won't receive an invite but can be selected in the Labor tab for time tracking and cost calculations.
+        </p>
+        <OffAppWorkersSection offAppWorkers={offAppWorkers} syncOffAppWorkers={syncOffAppWorkers}/>
+      </section>
+    </div>
+  );
+}
+
+function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
+  const [newName,    setNewName]    = useState("");
+  const [saving,     setSaving]     = useState(false);
+  const [editingId,  setEditingId]  = useState(null);
+  const [editName,   setEditName]   = useState("");
+  const [newRate,    setNewRate]    = useState("");
+  const [newRateDate,setNewRateDate]= useState(new Date().toISOString().slice(0,10));
+  const [rateEditId, setRateEditId] = useState(null);
+
+  const addWorker = async () => {
+    if (!newName.trim()) return;
+    setSaving(true);
+    const worker = { id: Date.now(), name: newName.trim(), rateHistory: [] };
+    await syncOffAppWorkers([...offAppWorkers, worker]);
+    setNewName("");
+    setSaving(false);
+  };
+
+  const removeWorker = async (id) => {
+    if (!confirm("Remove this worker? Their past labor entries won't be affected.")) return;
+    await syncOffAppWorkers(offAppWorkers.filter(w => w.id !== id));
+  };
+
+  const saveRate = async (workerId) => {
+    if (!newRate || isNaN(Number(newRate)) || Number(newRate) < 0) { alert("Enter a valid rate."); return; }
+    if (!newRateDate) { alert("Enter a start date."); return; }
+    const entry = { rate: Number(newRate), startDate: newRateDate };
+    const updated = offAppWorkers.map(w => {
+      if (w.id !== workerId) return w;
+      const rateHistory = [...(w.rateHistory||[]).filter(r => r.startDate !== newRateDate), entry]
+        .sort((a,b) => a.startDate.localeCompare(b.startDate));
+      return {...w, rateHistory};
+    });
+    await syncOffAppWorkers(updated);
+    setRateEditId(null);
+    setNewRate(""); setNewRateDate(new Date().toISOString().slice(0,10));
+  };
+
+  const getCurrentRate = (w) => {
+    const today = new Date().toISOString().slice(0,10);
+    const hist = (w.rateHistory||[]).filter(r => r.startDate <= today);
+    return hist.length > 0 ? hist[hist.length-1].rate : null;
+  };
+
+  return (
+    <div style={{display:"flex", flexDirection:"column", gap:0}}>
+      {offAppWorkers.length === 0 && (
+        <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>No off-app workers added yet.</p>
+      )}
+      {offAppWorkers.map(w => {
+        const currentRate = getCurrentRate(w);
+        return (
+          <div key={w.id} style={{borderBottom:`1px solid ${C.border}`, padding:"12px 0"}}>
+            <div style={{display:"flex", alignItems:"center", gap:8}}>
+              <div style={{flex:1}}>
+                {editingId === w.id ? (
+                  <div style={{display:"flex", gap:8}}>
+                    <input value={editName} onChange={e => setEditName(e.target.value)}
+                      style={{...S.input, flex:1}}/>
+                    <button style={S.btnPrimary} onClick={async () => {
+                      if (!editName.trim()) return;
+                      await syncOffAppWorkers(offAppWorkers.map(x => x.id===w.id ? {...x, name:editName.trim()} : x));
+                      setEditingId(null);
+                    }}>Save</button>
+                    <button style={S.btnSecondary} onClick={() => setEditingId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div style={{display:"flex", alignItems:"center", gap:8}}>
+                    <span style={{fontWeight:600, fontSize:14}}>{w.name}</span>
+                    <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`,
+                      borderRadius:4, padding:"1px 6px", color:C.textMuted}}>Off-App</span>
+                    {currentRate != null && (
+                      <span style={{fontSize:12, color:C.textMuted}}>${currentRate}/hr</span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {editingId !== w.id && (
+                <div style={{display:"flex", gap:6}}>
+                  <button style={{...S.btnSmall}} onClick={() => { setEditingId(w.id); setEditName(w.name); }}>
+                    <LucideIcons.Pencil size={12} strokeWidth={2}/>
+                  </button>
+                  <button style={{...S.btnSmall, color:C.danger}} onClick={() => removeWorker(w.id)}>✕</button>
+                </div>
+              )}
+            </div>
+
+            {/* Rate history */}
+            <div style={{marginTop:8, paddingLeft:0}}>
+              {(w.rateHistory||[]).length > 0 && (
+                <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:6}}>
+                  {[...(w.rateHistory||[])].sort((a,b)=>b.startDate.localeCompare(a.startDate)).map((r,i) => (
+                    <span key={i} style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`,
+                      borderRadius:4, padding:"2px 8px", color:C.textMuted}}>
+                      ${r.rate}/hr from {r.startDate}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {rateEditId === w.id ? (
+                <div style={{display:"flex", gap:8, flexWrap:"wrap", alignItems:"flex-end"}}>
+                  <label style={{fontSize:11, fontWeight:600}}>Rate ($/hr)
+                    <input type="number" value={newRate} onChange={e=>setNewRate(e.target.value)}
+                      min="0" step="0.25" style={{...S.input, width:90, marginTop:4}}/>
+                  </label>
+                  <label style={{fontSize:11, fontWeight:600}}>Effective Date
+                    <input type="date" value={newRateDate} onChange={e=>setNewRateDate(e.target.value)}
+                      style={{...S.input, marginTop:4}}/>
+                  </label>
+                  <button style={S.btnPrimary} onClick={() => saveRate(w.id)}>Save Rate</button>
+                  <button style={S.btnSecondary} onClick={() => setRateEditId(null)}>Cancel</button>
+                </div>
+              ) : (
+                <button style={{...S.btnSmall, fontSize:11}} onClick={() => {
+                  setRateEditId(w.id);
+                  setNewRate(""); setNewRateDate(new Date().toISOString().slice(0,10));
+                }}>
+                  <LucideIcons.Plus size={11} strokeWidth={2} style={{verticalAlign:"middle",marginRight:3}}/>
+                  {(w.rateHistory||[]).length > 0 ? "Update Rate" : "Set Rate"}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Add new worker */}
+      <div style={{display:"flex", gap:8, marginTop:14}}>
+        <input value={newName} onChange={e => setNewName(e.target.value)}
+          placeholder="Full name" style={{...S.input, flex:1}}
+          onKeyDown={e => e.key==="Enter" && addWorker()}/>
+        <button style={{...S.btnPrimary, opacity: saving?0.6:1}} onClick={addWorker} disabled={saving}>
+          <LucideIcons.Plus size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
+          Add Worker
+        </button>
+      </div>
     </div>
   );
 }
@@ -13165,6 +13324,7 @@ function App() {
     street: "", city: "", state: "", zip: "", website: "", googleReviewUrl: "",
   });
   const [iconStyle,     setIconStyle]    = useState("emoji"); // "emoji" | "lucide" — global, admin-set
+  const [offAppWorkers, setOffAppWorkers] = useState([]);
   const [reportSettings, setReportSettings] = useState({
     laborPct: 16, fuelPct: 5, cogsPct: 25, overheadPct: 15,
     ebitdaTargetPct: 20, ebitdaTargetDollars: "",
@@ -13546,6 +13706,7 @@ function App() {
         if (Array.isArray(sd) && sd.length > 0) {
           if (sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
           if (sd[0].data?.reportSettings) setReportSettings(prev => ({...prev, ...sd[0].data.reportSettings}));
+          if (sd[0].data?.offAppWorkers) setOffAppWorkers(sd[0].data.offAppWorkers);
         }
 
         const mr = await tFetch("materials?select=id,data&order=id.desc");
@@ -13681,6 +13842,17 @@ function App() {
         body: JSON.stringify({ data: { iconStyle: style } }),
       });
     } catch(e) { console.error("syncIconStyle error:", e); }
+  };
+
+  const syncOffAppWorkers = async (workers) => {
+    setOffAppWorkers(workers);
+    try {
+      await tFetch("appsettings?on_conflict=tenant_id", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ data: { offAppWorkers: workers } }),
+      });
+    } catch(e) { console.error("syncOffAppWorkers error:", e); }
   };
 
   const syncReportSettings = async (settings) => {
@@ -14265,7 +14437,7 @@ function App() {
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
+        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings}/></div>}
@@ -14278,7 +14450,7 @@ function App() {
         {view==="referral"      && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
         {view==="help" && getAccessLevel(permissions,"help",userRoles)!=="hidden" && <HelpView tFetch={tFetch} currentTenantId={currentTenantId} session={session} userRole={userRole} accessToken={session?.access_token} currentUserName={currentUserName} currentTenant={currentTenant}/>}
         {view==="request-form"  && userRole==="owner" && <EstimateRequestLinkView setView={navigateTo} currentTenantId={currentTenantId}/>}
-        {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data}/>}
+        {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data} offAppWorkers={offAppWorkers} syncOffAppWorkers={syncOffAppWorkers}/>}
         {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle} reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>}
         {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token} permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions}/>}
         {view==="global-permissions" && isPlatformAdmin && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={false}/>}
