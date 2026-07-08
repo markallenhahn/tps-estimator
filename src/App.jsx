@@ -6252,7 +6252,27 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
     <div>
       {/* Date range controls */}
       <section style={S.section}>
-        <h2 style={S.h2}>EBITDA Report</h2>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
+          <h2 style={{...S.h2, margin:0}}>EBITDA Report</h2>
+          <button style={S.btnSmall} onClick={() => {
+            const rows = [["Job","Date","Revenue","COGS","Gross Profit","GP%","Labor","Overhead","EBITDA","EBITDA%"]];
+            ebitdaJobData.forEach(d => rows.push([
+              d.job.clientName||"Unnamed", d.job.date||"",
+              d.revenue, d.cogs, d.grossProfit,
+              (d.grossMarginPct/100).toFixed(4),
+              d.jobLabor, d.overheadAlloc, d.ebitda,
+              (d.ebitdaPct/100).toFixed(4),
+            ]));
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            ws["!cols"] = [20,12,12,12,14,8,12,12,12,10].map(w=>({wch:w}));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "EBITDA");
+            XLSX.writeFile(wb, "ebitda-report.xlsx");
+          }}>
+            <LucideIcons.Download size={13} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
+            Export to Excel
+          </button>
+        </div>
         <div style={{display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"flex-end"}}>
           <div style={{display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden"}}>
             {["ytd","custom"].map(r => (
