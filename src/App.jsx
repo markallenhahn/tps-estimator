@@ -8328,15 +8328,11 @@ function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
                 </div>
               )}
               {rateEditId === w.id ? (
-                <div style={{display:"flex", gap:8, flexWrap:"wrap", alignItems:"flex-end"}}>
-                  <label style={{fontSize:11, fontWeight:600}}>Rate ($/hr)
-                    <input type="number" value={newRate} onChange={e=>setNewRate(e.target.value)}
-                      min="0" step="0.25" style={{...S.input, width:90, marginTop:4}}/>
-                  </label>
-                  <label style={{fontSize:11, fontWeight:600}}>Effective Date
-                    <input type="date" value={newRateDate} onChange={e=>setNewRateDate(e.target.value)}
-                      style={{...S.input, marginTop:4}}/>
-                  </label>
+                <div style={{display:"flex", gap:8, flexWrap:"wrap", alignItems:"center"}}>
+                  <input type="number" value={newRate} onChange={e=>setNewRate(e.target.value)}
+                    min="0" step="0.25" placeholder="Rate ($/hr)" style={{...S.input, width:110}}/>
+                  <input type="date" value={newRateDate} onChange={e=>setNewRateDate(e.target.value)}
+                    style={{...S.input, width:150}}/>
                   <button style={S.btnPrimary} onClick={() => saveRate(w.id)}>Save Rate</button>
                   <button style={S.btnSecondary} onClick={() => setRateEditId(null)}>Cancel</button>
                 </div>
@@ -8355,13 +8351,13 @@ function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
       })}
 
       {/* Add new worker */}
-      <div style={{display:"flex", gap:8, marginTop:14}}>
+      <div style={{display:"flex", gap:8, marginTop:14, maxWidth:400}}>
         <input value={newName} onChange={e => setNewName(e.target.value)}
           placeholder="Full name" style={{...S.input, flex:1}}
           onKeyDown={e => e.key==="Enter" && addWorker()}/>
-        <button style={{...S.btnPrimary, opacity: saving?0.6:1}} onClick={addWorker} disabled={saving}>
+        <button style={{...S.btnPrimary, flexShrink:0, opacity: saving?0.6:1}} onClick={addWorker} disabled={saving}>
           <LucideIcons.Plus size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
-          Add Worker
+          Add
         </button>
       </div>
     </div>
