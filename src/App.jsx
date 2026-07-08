@@ -639,7 +639,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
     return (
       <nav style={S.sidebar}>
         <div style={S.sidebarBrand}>
-          <img src={currentLogo} alt={currentCompanyAlt} style={{width:"100%", maxWidth:140, display:"block"}}/>
+          <img src={currentLogo} alt={currentCompanyAlt} style={{height:36, width:"auto", display:"block"}}/>
         </div>
         {myTenants && myTenants.length > 1 && (
           <div style={{padding:"0 16px 12px"}}>
