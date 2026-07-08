@@ -8329,10 +8329,14 @@ function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
               )}
               {rateEditId === w.id ? (
                 <div style={{display:"flex", gap:8, flexWrap:"wrap", alignItems:"center"}}>
-                  <input type="number" value={newRate} onChange={e=>setNewRate(e.target.value)}
-                    min="0" step="0.25" placeholder="Rate ($/hr)" style={{...S.input, width:110}}/>
-                  <input type="date" value={newRateDate} onChange={e=>setNewRateDate(e.target.value)}
-                    style={{...S.input, width:150}}/>
+                  <div style={{width:110, flexShrink:0}}>
+                    <input type="number" value={newRate} onChange={e=>setNewRate(e.target.value)}
+                      min="0" step="0.25" placeholder="Rate ($/hr)" style={{...S.input}}/>
+                  </div>
+                  <div style={{width:150, flexShrink:0}}>
+                    <input type="date" value={newRateDate} onChange={e=>setNewRateDate(e.target.value)}
+                      style={{...S.input}}/>
+                  </div>
                   <button style={S.btnPrimary} onClick={() => saveRate(w.id)}>Save Rate</button>
                   <button style={S.btnSecondary} onClick={() => setRateEditId(null)}>Cancel</button>
                 </div>
