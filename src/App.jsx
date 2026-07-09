@@ -7941,6 +7941,15 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  // Auto-save helper for pill clicks — updates draft and immediately persists
+  const autoSaveDraft = (updater) => {
+    setDraft(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      syncReportSettings(next);
+      return next;
+    });
+  };
+
   const BUCKET_OPTS = [
     {value:"cogs",    label:"COGS",    color:"#ef4444"},
     {value:"labor",   label:"Labor",   color:"#f59e0b"},
@@ -7992,7 +8001,7 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
                     <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
                       {unassigned[cat].map(s => (
                         <button key={s} onClick={() => {
-                          setDraft(p => {
+                          autoSaveDraft(p => {
                             const ns = new Set([...(p.customSubcategories[cat]||[]), s]);
                             return {...p, customSubcategories:{...p.customSubcategories,[cat]:[...ns]}};
                           });
@@ -8028,7 +8037,7 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
                         {s}
                         {isCustom && (
                           <button onClick={() => {
-                            setDraft(p => {
+                            autoSaveDraft(p => {
                               return {...p, customSubcategories:{...p.customSubcategories,[cat]:(p.customSubcategories[cat]||[]).filter(x=>x!==s)}};
                             });
                           }} style={{background:"none", border:"none", cursor:"pointer", fontSize:13, color:C.textMuted}}>×</button>
@@ -8051,13 +8060,13 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
               placeholder="Custom subcategory…" style={{...S.input, flex:1}}
               onKeyDown={e => {
                 if (e.key==="Enter" && newSubcatName.trim()) {
-                  setDraft(p => { const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
+                  autoSaveDraft(p => { const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
                   setNewSubcatName("");
                 }
               }}/>
             <button style={{...S.btnSmall, flexShrink:0}} onClick={() => {
               if (!newSubcatName.trim()) return;
-              setDraft(p => { const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
+              autoSaveDraft(p => { const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
               setNewSubcatName("");
             }}>+ Add</button>
           </div>
