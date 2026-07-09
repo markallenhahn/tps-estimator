@@ -7959,61 +7959,7 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
 
       <div style={{display:"flex", flexDirection:"column", gap:24}}>
 
-        {/* Category Bucket Assignments */}
-        <div>
-          <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:12}}>
-            Expense Category Buckets
-          </div>
-          <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
-            Assign each expense category to a bucket. EBITDA = Revenue − COGS − Labor − Overhead.
-          </p>
-          <div style={{border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden"}}>
-            {allCats.map((cat, idx) => {
-              const bucket = draft.categoryBuckets[cat];
-              return (
-                <div key={cat} style={{padding:"10px 14px",
-                  borderBottom: idx < allCats.length-1 ? `1px solid ${C.border}` : "none",
-                  background: idx%2===0 ? C.surface : C.surface2}}>
-                  <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>{cat}</div>
-                  <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center"}}>
-                    {BUCKET_OPTS.map(opt => (
-                      <button key={opt.value} onClick={() => setBucket(cat, opt.value)}
-                        style={{fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, cursor:"pointer",
-                          border:`1px solid ${bucket===opt.value ? opt.color : C.border}`,
-                          background: bucket===opt.value ? opt.color+"20" : C.surface,
-                          color: bucket===opt.value ? opt.color : C.textMuted}}>
-                        {opt.label}
-                      </button>
-                    ))}
-                    {!Object.keys(DEFAULT_BUCKETS).includes(cat) && (
-                      <button onClick={() => {
-                        const next = {...draft.categoryBuckets};
-                        delete next[cat];
-                        setDraft(p => ({...p, categoryBuckets: next}));
-                      }} style={{fontSize:11, color:C.danger, background:"none", border:"none", cursor:"pointer", padding:"4px 6px"}}>✕</button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {/* Add custom category */}
-          <div style={{display:"flex", gap:8, marginTop:10, maxWidth:380}}>
-            <input value={newCatName} onChange={e=>setNewCatName(e.target.value)}
-              placeholder="Add custom category…" style={{...S.input, flex:1}}
-              onKeyDown={e => {
-                if (e.key==="Enter" && newCatName.trim()) {
-                  setBucket(newCatName.trim(), "exclude");
-                  setNewCatName("");
-                }
-              }}/>
-            <button style={{...S.btnSmall, flexShrink:0}} onClick={() => {
-              if (!newCatName.trim()) return;
-              setBucket(newCatName.trim(), "exclude");
-              setNewCatName("");
-            }}>+ Add</button>
-          </div>
-        </div>
+
 
         {/* Subcategories */}
         <div>
@@ -8044,10 +7990,12 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
                     <div style={{fontSize:11, fontWeight:600, color:C.textMuted, marginBottom:4}}>{cat}</div>
                     <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
                       {unassigned[cat].map(s => (
-                        <button key={s} onClick={() => setDraft(p => ({...p, customSubcategories:{
-                          ...p.customSubcategories,
-                          [cat]: [...new Set([...(p.customSubcategories[cat]||[]), s])]
-                        }}))} style={{fontSize:11, padding:"3px 10px", borderRadius:20, cursor:"pointer",
+                        <button key={s} onClick={() => {
+                          setDraft(p => {
+                            const ns = new Set([...(p.customSubcategories[cat]||[]), s]);
+                            return {...p, customSubcategories:{...p.customSubcategories,[cat]:[...ns]}};
+                          });
+                        }} style={{fontSize:11, padding:"3px 10px", borderRadius:20, cursor:"pointer",
                           border:`1px dashed ${C.border}`, background:C.surface, color:C.textMuted}}>
                           + {s}
                         </button>
@@ -8078,10 +8026,11 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
                         border:`1px solid ${isCustom ? C.accent : C.border}`, color:C.text}}>
                         {s}
                         {isCustom && (
-                          <button onClick={() => setDraft(p => ({...p, customSubcategories:{
-                            ...p.customSubcategories,
-                            [cat]: (p.customSubcategories[cat]||[]).filter(x => x !== s)
-                          }}))} style={{background:"none", border:"none", cursor:"pointer", fontSize:13, color:C.textMuted}}>×</button>
+                          <button onClick={() => {
+                            setDraft(p => {
+                              return {...p, customSubcategories:{...p.customSubcategories,[cat]:(p.customSubcategories[cat]||[]).filter(x=>x!==s)}};
+                            });
+                          }} style={{background:"none", border:"none", cursor:"pointer", fontSize:13, color:C.textMuted}}>×</button>
                         )}
                       </span>
                     );
