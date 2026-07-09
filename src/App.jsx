@@ -3520,42 +3520,6 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                 </div>
               ))}
             </div>
-            {/* Inline edit form */}
-            {editingExpId === e.id && (
-              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
-                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
-                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
-                    style={{...S.input, flex:1, minWidth:130}}/>
-                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
-                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
-                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
-                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
-                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
-                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                  </select>
-                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
-                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
-                      <option value="">No subcategory</option>
-                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  )}
-                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
-                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
-                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
-                </div>
-                <div style={{display:"flex", gap:8}}>
-                  <button style={S.btnPrimary} onClick={()=>{
-                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
-                    setEditingExpId(null);
-                  }}>Save</button>
-                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
-                </div>
-              </div>
-            )}
           );
         })}
       </section>
@@ -4362,42 +4326,6 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                 )}
               </div>
             </div>
-            {/* Inline edit form */}
-            {editingExpId === e.id && (
-              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
-                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
-                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
-                    style={{...S.input, flex:1, minWidth:130}}/>
-                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
-                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
-                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
-                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
-                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
-                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                  </select>
-                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
-                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
-                      <option value="">No subcategory</option>
-                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  )}
-                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
-                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
-                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
-                </div>
-                <div style={{display:"flex", gap:8}}>
-                  <button style={S.btnPrimary} onClick={()=>{
-                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
-                    setEditingExpId(null);
-                  }}>Save</button>
-                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
-                </div>
-              </div>
-            )}
           );
         })}
       </section>
@@ -5171,42 +5099,6 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
                 )}
               </>}
             </div>
-            {/* Inline edit form */}
-            {editingExpId === e.id && (
-              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
-                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
-                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
-                    style={{...S.input, flex:1, minWidth:130}}/>
-                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
-                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
-                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
-                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
-                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
-                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                  </select>
-                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
-                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
-                      <option value="">No subcategory</option>
-                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  )}
-                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
-                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
-                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
-                </div>
-                <div style={{display:"flex", gap:8}}>
-                  <button style={S.btnPrimary} onClick={()=>{
-                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
-                    setEditingExpId(null);
-                  }}>Save</button>
-                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
-                </div>
-              </div>
-            )}
           );
         })}
       </div>
@@ -8618,42 +8510,6 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                 </div>
               )}
             </div>
-            {/* Inline edit form */}
-            {editingExpId === e.id && (
-              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
-                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
-                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
-                    style={{...S.input, flex:1, minWidth:130}}/>
-                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
-                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
-                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
-                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
-                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
-                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                  </select>
-                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
-                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
-                      <option value="">No subcategory</option>
-                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  )}
-                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
-                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
-                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
-                </div>
-                <div style={{display:"flex", gap:8}}>
-                  <button style={S.btnPrimary} onClick={()=>{
-                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
-                    setEditingExpId(null);
-                  }}>Save</button>
-                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
-                </div>
-              </div>
-            )}
           );
         })}
       </section>
