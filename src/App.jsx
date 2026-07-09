@@ -8101,7 +8101,7 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
               placeholder="Custom subcategory…" style={{...S.input, flex:1}}
               onKeyDown={e => {
                 if (e.key==="Enter" && newSubcatName.trim()) {
-                  const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
+                  setDraft(p => { const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
                   setNewSubcatName("");
                 }
               }}/>
