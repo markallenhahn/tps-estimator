@@ -10367,7 +10367,8 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           const linkedJob = jobs.find(j=>String(j.id)===String(e.jobId));
           const isSelected = selectedIds.has(e.id);
           return (
-            <div key={e.id} style={{display:"flex", alignItems:"center", gap:8, padding:"10px 4px",
+            <React.Fragment key={e.id}>
+            <div style={{display:"flex", alignItems:"center", gap:8, padding:"10px 4px",
               borderBottom:`1px solid ${C.border}`, background: isSelected ? "#fffbeb" : "transparent"}}>
               {canEdit && (
                 <input type="checkbox" checked={isSelected} style={{flexShrink:0}}
@@ -10445,6 +10446,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 </div>
               </div>
             )}
+            </React.Fragment>
           );
         })}
       </section>
