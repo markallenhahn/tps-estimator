@@ -7976,11 +7976,12 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
               "COGS": ["Materials","Subcontractors","Equipment Rental","Job Supplies","Crew Supplies","Fuel"],
               "Overhead": ["Insurance","Office & Software","Vehicle Payments/Lease","Equipment Payments/Lease","Equipment Maintenance & Repairs","Marketing & Advertising","Phone & Utilities","Accounting & Legal","Owner Salary/Draw","Other G&A"],
             };
-            const allAssigned = new Set([
-              ...Object.keys(EXPENSE_CATEGORY_MAP).flatMap(cat => EXPENSE_CATEGORY_MAP[cat]),
-              ...Object.values(draft.customSubcategories||{}).flat(),
-            ]);
-            const unassigned = { COGS: RECOMMENDED.COGS.filter(s=>!allAssigned.has(s)), Overhead: RECOMMENDED.Overhead.filter(s=>!allAssigned.has(s)) };
+            // Only filter out items already in customSubcategories (built-ins are always shown separately)
+            const customAssigned = new Set(Object.values(draft.customSubcategories||{}).flat());
+            const unassigned = {
+              COGS: RECOMMENDED.COGS.filter(s=>!customAssigned.has(s)),
+              Overhead: RECOMMENDED.Overhead.filter(s=>!customAssigned.has(s)),
+            };
             if (unassigned.COGS.length === 0 && unassigned.Overhead.length === 0) return null;
             return (
               <div style={{background:C.surface2, borderRadius:8, padding:12, marginBottom:12, border:`1px solid ${C.border}`}}>
