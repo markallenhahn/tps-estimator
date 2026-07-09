@@ -8101,13 +8101,13 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
               placeholder="Custom subcategory…" style={{...S.input, flex:1}}
               onKeyDown={e => {
                 if (e.key==="Enter" && newSubcatName.trim()) {
-                  setDraft(p => ({...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()])]}}}));
+                  const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
                   setNewSubcatName("");
                 }
               }}/>
             <button style={{...S.btnSmall, flexShrink:0}} onClick={() => {
               if (!newSubcatName.trim()) return;
-              setDraft(p => ({...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()])]}}}));
+              setDraft(p => { const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
               setNewSubcatName("");
             }}>+ Add</button>
           </div>
