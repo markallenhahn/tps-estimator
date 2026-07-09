@@ -3520,6 +3520,42 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                 </div>
               ))}
             </div>
+            {/* Inline edit form */}
+            {editingExpId === e.id && (
+              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
+                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
+                    style={{...S.input, flex:1, minWidth:130}}/>
+                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
+                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
+                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
+                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
+                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
+                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
+                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
+                      <option value="">No subcategory</option>
+                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  )}
+                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
+                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
+                </div>
+                <div style={{display:"flex", gap:8}}>
+                  <button style={S.btnPrimary} onClick={()=>{
+                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
+                    setEditingExpId(null);
+                  }}>Save</button>
+                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
           );
         })}
       </section>
@@ -4326,6 +4362,42 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                 )}
               </div>
             </div>
+            {/* Inline edit form */}
+            {editingExpId === e.id && (
+              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
+                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
+                    style={{...S.input, flex:1, minWidth:130}}/>
+                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
+                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
+                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
+                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
+                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
+                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
+                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
+                      <option value="">No subcategory</option>
+                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  )}
+                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
+                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
+                </div>
+                <div style={{display:"flex", gap:8}}>
+                  <button style={S.btnPrimary} onClick={()=>{
+                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
+                    setEditingExpId(null);
+                  }}>Save</button>
+                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
           );
         })}
       </section>
@@ -5099,6 +5171,42 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
                 )}
               </>}
             </div>
+            {/* Inline edit form */}
+            {editingExpId === e.id && (
+              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
+                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
+                    style={{...S.input, flex:1, minWidth:130}}/>
+                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
+                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
+                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
+                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
+                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
+                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
+                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
+                      <option value="">No subcategory</option>
+                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  )}
+                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
+                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
+                </div>
+                <div style={{display:"flex", gap:8}}>
+                  <button style={S.btnPrimary} onClick={()=>{
+                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
+                    setEditingExpId(null);
+                  }}>Save</button>
+                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
           );
         })}
       </div>
@@ -6803,8 +6911,17 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const periodRevenue = ebitdaJobs.reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue, 0);
 
   // Category bucket assignments from report settings
-  const catBuckets = reportSettings?.categoryBuckets || {
-    "COGS":"cogs","Overhead":"overhead","Labor":"labor",
+  // Include legacy category names in bucket mapping
+  const catBuckets = {
+    // Legacy top-level categories mapped to new buckets
+    "Subcontractors": "cogs",
+    "Job Supplies":   "cogs",
+    "Crew Supplies":  "cogs",
+    "Fuel":           "cogs",
+    "Equipment":      "overhead",
+    "Other":          "exclude",
+    // Current categories from reportSettings
+    ...(reportSettings?.categoryBuckets || {"COGS":"cogs","Overhead":"overhead","Labor":"labor"}),
   };
 
   // Expenses grouped by bucket for the period
@@ -8006,59 +8123,99 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
           </div>
         </div>
 
-        {/* Custom Subcategories */}
+        {/* Subcategories */}
         <div>
           <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8}}>
-            Custom Subcategories
+            Subcategories
           </div>
           <p style={{fontSize:12, color:C.textMuted, marginTop:-4, marginBottom:12}}>
-            Add your own subcategories under COGS or Overhead. They'll appear in the expense form and EBITDA report.
+            Assign subcategories to COGS or Overhead buckets. Recommended ones are shown below — click to add them. You can also create custom ones.
           </p>
+
+          {/* Recommended subcategories */}
+          {(() => {
+            const RECOMMENDED = {
+              "COGS": ["Materials","Subcontractors","Equipment Rental","Job Supplies","Crew Supplies","Fuel"],
+              "Overhead": ["Insurance","Office & Software","Vehicle Payments/Lease","Equipment Payments/Lease","Equipment Maintenance & Repairs","Marketing & Advertising","Phone & Utilities","Accounting & Legal","Owner Salary/Draw","Other G&A"],
+            };
+            const allAssigned = new Set([
+              ...Object.keys(EXPENSE_CATEGORY_MAP).flatMap(cat => EXPENSE_CATEGORY_MAP[cat]),
+              ...Object.values(draft.customSubcategories||{}).flat(),
+            ]);
+            const unassigned = { COGS: RECOMMENDED.COGS.filter(s=>!allAssigned.has(s)), Overhead: RECOMMENDED.Overhead.filter(s=>!allAssigned.has(s)) };
+            if (unassigned.COGS.length === 0 && unassigned.Overhead.length === 0) return null;
+            return (
+              <div style={{background:C.surface2, borderRadius:8, padding:12, marginBottom:12, border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:11, fontWeight:700, color:C.textMuted, marginBottom:8}}>RECOMMENDED — click to add</div>
+                {["COGS","Overhead"].map(cat => unassigned[cat].length > 0 && (
+                  <div key={cat} style={{marginBottom:8}}>
+                    <div style={{fontSize:11, fontWeight:600, color:C.textMuted, marginBottom:4}}>{cat}</div>
+                    <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                      {unassigned[cat].map(s => (
+                        <button key={s} onClick={() => setDraft(p => ({...p, customSubcategories:{
+                          ...p.customSubcategories,
+                          [cat]: [...new Set([...(p.customSubcategories[cat]||[]), s])]
+                        }}))} style={{fontSize:11, padding:"3px 10px", borderRadius:20, cursor:"pointer",
+                          border:`1px dashed ${C.border}`, background:C.surface, color:C.textMuted}}>
+                          + {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* Current subcategories */}
           {["COGS","Overhead"].map(cat => {
-            const customList = draft.customSubcategories?.[cat] || [];
+            const builtIn = EXPENSE_CATEGORY_MAP[cat] || [];
+            const custom = draft.customSubcategories?.[cat] || [];
+            const all = [...builtIn, ...custom];
+            if (all.length === 0) return null;
             return (
               <div key={cat} style={{marginBottom:12}}>
                 <div style={{fontSize:12, fontWeight:600, marginBottom:6}}>{cat}</div>
-                {customList.length > 0 && (
-                  <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:8}}>
-                    {customList.map(s => (
+                <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                  {all.map(s => {
+                    const isCustom = custom.includes(s);
+                    return (
                       <span key={s} style={{display:"inline-flex", alignItems:"center", gap:4,
                         fontSize:11, fontWeight:600, padding:"3px 8px 3px 10px", borderRadius:20,
-                        background:C.surface2, border:`1px solid ${C.border}`, color:C.text}}>
+                        background: isCustom ? "#fffbeb" : C.surface2,
+                        border:`1px solid ${isCustom ? C.accent : C.border}`, color:C.text}}>
                         {s}
-                        <button onClick={() => setDraft(p => ({...p, customSubcategories:{
-                          ...p.customSubcategories,
-                          [cat]: (p.customSubcategories[cat]||[]).filter(x => x !== s)
-                        }}))} style={{background:"none", border:"none", cursor:"pointer", fontSize:13, color:C.textMuted}}>×</button>
+                        {isCustom && (
+                          <button onClick={() => setDraft(p => ({...p, customSubcategories:{
+                            ...p.customSubcategories,
+                            [cat]: (p.customSubcategories[cat]||[]).filter(x => x !== s)
+                          }}))} style={{background:"none", border:"none", cursor:"pointer", fontSize:13, color:C.textMuted}}>×</button>
+                        )}
                       </span>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
-          <div style={{display:"flex", gap:8, maxWidth:420}}>
+
+          {/* Add custom subcategory */}
+          <div style={{display:"flex", gap:8, maxWidth:420, marginTop:8}}>
             <select value={newSubcatCat} onChange={e=>setNewSubcatCat(e.target.value)} style={{...S.input, width:120, flexShrink:0}}>
               <option value="COGS">COGS</option>
               <option value="Overhead">Overhead</option>
             </select>
             <input value={newSubcatName} onChange={e=>setNewSubcatName(e.target.value)}
-              placeholder="Subcategory name…" style={{...S.input, flex:1}}
+              placeholder="Custom subcategory…" style={{...S.input, flex:1}}
               onKeyDown={e => {
                 if (e.key==="Enter" && newSubcatName.trim()) {
-                  setDraft(p => ({...p, customSubcategories:{
-                    ...p.customSubcategories,
-                    [newSubcatCat]: [...new Set([...(p.customSubcategories[newSubcatCat]||[]), newSubcatName.trim()])]
-                  }}));
+                  setDraft(p => ({...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()])]}}}));
                   setNewSubcatName("");
                 }
               }}/>
             <button style={{...S.btnSmall, flexShrink:0}} onClick={() => {
               if (!newSubcatName.trim()) return;
-              setDraft(p => ({...p, customSubcategories:{
-                ...p.customSubcategories,
-                [newSubcatCat]: [...new Set([...(p.customSubcategories[newSubcatCat]||[]), newSubcatName.trim()])]
-              }}));
+              setDraft(p => ({...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()])]}}}));
               setNewSubcatName("");
             }}>+ Add</button>
           </div>
@@ -8461,6 +8618,42 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                 </div>
               )}
             </div>
+            {/* Inline edit form */}
+            {editingExpId === e.id && (
+              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
+                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
+                    style={{...S.input, flex:1, minWidth:130}}/>
+                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
+                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
+                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
+                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
+                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
+                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
+                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
+                      <option value="">No subcategory</option>
+                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  )}
+                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
+                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
+                </div>
+                <div style={{display:"flex", gap:8}}>
+                  <button style={S.btnPrimary} onClick={()=>{
+                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
+                    setEditingExpId(null);
+                  }}>Save</button>
+                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
           );
         })}
       </section>
@@ -9475,6 +9668,9 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const [selectedIds,   setSelectedIds]   = useState(new Set());
   const [sortField,     setSortField]     = useState("date");
   const [sortDir,       setSortDir]       = useState("desc");
+  const [editingExpId,  setEditingExpId]  = useState(null);
+  const [editForm,      setEditForm]      = useState({});
+  const setEF = (k,v) => setEditForm(p=>({...p,[k]:v}));
   const [uploading,   setUploading]   = useState(false);
   // Import state
   const [showImport,    setShowImport]    = useState(false);
@@ -9614,7 +9810,9 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     const baseId = Date.now();
 
     importRows.forEach((row, idx) => {
-      const appCat = importMapping[row.sheetCat] || "Other";
+      const mapping = importMapping[row.sheetCat];
+      const appCat = (typeof mapping === "object" ? mapping.cat : mapping) || "Other";
+      const appSubcat = typeof mapping === "object" ? (mapping.subcat || "") : "";
       const amount = row.amount;
       const date   = row.date;
       const notes  = [row.item, row.invoice ? "Inv#"+row.invoice : ""].filter(Boolean).join(" — ");
@@ -9651,7 +9849,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         : "Check";
       addExpense({
         id: baseId * 1000 + idx * 2 + 1,
-        date, category: appCat, amount, vendorId, vendorName: row.payee,
+        date, category: appCat, subcategory: appSubcat, amount, vendorId, vendorName: row.payee,
         notes, paymentMethod: payMethod, jobId: "", receiptUrl: "",
       });
       added++;
@@ -9662,7 +9860,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     if (added > 0) {
       // Queue COGS expenses for Materials prompt
       const cogsEntries = importRows
-        .filter(r => (importMapping[r.sheetCat]||"Other") === "COGS")
+        .filter(r => { const m = importMapping[r.sheetCat]; return (typeof m==="object"?m.cat:m) === "COGS"; })
         .map(r => ({
           id: Date.now() + Math.random(),
           date: r.date,
@@ -9812,9 +10010,11 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
 
   // Totals by category and payment method
   const totalAmt = filtered.reduce((s,e) => s + Number(e.amount||0), 0);
-  const byCatRaw = EXPENSE_CATEGORIES.map(cat => ({
+  // Get all unique categories from actual expenses (includes legacy ones)
+  const allExpCats = [...new Set(filtered.map(e=>e.category).filter(Boolean))];
+  const byCatRaw = allExpCats.map(cat => ({
     cat, amt: filtered.filter(e=>e.category===cat).reduce((s,e)=>s+Number(e.amount||0),0)
-  })).filter(r=>r.amt>0);
+  })).filter(r=>r.amt>0).sort((a,b)=>b.amt-a.amt);
   const byCat = [];
   byCatRaw.forEach(({cat, amt}) => {
     byCat.push({cat, amt});
@@ -10026,11 +10226,21 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                       <div key={sheetCat} style={{display:"flex", alignItems:"center", gap:10, marginBottom:8}}>
                         <div style={{flex:1, fontSize:13, fontWeight:600}}>{sheetCat || "(blank)"}</div>
                         <span style={{fontSize:12, color:C.textMuted}}>→</span>
-                        <select value={importMapping[sheetCat]}
-                          onChange={e => setImportMapping(prev => ({...prev, [sheetCat]: e.target.value}))}
-                          style={{...S.input, width:160}}>
+                        <select value={importMapping[sheetCat]?.cat || importMapping[sheetCat] || ""}
+                          onChange={e => setImportMapping(prev => ({...prev, [sheetCat]: {...(typeof prev[sheetCat]==="object"?prev[sheetCat]:{}), cat: e.target.value, subcat:""}}))}
+                          style={{...S.input, width:130}}>
                           {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
+                        {["COGS","Overhead"].includes(importMapping[sheetCat]?.cat || importMapping[sheetCat]) && (
+                          <select value={importMapping[sheetCat]?.subcat || ""}
+                            onChange={e => setImportMapping(prev => ({...prev, [sheetCat]: {...(typeof prev[sheetCat]==="object"?prev[sheetCat]:{}), subcat: e.target.value}}))}
+                            style={{...S.input, width:160}}>
+                            <option value="">No subcategory</option>
+                            {[...(EXPENSE_CATEGORY_MAP[importMapping[sheetCat]?.cat || importMapping[sheetCat]]||[]), ...(customSubcategories?.[importMapping[sheetCat]?.cat || importMapping[sheetCat]]||[])].map(s=>(
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                        )}
                         <div style={{fontSize:11, color:C.textMuted, flexShrink:0}}>
                           ({importRows.filter(r=>r.sheetCat===sheetCat).length} rows)
                         </div>
@@ -10328,15 +10538,57 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"2px 7px"}}>{e.category}</span>
                 {e.subcategory && <span style={{fontSize:10, color:C.textMuted, marginLeft:4}}>{e.subcategory}</span>}
               </div>
-              {/* Amount + delete col */}
-              <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8}}>
+              {/* Amount + actions col */}
+              <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:6}}>
                 <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
+                {canEdit && (
+                  <button style={{...S.btnSmall, flexShrink:0, width:24, padding:0}}
+                    onClick={()=>{ setEditingExpId(e.id); setEditForm({...e}); }}>
+                    <LucideIcons.Pencil size={11} strokeWidth={2}/>
+                  </button>
+                )}
                 {canEdit && (
                   <button style={{...S.btnSmall, color:C.danger, flexShrink:0, width:24, padding:0}}
                     onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
                 )}
               </div>
             </div>
+            {/* Inline edit form */}
+            {editingExpId === e.id && (
+              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
+                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
+                    style={{...S.input, flex:1, minWidth:130}}/>
+                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
+                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
+                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
+                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
+                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
+                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
+                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
+                      <option value="">No subcategory</option>
+                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  )}
+                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
+                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
+                </div>
+                <div style={{display:"flex", gap:8}}>
+                  <button style={S.btnPrimary} onClick={()=>{
+                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
+                    setEditingExpId(null);
+                  }}>Save</button>
+                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
           );
         })}
       </section>
