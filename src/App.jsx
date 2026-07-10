@@ -3364,15 +3364,12 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
             d.setDate(d.getDate() - 7);
             setSelectedDate(d.toISOString().slice(0,10));
           }}>← Prev Week</button>
-          <label style={{flex:1, overflow:"hidden", cursor:"pointer", position:"relative"}}>
-            <div style={{textAlign:"center", fontWeight:600, fontSize:14, padding:"8px 4px",
-              background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, lineHeight:"1.2"}}>
-              {new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
-            </div>
+          <div style={{flex:1, overflow:"hidden"}}>
             <input type="date" value={selectedDate}
               onChange={e => setSelectedDate(e.target.value)}
-              style={{position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}}/>
-          </label>
+              style={{...S.input, textAlign:"center", fontWeight:600, marginBottom:0,
+                colorScheme:"light", WebkitAppearance:"none"}}/>
+          </div>
           <button style={{...S.btnSecondary, flexShrink:0, padding:"8px 12px"}} onClick={() => {
             const d = new Date(selectedDate+"T12:00:00");
             d.setDate(d.getDate() + 7);
@@ -4745,7 +4742,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
 
   // ── Which job status categories get geocoded/clustered/shown on the map ──
   // Defaults to Signed + Scheduled — the statuses you'd actually drive a route to.
-  const ZONE_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
+  const ZONE_STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
   const zoneStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
   const [filterStatuses, setFilterStatuses] = useState(zones?.filterStatuses || ["signed","scheduled"]);
   const filterInitRef = useRef(false);
