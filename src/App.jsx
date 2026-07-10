@@ -4076,25 +4076,29 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                         }, 0);
                         // Find unit cost from materials purchased in this period
                         const periodMats = (materials||[]).filter(m=>m.category===reconcilMatType && m.date > p.openDate && m.date <= p.closeDate);
-                        const avgUnitCost = periodMats.length > 0
-                          ? periodMats.reduce((s,m)=>s+(Number(m.cost||0)||0),0) / periodMats.reduce((s,m)=>s+Number(m.qty||0),0)
-                          : 0;
+                        // Use weighted average unit cost from purchases in this period
+                        const totalCost = periodMats.reduce((s,m)=>s+Number(m.cost||0),0);
+                        const totalQty  = periodMats.reduce((s,m)=>s+Number(m.qty||0),0);
+                        const avgUnitCost = totalQty > 0 ? totalCost / totalQty : 0;
                         const reconciledQty = estQty * p.wasteFactor;
                         const reconciledCost = reconciledQty * avgUnitCost;
                         // Write reconciled actual to job — don't overwrite manual actuals
-                        jobs.find(jj=>jj.id===j.id); // reference check
-                        // Write reconciled actual to job costs
-                        log.jobsUpdated.push({jobId:j.id, jobName:j.clientName, qty:reconciledQty.toFixed(2), cost:reconciledCost.toFixed(2), wasteFactor:p.wasteFactor, period:`${p.openDate}→${p.closeDate}`});
-                        // Write to job if updateJobById available and no manual actual exists
+                        const reconciledAt = new Date().toISOString();
+                        log.jobsUpdated.push({jobId:j.id, jobName:j.clientName, qty:reconciledQty.toFixed(2), cost:reconciledCost.toFixed(2), wasteFactor:p.wasteFactor, period:`${p.openDate}→${p.closeDate}`, reconciledAt});
                         if (updateJobById) {
                           updateJobById(j.id, job => {
                             const existingActual = job.costs?.actuals?.[reconcilMatType];
                             const hasManualActual = existingActual !== null && existingActual !== "" && existingActual !== undefined;
-                            if (hasManualActual) return job; // don't overwrite manual actuals
+                            if (hasManualActual) return job;
                             return {
                               ...job,
                               costs: {
                                 ...(job.costs||{}),
+                                // Write to actuals so Costs tab and EBITDA pick it up
+                                actuals: {
+                                  ...(job.costs?.actuals||{}),
+                                  [reconcilMatType]: Number(reconciledCost.toFixed(2)),
+                                },
                                 reconciledActuals: {
                                   ...(job.costs?.reconciledActuals||{}),
                                   [reconcilMatType]: {
@@ -4102,7 +4106,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                                     cost: reconciledCost,
                                     wasteFactor: p.wasteFactor,
                                     period: `${p.openDate}→${p.closeDate}`,
-                                    reconciledAt: new Date().toISOString(),
+                                    reconciledAt,
                                   }
                                 }
                               }
@@ -4131,6 +4135,26 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                         <div style={{fontWeight:700, fontSize:13}}>{log.matLabel} — {log.from} to {log.to}</div>
                         <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>Run on {log.date} · {log.periodsCount} period{log.periodsCount!==1?"s":""} · {log.jobsUpdated.length} jobs updated · Running waste factor: {log.runningWasteFactor?.toFixed(3)}x</div>
                       </div>
+                      <button style={{...S.btnSmall, color:C.danger, flexShrink:0}} onClick={() => {
+                        if (!confirm("Delete this reconciliation and revert actuals on affected jobs?")) return;
+                        log.jobsUpdated.forEach(ju => {
+                          if (updateJobById) {
+                            updateJobById(ju.jobId, job => {
+                              const ra = job.costs?.reconciledActuals?.[log.matType];
+                              if (!ra || ra.reconciledAt !== ju.reconciledAt) return job;
+                              const newActuals = {...(job.costs?.actuals||{})};
+                              delete newActuals[log.matType];
+                              const newRA = {...(job.costs?.reconciledActuals||{})};
+                              delete newRA[log.matType];
+                              return {...job, costs:{...(job.costs||{}), actuals:newActuals, reconciledActuals:newRA}};
+                            });
+                          }
+                        });
+                        setReconcilLog(prev => prev.filter(l => l.id !== log.id));
+                      }}>
+                        <LucideIcons.Trash2 size={13} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
+                        Delete & Revert
+                      </button>
                     </div>
                     <div style={{marginTop:8, display:"flex", gap:6, flexWrap:"wrap"}}>
                       {log.jobsUpdated.map((j,i) => (
@@ -7039,16 +7063,21 @@ function CostsView({ currentJob, updateJob, rates, expenses }) {
   const variance     = actTotal - estTotal;
 
   // ── Row renderer ──
+  const reconciledActuals = costs.reconciledActuals || {};
   const costRow = (label, est, actKey, sub) => {
     const actRaw  = actuals[actKey];
     const hasAct  = actRaw !== undefined && actRaw !== null && actRaw !== "";
     const actAmt  = hasAct ? Number(actRaw) : est;
     const diff    = actAmt - est;
+    const isReconciled = !!reconciledActuals[actKey];
     return (
       <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
           <div>
-            <div style={{fontSize:13, color:C.text, fontWeight:600}}>{label}</div>
+            <div style={{display:"flex", alignItems:"center", gap:6}}>
+              <div style={{fontSize:13, color:C.text, fontWeight:600}}>{label}</div>
+              {isReconciled && <span style={{fontSize:9, fontWeight:700, color:"#0e7490", background:"#e0f2fe", borderRadius:4, padding:"1px 5px", letterSpacing:"0.04em"}}>RECONCILED</span>}
+            </div>
             {sub && <div style={{fontSize:11, color:C.textDim, marginTop:1}}>{sub}</div>}
           </div>
           <div style={{textAlign:"right"}}>
