@@ -2204,19 +2204,19 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {/* ── MEDIA ── */}
       <section style={S.section}>
         <h2 style={S.h2}>Photos</h2>
-        {isDesktop ? (
-          <>
+        {!capturing ? (
+          <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
             <input ref={fileInputRef} type="file" accept="image/*" multiple style={{display:"none"}}
               onChange={handleFileUpload}/>
             <button style={{...S.btnCapture, maxWidth:220}} onClick={() => fileInputRef.current?.click()}>
               📁 Upload Photo
             </button>
-            <p style={{fontSize:11, color:C.textDim, marginTop:8, marginBottom:0}}>
-              Camera capture is for the mobile app — upload existing photo files here instead.
-            </p>
-          </>
-        ) : !capturing ? (
-          <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}><LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Take Photo</button>
+            {!isDesktop && (
+              <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}>
+                <LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Take Photo
+              </button>
+            )}
+          </div>
         ) : (
           <div style={S.cameraBox}>
             <video ref={videoRef} autoPlay muted playsInline style={S.cameraPreview}/>
@@ -4124,42 +4124,40 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                         }, 0);
                         // Find unit cost from materials purchased in this period
                         const periodMats = (materials||[]).filter(m=>m.category===reconcilMatType && m.date > p.openDate && m.date <= p.closeDate);
-                        // Use weighted average unit cost from purchases in this period
-                        const totalCost = periodMats.reduce((s,m)=>s+Number(m.cost||0),0);
+                        // Weighted average: prefer total cost, fall back to unitCost × qty
+                        const totalCost = periodMats.reduce((s,m) => {
+                          const c = Number(m.cost||0);
+                          // If total cost not set, derive from unitCost × qty
+                          return s + (c > 0 ? c : Number(m.unitCost||0) * Number(m.qty||0));
+                        }, 0);
                         const totalQty  = periodMats.reduce((s,m)=>s+Number(m.qty||0),0);
                         const avgUnitCost = totalQty > 0 ? totalCost / totalQty : 0;
                         const reconciledQty = estQty * p.wasteFactor;
                         const reconciledCost = reconciledQty * avgUnitCost;
-                        // Write reconciled actual to job — don't overwrite manual actuals
+                        // Write reconciled actual to job — always overwrite (reconciliation is ground truth)
                         const reconciledAt = new Date().toISOString();
                         log.jobsUpdated.push({jobId:j.id, jobName:j.clientName, qty:reconciledQty.toFixed(2), cost:reconciledCost.toFixed(2), wasteFactor:p.wasteFactor, period:`${p.openDate}→${p.closeDate}`, reconciledAt});
-                        if (updateJobById) {
-                          updateJobById(j.id, job => {
-                            const existingActual = job.costs?.actuals?.[reconcilMatType];
-                            const hasManualActual = existingActual !== null && existingActual !== "" && existingActual !== undefined;
-                            if (hasManualActual) return job;
-                            return {
-                              ...job,
-                              costs: {
-                                ...(job.costs||{}),
-                                // Write to actuals so Costs tab and EBITDA pick it up
-                                actuals: {
-                                  ...(job.costs?.actuals||{}),
-                                  [reconcilMatType]: Number(reconciledCost.toFixed(2)),
-                                },
-                                reconciledActuals: {
-                                  ...(job.costs?.reconciledActuals||{}),
-                                  [reconcilMatType]: {
-                                    qty: reconciledQty,
-                                    cost: reconciledCost,
-                                    wasteFactor: p.wasteFactor,
-                                    period: `${p.openDate}→${p.closeDate}`,
-                                    reconciledAt,
-                                  }
+                        if (updateJobById && reconciledCost > 0) {
+                          updateJobById(j.id, job => ({
+                            ...job,
+                            costs: {
+                              ...(job.costs||{}),
+                              actuals: {
+                                ...(job.costs?.actuals||{}),
+                                [reconcilMatType]: Number(reconciledCost.toFixed(2)),
+                              },
+                              reconciledActuals: {
+                                ...(job.costs?.reconciledActuals||{}),
+                                [reconcilMatType]: {
+                                  qty: reconciledQty,
+                                  cost: reconciledCost,
+                                  wasteFactor: p.wasteFactor,
+                                  period: `${p.openDate}→${p.closeDate}`,
+                                  reconciledAt,
                                 }
                               }
-                            };
-                          });
+                            }
+                          }));
                         }
                       });
                     });
@@ -8817,7 +8815,7 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData, offAppW
         )}
       </section>
 
-      <CrewsSection users={users} isManager={isManager} tFetch={tFetch}/>
+      <CrewsSection users={users} isManager={isManager} tFetch={tFetch} offAppWorkers={offAppWorkers}/>
 
       {/* ── Off-App Workers ── */}
       <section style={S.section}>
@@ -8956,7 +8954,7 @@ function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
 }
 
 // ─── Crews management (used inside TeamView) ───────────────────────────────────
-function CrewsSection({ users, isManager, tFetch }) {
+function CrewsSection({ users, isManager, tFetch, offAppWorkers=[] }) {
   const [crews,       setCrews]       = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [editingId,   setEditingId]   = useState(null);
@@ -9026,6 +9024,10 @@ function CrewsSection({ users, isManager, tFetch }) {
   };
 
   const nameOf = (userId) => {
+    if (String(userId).startsWith("oaw-")) {
+      const oaw = (offAppWorkers||[]).find(w => "oaw-"+w.id === userId);
+      return oaw ? oaw.name + " (off-app)" : "—";
+    }
     const u = users.find(x => x.id === userId);
     if (!u) return "—";
     return [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
@@ -9089,6 +9091,15 @@ function CrewsSection({ users, isManager, tFetch }) {
                   {nameOf(u.id)}
                 </label>
               ))}
+              {(offAppWorkers||[]).map(w => {
+                const wid = "oaw-"+w.id;
+                return (
+                  <label key={wid} style={{display:"flex", alignItems:"center", gap:8, fontSize:13, color:C.text}}>
+                    <input type="checkbox" checked={draftMemberIds.includes(wid)} onChange={() => toggleMember(wid)}/>
+                    {w.name} <span style={{fontSize:11, color:C.textMuted}}>(off-app)</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
           <div style={{display:"flex", gap:8, marginTop:14}}>
@@ -9888,19 +9899,19 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
           borderBottom:`2px solid ${C.border}`, marginBottom:4}}>
           {canEdit && <div style={{width:20, flexShrink:0}}/>}
-          <div style={{width:90, flexShrink:0, fontSize:11, fontWeight:700, color:sortField==="date"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
+          {isDesktop && <div style={{width:90, flexShrink:0, fontSize:11, fontWeight:700, color:sortField==="date"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
             onClick={()=>{ sortField==="date"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("date"); setSortDir("desc"); }}>
             DATE{sortField==="date"?(sortDir==="asc"?" ↑":" ↓"):""}
-          </div>
-          <div style={{flex:2, minWidth:140, fontSize:11, fontWeight:700, color:sortField==="vendorName"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
+          </div>}
+          <div style={{flex:2, minWidth:0, fontSize:11, fontWeight:700, color:sortField==="vendorName"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
             onClick={()=>{ sortField==="vendorName"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("vendorName"); setSortDir("desc"); }}>
             VENDOR{sortField==="vendorName"?(sortDir==="asc"?" ↑":" ↓"):""}
           </div>
-          <div style={{flex:1, minWidth:120, fontSize:11, fontWeight:700, color:sortField==="category"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
+          {isDesktop && <div style={{flex:1, minWidth:0, fontSize:11, fontWeight:700, color:sortField==="category"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
             onClick={()=>{ sortField==="category"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("category"); setSortDir("desc"); }}>
             CATEGORY{sortField==="category"?(sortDir==="asc"?" ↑":" ↓"):""}
-          </div>
-          <div style={{width:90, flexShrink:0, fontSize:11, fontWeight:700, color:sortField==="amount"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em", textAlign:"right"}}
+          </div>}
+          <div style={{width:80, flexShrink:0, fontSize:11, fontWeight:700, color:sortField==="amount"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em", textAlign:"right"}}
             onClick={()=>{ sortField==="amount"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("amount"); setSortDir("desc"); }}>
             AMOUNT{sortField==="amount"?(sortDir==="asc"?" ↑":" ↓"):""}
           </div>
@@ -9925,19 +9936,20 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                       return next;
                     })}/>
                 )}
-                {/* Date */}
-                <div style={{width:90, flexShrink:0, fontSize:12, color:C.textMuted}}>{e.date}</div>
+                {/* Date - hide on mobile */}
+                <div style={{width:90, flexShrink:0, fontSize:12, color:C.textMuted, display: isDesktop?"block":"none"}}>{e.date}</div>
                 {/* Vendor */}
-                <div style={{flex:2, minWidth:140, fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                <div style={{flex:2, minWidth:0, fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
                   {e.vendorName||"—"}
+                  {!isDesktop && e.subcategory && <span style={{fontSize:11, color:C.textMuted, fontWeight:400, marginLeft:6}}>{e.subcategory}</span>}
                 </div>
-                {/* Category + subcategory */}
-                <div style={{flex:1, minWidth:120, fontSize:12}}>
+                {/* Category + subcategory - hide on mobile */}
+                <div style={{flex:1, minWidth:0, fontSize:12, display: isDesktop?"block":"none"}}>
                   <span style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
                   {e.subcategory && <span style={{fontSize:11, color:C.textMuted, marginLeft:4}}>{e.subcategory}</span>}
                 </div>
                 {/* Amount */}
-                <div style={{width:90, flexShrink:0, textAlign:"right", fontWeight:700, fontSize:14}}>
+                <div style={{width:80, flexShrink:0, textAlign:"right", fontWeight:700, fontSize:14}}>
                   {formatCurrency(Number(e.amount||0))}
                 </div>
                 {/* Actions */}
@@ -10222,7 +10234,7 @@ function JobContextBar({ currentJob, updateJob, setView, view, permissions, user
       borderBottom: `1px solid ${C.border}`,
       padding: "8px 16px",
       position: "sticky",
-      top: 0,
+      top: 56,
       zIndex: 40,
     }}>
       {/* Client + back to jobs */}
@@ -11120,7 +11132,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   const setDiscount = val => { if (isLocked) return; updateJob(j => ({...j, discount: Number(val)})); };
 
   if (!Array.isArray(currentJob.areas)) return <div className="tps-page" style={S.page}><p style={S.noJob}>Loading job data...</p></div>;
-  const subtotal    = currentJob.areas.reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
+  const subtotal    = (currentJob.areas||[]).reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
   const marginAmt   = subtotal * (margin/100);
   const discountAmt = (subtotal + marginAmt) * (discount/100);
   const calcTotal   = subtotal + marginAmt - discountAmt;
@@ -11221,7 +11233,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
     "To: " + (currentJob.clientName||"Client"),
     currentJob.address||"", cityLine||"", currentJob.clientPhone||"", "",
     "─────────────────────────", "LINE ITEMS", "─────────────────────────",
-    ...currentJob.areas.map(a => {
+    ...(currentJob.areas||[]).map(a => {
       const svc = rates[a.serviceType]; const amt = calcLineAmt(a,rates);
       const qtyStr = isTonMode(a.serviceType,rates)
         ? (Number(a.measurement).toLocaleString() + " sq ft (" + calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)).toFixed(2) + " tons)")
@@ -11356,7 +11368,7 @@ ${owner}${phone ? `\n${phone}` : ""}${email ? `\n${email}` : ""}`;
 
   // ── PDF via jsPDF (pure browser, no API) ──────────────────────────────────
   const generatePDF = async (clientSigOverride, signedAtOverride, printNameOverride, skipSave=false) => {
-    if (currentJob.areas.length === 0) { alert("Add at least one line item before generating a PDF."); return; }
+    if ((currentJob.areas||[]).length === 0) { alert("Add at least one line item before generating a PDF."); return; }
     if (!skipSave) setPdfLoading(true);
 
     try {
@@ -11482,7 +11494,7 @@ ${owner}${phone ? `\n${phone}` : ""}${email ? `\n${email}` : ""}`;
       });
       y += hdrH;
 
-      currentJob.areas.forEach((a, idx) => {
+      (currentJob.areas||[]).forEach((a, idx) => {
         const svc  = rates[a.serviceType];
         const amt  = calcLineAmt(a, rates);
         const qty  = Number(a.measurement || 0);
@@ -11700,12 +11712,12 @@ ${a}`.notes : "");
           {currentJob.clientEmail && <div style={S.estimateClientAddr}>{currentJob.clientEmail}</div>}
         </div>
 
-        {currentJob.areas.length === 0 ? (
+        {(currentJob.areas||[]).length === 0 ? (
           <div style={S.empty}><p style={S.emptyText}>No line items yet. Add measurements first.</p></div>
         ) : (
           <>
             <div style={{marginBottom:12}}>
-              {currentJob.areas.map((a, idx) => {
+              {(currentJob.areas||[]).map((a, idx) => {
                 const svc  = rates[a.serviceType];
                 const amt  = calcLineAmt(a, rates);
                 const tons = isTonMode(a.serviceType,rates) ? calcTons(a.measurement, a.depthIn??(rates[a.serviceType]?.depthIn??DEFAULT_ASPHALT_DEPTH_IN), a.density??(rates[a.serviceType]?.density??DEFAULT_ASPHALT_DENSITY), a.tonsFormula??(rates[a.serviceType]?.tonsFormula??DEFAULT_TONS_FORMULA)) : null;
