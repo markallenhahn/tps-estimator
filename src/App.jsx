@@ -6330,11 +6330,8 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
 
         {/* Summary cards */}
         {(() => {
-          // Actual fuel from COGS expenses with subcategory Fuel
-          const actFuel = expenses
-            .filter(e => e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to &&
-              (e.subcategory === "Fuel" || (e.category === "Fuel")))
-            .reduce((s,e) => s + Number(e.amount||0), 0);
+          // Actual fuel from COGS subcategory breakdown (already filtered for period)
+          const actFuel = (cogsBySubcat["Fuel"] || 0) + (cogsBySubcat["fuel"] || 0);
 
           const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
           const actLabor    = periodExpLabor > 0 ? periodExpLabor : null;
