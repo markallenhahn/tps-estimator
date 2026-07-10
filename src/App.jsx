@@ -9074,6 +9074,11 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const [editForm,      setEditForm]      = useState({});
   const setEF = (k,v) => setEditForm(p=>({...p,[k]:v}));
   const [selectedIds,   setSelectedIds]   = useState(new Set());
+  const [sortField,     setSortField]     = useState("date");
+  const [sortDir,       setSortDir]       = useState("desc");
+  const [searchText,    setSearchText]    = useState("");
+  const [filterDateFrom,setFilterDateFrom]= useState("");
+  const [filterDateTo,  setFilterDateTo]  = useState("");
   // Import state
   const [showImport,    setShowImport]    = useState(false);
   // COGS → Materials prompt state
@@ -9339,11 +9344,21 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   };
 
   // Filters
-  const filtered = expenses.filter(e =>
-    (filterCat    === "All" || e.category      === filterCat) &&
-    (filterMethod === "All" || e.paymentMethod === filterMethod) &&
-    (filterJob    === "All" || String(e.jobId) === String(filterJob))
-  );
+  const filtered = expenses
+    .filter(e =>
+      (filterCat    === "All" || e.category      === filterCat) &&
+      (filterMethod === "All" || e.paymentMethod === filterMethod) &&
+      (filterJob    === "All" || String(e.jobId) === String(filterJob)) &&
+      (!filterDateFrom || e.date >= filterDateFrom) &&
+      (!filterDateTo   || e.date <= filterDateTo) &&
+      (!searchText || (e.vendorName||"").toLowerCase().includes(searchText.toLowerCase()) || (e.notes||"").toLowerCase().includes(searchText.toLowerCase()))
+    )
+    .sort((a,b) => {
+      let va = a[sortField]||"", vb = b[sortField]||"";
+      if (sortField === "amount") { va = Number(a.amount||0); vb = Number(b.amount||0); }
+      const cmp = typeof va === "number" ? va - vb : String(va).localeCompare(String(vb));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
 
   // Totals by category and payment method
   const totalAmt = filtered.reduce((s,e) => s + Number(e.amount||0), 0);
@@ -9749,6 +9764,42 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
             <option value="">Unlinked</option>
             {jobs.map(j=><option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No addr"}</option>)}
           </select>
+        </div>
+
+        {/* Search + date range */}
+        <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+          <input value={searchText} onChange={e=>setSearchText(e.target.value)}
+            placeholder="Search vendor or notes…" style={{...S.input, flex:2, minWidth:160}}/>
+          <div style={{width:150, flexShrink:0, overflow:"hidden"}}>
+            <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} style={{...S.input}}/>
+          </div>
+          <div style={{width:150, flexShrink:0, overflow:"hidden"}}>
+            <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)} style={{...S.input}}/>
+          </div>
+          {selectedIds.size > 0 && canEdit && (
+            <button style={{...S.btnSmall, color:C.danger, flexShrink:0}} onClick={()=>{
+              if(confirm(`Delete ${selectedIds.size} expense(s)?`)){
+                [...selectedIds].forEach(id=>deleteExpense(id));
+                setSelectedIds(new Set());
+              }
+            }}>🗑 Delete ({selectedIds.size})</button>
+          )}
+        </div>
+
+        {/* Column headers */}
+        <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
+          borderBottom:`2px solid ${C.border}`, marginBottom:4}}>
+          {canEdit && <div style={{width:20, flexShrink:0}}/>}
+          {[["date","DATE",90],["vendorName","VENDOR",2],["category","CATEGORY",2],["amount","AMOUNT",90]].map(([field,label,flex])=>(
+            <div key={field} onClick={()=>{ if(sortField===field){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField(field);setSortDir("desc");} }}
+              style={{[typeof flex==="number"&&flex<10?"width":"flex"]:flex, flexShrink:typeof flex==="number"&&flex<10?0:1,
+                fontSize:11, fontWeight:700, color:sortField===field?C.accent:C.textMuted,
+                cursor:"pointer", userSelect:"none", textAlign:field==="amount"?"right":"left",
+                textTransform:"uppercase", letterSpacing:"0.05em"}}>
+              {label}{sortField===field?(sortDir==="asc"?" ↑":" ↓"):""}
+            </div>
+          ))}
+          {canEdit && <div style={{width:56, flexShrink:0}}/>}
         </div>
 
         {/* Expense list */}
