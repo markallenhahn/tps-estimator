@@ -3342,10 +3342,22 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
 
       {/* Date picker + manual entry — admin/manager/crew lead only */}
       <section style={S.section}>
-        <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:14}}>
-          <input type="date" value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)}
-            style={{...S.input, flex:1, marginBottom:0}}/>
+        <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:14}}>
+          <button style={{...S.btnSecondary, flexShrink:0, padding:"8px 12px"}} onClick={() => {
+            const d = new Date(selectedDate+"T12:00:00");
+            d.setDate(d.getDate() - 7);
+            setSelectedDate(d.toISOString().slice(0,10));
+          }}>← Prev Week</button>
+          <div style={{flex:1, overflow:"hidden"}}>
+            <input type="date" value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              style={{...S.input, marginBottom:0}}/>
+          </div>
+          <button style={{...S.btnSecondary, flexShrink:0, padding:"8px 12px"}} onClick={() => {
+            const d = new Date(selectedDate+"T12:00:00");
+            d.setDate(d.getDate() + 7);
+            setSelectedDate(d.toISOString().slice(0,10));
+          }}>Next Week →</button>
         </div>
         <h2 style={S.h2}>
           {new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
