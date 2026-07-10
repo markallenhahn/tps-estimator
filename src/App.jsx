@@ -5545,7 +5545,7 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
 }
 
 // ─── Shared cost calculator (used by CostsView and ReportsView) ───────────────
-function calcJobFinancials(job, rates) {
+function calcJobFinancials(job, rates, laborEntries=[], offAppWorkers=[]) {
   const SEALCOAT_PRICE_PER_GAL = 4.33;
   const SEALCOAT_SQFT_PER_GAL  = 70;
   const CRACKFILL_PER_LINFT    = 0.14;
@@ -5571,7 +5571,25 @@ function calcJobFinancials(job, rates) {
 
   const costs     = job.costs || {};
   const actuals   = costs.actuals || {};
-  const actVal    = (key, est) => actuals[key]!=null && actuals[key]!=="" ? Number(actuals[key]) : est;
+
+  // Labor from Labor tab entries linked to this job
+  const jobDate__ = job.date?.includes("/") ? new Date(job.date).toISOString().slice(0,10) : (job.date||"");
+  const linkedLaborEntries = laborEntries.filter(e => String(e.jobId) === String(job.id));
+  const laborFromLinkedEntries = linkedLaborEntries.reduce((s,e) => {
+    let rate = 0;
+    if (e.name) {
+      const oaw = offAppWorkers.find(w => w.name === e.name);
+      const hist = (oaw?.rateHistory||[]).filter(r => r.startDate <= (e.date||jobDate__)).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+      rate = hist[0]?.rate || 0;
+    }
+    return s + (Number(e.hours||0) * rate);
+  }, 0);
+  const hasLinkedLaborEntries = linkedLaborEntries.length > 0 && laborFromLinkedEntries > 0;
+
+  const actVal    = (key, est) => {
+    if (key === "labor" && hasLinkedLaborEntries) return laborFromLinkedEntries;
+    return actuals[key]!=null && actuals[key]!=="" ? Number(actuals[key]) : est;
+  };
 
   const estSealcoat  = (sealcoatSqFt/SEALCOAT_SQFT_PER_GAL)*SEALCOAT_PRICE_PER_GAL;
   const estCrackFill = crackFillLinFt*CRACKFILL_PER_LINFT;
@@ -6650,7 +6668,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   });
 
   // Total revenue for period (for overhead allocation %)
-  const periodRevenue = ebitdaJobs.reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue, 0);
+  const periodRevenue = ebitdaJobs.reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}, laborEntries, offAppWorkers).revenue, 0);
 
   // Category bucket assignments
   const catBuckets = {
@@ -6688,12 +6706,12 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
       const d = j.date.includes("/") ? new Date(j.date).toISOString().slice(0,10) : j.date;
       return d >= yearStart && d <= yearEnd && !["estimate","draft","lost"].includes(j.status);
     })
-    .reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue, 0);
+    .reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}, laborEntries, offAppWorkers).revenue, 0);
 
   // Per-job EBITDA data
   const allRatesEbitda = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
   const ebitdaJobData = ebitdaJobs.map(j => {
-    const fin = calcJobFinancials(j, allRatesEbitda);
+    const fin = calcJobFinancials(j, allRatesEbitda, laborEntries, offAppWorkers);
     const revenue = fin.revenue;
 
     // COGS: actuals first, then FIFO material calc, then estimated
@@ -6735,14 +6753,18 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     const cogsIsEstimated = !hasActuals && !hasFifo;
     const cogsSource = hasActuals ? "actual" : hasFifo ? "fifo" : "estimated";
 
-    // Labor: actual hours × rate
-    const jobLabor = laborEntries
-      .filter(e => e.jobId === j.id || (e.date && e.date === jobDate)) // by jobId or date match
-      .reduce((s,e) => {
-        const rate = getRateForUser(e.userId, e.date || jobDate);
-        return s + (Number(e.hours||0) * (rate||0));
-      }, 0);
-    const laborIsEstimated = jobLabor === 0;
+    // Labor: actual hours × rate from Labor tab entries linked to this job
+    const jobLaborEntries = laborEntries.filter(e => String(e.jobId) === String(j.id));
+    const jobLabor = jobLaborEntries.reduce((s,e) => {
+      let rate = getRateForUser(e.userId, e.date || jobDate);
+      if (!rate && e.name) {
+        const oaw = (offAppWorkers||[]).find(w => w.name === e.name);
+        const hist = (oaw?.rateHistory||[]).filter(r => r.startDate <= (e.date||jobDate)).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+        rate = hist[0]?.rate || 0;
+      }
+      return s + (Number(e.hours||0) * (rate||0));
+    }, 0);
+    const laborIsEstimated = jobLaborEntries.length === 0;
 
     // Overhead: allocate by revenue %
     const revenueShare = periodRevenue > 0 ? revenue / periodRevenue : 0;
@@ -6798,7 +6820,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   // Filter jobs that have any revenue
   const reportJobs = jobs
     .filter(j => {
-      const f = calcJobFinancials(j, allRates);
+      const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers);
       if (f.revenue === 0) return false;
       if (filterStatuses.length > 0 && !filterStatuses.includes(j.status)) return false;
       return true;
@@ -6807,7 +6829,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 
   // Summary totals
   const totals = reportJobs.reduce((acc, j) => {
-    const f = calcJobFinancials(j, allRates);
+    const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers);
     acc.revenue        += f.revenue;
     acc.totalCosts     += f.totalCosts;
     acc.grossProfit    += f.grossProfit;
@@ -6901,7 +6923,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 
       // Rows
       reportJobs.forEach((j,idx)=>{
-        const f = calcJobFinancials(j, allRates);
+        const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers);
         if (y>720) { doc.addPage(); y=40; }
         doc.setFillColor(...(idx%2===0?[255,255,255]:LGRAY));
         doc.rect(ML,y,usable,18,"F");
@@ -7092,7 +7114,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
         <section style={S.section}>
           <h2 style={S.h2}>Job Breakdown</h2>
           {reportJobs.map(j => {
-            const f = calcJobFinancials(j, allRates);
+            const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers);
             const marginColor = f.actualMargin>=52 ? C.green : f.actualMargin>0 ? C.accent : C.danger;
             return (
               <div key={j.id} style={{...S.schedJobCard, marginBottom:10}}
