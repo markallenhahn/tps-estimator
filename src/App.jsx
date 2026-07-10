@@ -9935,6 +9935,18 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                       placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
                     <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
                       placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
+                    {(() => {
+                      const defaults = getVendorDefaults(editForm.vendorName);
+                      if (!defaults || (editForm.category === defaults.category && editForm.subcategory === defaults.subcategory)) return null;
+                      return (
+                        <div style={{flexBasis:"100%", fontSize:11, color:C.accent, display:"flex", alignItems:"center", gap:6, marginBottom:4}}>
+                          <span>💡 Usually: <strong>{defaults.category}{defaults.subcategory ? " → " + defaults.subcategory : ""}</strong></span>
+                          <button style={{...S.btnSmall, fontSize:10, padding:"1px 8px"}} onClick={()=>setEF("category",defaults.category)||setEF("subcategory",defaults.subcategory||"")}>
+                            Use this
+                          </button>
+                        </div>
+                      );
+                    })()}
                     <select value={editForm.category||""} onChange={ev=>{setEF("category",ev.target.value);setEF("subcategory","");}} style={{...S.input, flex:1, minWidth:110}}>
                       {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
                     </select>
