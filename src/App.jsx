@@ -13789,6 +13789,12 @@ function App() {
     street: "", city: "", state: "", zip: "", website: "", googleReviewUrl: "",
   });
   const [iconStyle,     setIconStyle]    = useState("emoji"); // "emoji" | "lucide" — global, admin-set
+  const [reportSettings, setReportSettings] = useState({
+    laborPct: 15, cogsPct: 35, overheadPct: 15, ebitdaTargetDollars: "",
+    categoryBuckets: { "COGS":"cogs", "Overhead":"overhead", "Labor":"labor" },
+    customSubcategories: { "COGS": [], "Overhead": [] },
+  });
+  const [offAppWorkers, setOffAppWorkers] = useState([]);
   const [teamUsers,     setTeamUsers]    = useState([]);
   const [crews,         setCrews]        = useState([]);
   const [materials,         setMaterials]         = useState([]);
@@ -14163,7 +14169,11 @@ function App() {
 
         const sr = await tFetch("appsettings?select=data&order=id.desc&limit=1");
         const sd = await sr.json();
-        if (Array.isArray(sd) && sd.length > 0 && sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
+        if (Array.isArray(sd) && sd.length > 0) {
+          if (sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
+          if (sd[0].data?.reportSettings) setReportSettings(prev => ({...prev, ...sd[0].data.reportSettings}));
+          if (sd[0].data?.offAppWorkers) setOffAppWorkers(sd[0].data.offAppWorkers);
+        }
 
         const mr = await tFetch("materials?select=id,data&order=id.desc");
         const md = await mr.json();
@@ -14289,15 +14299,32 @@ function App() {
     } catch(e) { console.error("syncCompanySettings error:", e); }
   };
 
-  const syncIconStyle = async (style) => {
-    setIconStyle(style);
+  const syncAppSettings = async (patch) => {
     try {
+      const r = await tFetch("appsettings?select=data&order=id.desc&limit=1");
+      const rows = await r.json();
+      const current = (Array.isArray(rows) && rows[0]?.data) || {};
       await tFetch("appsettings?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ data: { iconStyle: style } }),
+        body: JSON.stringify({ data: { ...current, ...patch } }),
       });
-    } catch(e) { console.error("syncIconStyle error:", e); }
+    } catch(e) { console.error("syncAppSettings error:", e); }
+  };
+
+  const syncIconStyle = async (style) => {
+    setIconStyle(style);
+    await syncAppSettings({ iconStyle: style });
+  };
+
+  const syncOffAppWorkers = async (workers) => {
+    setOffAppWorkers(workers);
+    await syncAppSettings({ offAppWorkers: workers });
+  };
+
+  const syncReportSettings = async (settings) => {
+    setReportSettings(settings);
+    await syncAppSettings({ reportSettings: settings });
   };
 
   // Assign a newly created/edited job to its nearest existing zone centroid
