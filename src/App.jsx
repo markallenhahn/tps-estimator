@@ -9061,10 +9061,12 @@ function CrewsSection({ users, isManager, tFetch }) {
 // ─── Export View (secret) ──────────────────────────────────────────────────────
 
 // ─── Expenses View ─────────────────────────────────────────────────────────────
-const EXPENSE_CATEGORIES = [
-  "Overhead","Labor","Fuel","COGS",
-  "Subcontractors","Equipment","Job Supplies","Crew Supplies","Other",
-];
+const EXPENSE_CATEGORIES = ["COGS","Overhead","Labor"];
+const EXPENSE_CATEGORY_MAP = {
+  "COGS":     ["Materials","Subcontractors","Equipment Rental","Job Supplies","Crew Supplies","Fuel"],
+  "Overhead": ["Insurance","Office & Software","Vehicle Payments/Lease","Equipment Payments/Lease","Equipment Maintenance & Repairs","Marketing & Advertising","Phone & Utilities","Accounting & Legal","Owner Salary/Draw","Other G&A"],
+  "Labor":    [],
+};
 const PAYMENT_METHODS = ["Company Card","Cash","Personal Card","Check","ACH/Transfer"];
 
 function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial }) {
@@ -9798,15 +9800,18 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
           borderBottom:`2px solid ${C.border}`, marginBottom:4}}>
           {canEdit && <div style={{width:20, flexShrink:0}}/>}
-          {[["date","DATE",90],["vendorName","VENDOR",2],["category","CATEGORY",2],["amount","AMOUNT",90]].map(([field,label,flex])=>(
-            <div key={field} onClick={()=>{ if(sortField===field){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField(field);setSortDir("desc");} }}
-              style={{[typeof flex==="number"&&flex<10?"width":"flex"]:flex, flexShrink:typeof flex==="number"&&flex<10?0:1,
-                fontSize:11, fontWeight:700, color:sortField===field?C.accent:C.textMuted,
-                cursor:"pointer", userSelect:"none", textAlign:field==="amount"?"right":"left",
-                textTransform:"uppercase", letterSpacing:"0.05em"}}>
-              {label}{sortField===field?(sortDir==="asc"?" ↑":" ↓"):""}
-            </div>
-          ))}
+          {[["date","DATE",90],["vendorName","VENDOR",2],["category","CATEGORY",2],["amount","AMOUNT",90]].map(([field,label,flex])=>{
+            const isWide = typeof flex !== "number" || flex >= 2;
+            return (
+              <div key={field} onClick={()=>{ if(sortField===field){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField(field);setSortDir("desc");} }}
+                style={{...(isWide ? {flex} : {width:flex, flexShrink:0}),
+                  minWidth:0, fontSize:11, fontWeight:700, color:sortField===field?C.accent:C.textMuted,
+                  cursor:"pointer", userSelect:"none", textAlign:field==="amount"?"right":"left",
+                  textTransform:"uppercase", letterSpacing:"0.05em"}}>
+                {label}{sortField===field?(sortDir==="asc"?" ↑":" ↓"):""}
+              </div>
+            );
+          })}
           {canEdit && <div style={{width:56, flexShrink:0}}/>}
         </div>
 
