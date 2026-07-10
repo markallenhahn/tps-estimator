@@ -9797,15 +9797,22 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
           borderBottom:`2px solid ${C.border}`, marginBottom:4}}>
           {canEdit && <div style={{width:20, flexShrink:0}}/>}
-          {[["date","DATE",90,90],["vendorName","VENDOR","2","140"],["category","CATEGORY","1","120"],["amount","AMOUNT",90,90]].map(([field,label,flex,minW])=>(
-            <div key={field} onClick={()=>{ if(sortField===field){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField(field);setSortDir("desc");} }}
-              style={{...(String(flex).match(/^\d+$/)&&Number(flex)<10 ? {width:Number(flex),flexShrink:0} : {flex:Number(flex),minWidth:Number(minW)}),
-                fontSize:11, fontWeight:700, color:sortField===field?C.accent:C.textMuted,
-                cursor:"pointer", userSelect:"none", textAlign:field==="amount"?"right":"left",
-                textTransform:"uppercase", letterSpacing:"0.05em", overflow:"hidden"}}>
-              {label}{sortField===field?(sortDir==="asc"?" ↑":" ↓"):""}
-            </div>
-          ))}
+          <div style={{width:90, flexShrink:0, fontSize:11, fontWeight:700, color:sortField==="date"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
+            onClick={()=>{ sortField==="date"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("date"); setSortDir("desc"); }}>
+            DATE{sortField==="date"?(sortDir==="asc"?" ↑":" ↓"):""}
+          </div>
+          <div style={{flex:2, minWidth:140, fontSize:11, fontWeight:700, color:sortField==="vendorName"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
+            onClick={()=>{ sortField==="vendorName"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("vendorName"); setSortDir("desc"); }}>
+            VENDOR{sortField==="vendorName"?(sortDir==="asc"?" ↑":" ↓"):""}
+          </div>
+          <div style={{flex:1, minWidth:120, fontSize:11, fontWeight:700, color:sortField==="category"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
+            onClick={()=>{ sortField==="category"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("category"); setSortDir("desc"); }}>
+            CATEGORY{sortField==="category"?(sortDir==="asc"?" ↑":" ↓"):""}
+          </div>
+          <div style={{width:90, flexShrink:0, fontSize:11, fontWeight:700, color:sortField==="amount"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em", textAlign:"right"}}
+            onClick={()=>{ sortField==="amount"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("amount"); setSortDir("desc"); }}>
+            AMOUNT{sortField==="amount"?(sortDir==="asc"?" ↑":" ↓"):""}
+          </div>
           {canEdit && <div style={{width:60, flexShrink:0}}/>}
         </div>
 
