@@ -6328,6 +6328,34 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
           )}
         </div>
 
+        {/* Summary grid — old profitability style */}
+        {ebitdaTotals.revenue > 0 && (() => {
+          const cards = [
+            { label:"TOTAL REVENUE",    value: ebitdaTotals.revenue,    color:"#000", bold:true },
+            { label:"TOTAL COSTS",      value: ebitdaTotals.cogs + (periodExpLabor||0) + periodOverhead, color:"#000" },
+            { label:"MATERIALS",        value: ebitdaTotals.cogs,       color:C.textMuted },
+            { label:"FUEL (5%)",        value: ebitdaTotals.revenue*0.05, color:C.textMuted },
+            { label:"LABOR",            value: periodExpLabor > 0 ? periodExpLabor : ebitdaTotals.revenue*(reportSettings.laborPct||15)/100, color:C.textMuted },
+            { label:"GROSS PROFIT",     value: ebitdaTotals.grossProfit, color: ebitdaTotals.grossProfit>=0?"#16a34a":"#ef4444",
+              sub: ebitdaTotals.revenue>0?(ebitdaTotals.grossProfit/ebitdaTotals.revenue*100).toFixed(1)+"%":null },
+            { label:`OVERHEAD (${periodRevenue>0?((periodOverhead/periodRevenue)*100).toFixed(2):0}%)`,
+              value: periodOverhead,  color:C.textMuted },
+            { label:"NET PROFIT",       value: ebitdaTotals.ebitda,     color: ebitdaTotals.ebitda>=0?"#16a34a":"#ef4444",
+              sub: ebitdaTotals.revenue>0?(ebitdaTotals.ebitda/ebitdaTotals.revenue*100).toFixed(1)+"%":null },
+          ];
+          return (
+            <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:10, marginBottom:20}}>
+              {cards.map(c => (
+                <div key={c.label} style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"12px 16px"}}>
+                  <div style={{fontSize:10, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6}}>{c.label}</div>
+                  <div style={{fontSize:20, fontWeight:c.bold?800:700, color:c.color}}>{fmtMoney(c.value)}</div>
+                  {c.sub && <div style={{fontSize:13, fontWeight:600, color:c.color, marginTop:2}}>{c.sub}</div>}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* Summary cards — actuals vs estimates */}
         {(() => {
           const estCOGS     = periodRevenue * (reportSettings.cogsPct||35) / 100;
