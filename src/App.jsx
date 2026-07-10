@@ -9124,6 +9124,7 @@ const EXPENSE_CATEGORY_MAP = {
 const PAYMENT_METHODS = ["Company Card","Cash","Personal Card","Check","ACH/Transfer"];
 
 function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial, customSubcategories={} }) {
+  const isDesktop = useIsDesktop();
   const canEdit = userRole === "owner" || userRole === "manager";
   const [showForm,    setShowForm]    = useState(false);
   const [showVendors, setShowVendors] = useState(false);
