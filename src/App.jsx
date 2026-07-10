@@ -3035,6 +3035,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
   const [newName,      setNewName]      = useState("");
   const [newHours,     setNewHours]     = useState("");
   const [newJobId,     setNewJobId]     = useState("");
+  const [editJobId,    setEditJobId]    = useState("");
   const [editingId,    setEditingId]    = useState(null);
   const [editName,     setEditName]     = useState("");
   const [editHours,    setEditHours]    = useState("");
@@ -3222,8 +3223,8 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
     return days.some(d => d.date === selectedDate);
   });
 
-  const startEdit = (e) => { setEditingId(e.id); setEditName(e.name); setEditHours(String(e.hours)); };
-  const cancelEdit = () => { setEditingId(null); setEditName(""); setEditHours(""); };
+  const startEdit = (e) => { setEditingId(e.id); setEditName(e.name); setEditHours(String(e.hours)); setEditJobId(e.jobId||""); };
+  const cancelEdit = () => { setEditingId(null); setEditName(""); setEditHours(""); setEditJobId(""); };
   const saveEdit = (entry) => {
     if (!editName.trim() || !editHours || isNaN(Number(editHours))) return;
     const nameLower = editName.trim().toLowerCase();
@@ -3236,7 +3237,8 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
     addLaborEntry({ id: Date.now(), date: entry.date, name: editName.trim(), hours: Number(editHours),
       userId: matched?.id || entry.userId || null,
       offAppWorkerId: matchedOAW2?.id || entry.offAppWorkerId || null,
-      linked: !!(matched || matchedOAW2 || entry.userId || entry.offAppWorkerId) });
+      linked: !!(matched || matchedOAW2 || entry.userId || entry.offAppWorkerId),
+      jobId: editJobId || null });
     cancelEdit();
   };
 
@@ -3362,11 +3364,15 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
             d.setDate(d.getDate() - 7);
             setSelectedDate(d.toISOString().slice(0,10));
           }}>← Prev Week</button>
-          <div style={{flex:1, overflow:"hidden"}}>
+          <label style={{flex:1, overflow:"hidden", cursor:"pointer", position:"relative"}}>
+            <div style={{textAlign:"center", fontWeight:600, fontSize:14, padding:"8px 4px",
+              background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, lineHeight:"1.2"}}>
+              {new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+            </div>
             <input type="date" value={selectedDate}
               onChange={e => setSelectedDate(e.target.value)}
-              style={{...S.input, marginBottom:0}}/>
-          </div>
+              style={{position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}}/>
+          </label>
           <button style={{...S.btnSecondary, flexShrink:0, padding:"8px 12px"}} onClick={() => {
             const d = new Date(selectedDate+"T12:00:00");
             d.setDate(d.getDate() + 7);
@@ -3456,6 +3462,19 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                       )}
                       <input type="number" value={editHours} onChange={e2 => setEditHours(e2.target.value)}
                         min="0" step="0.5" style={{...S.input, flex:1}}/>
+                    </div>
+                    <div style={{overflow:"hidden", marginBottom:8}}>
+                      <select value={editJobId||""} onChange={e2 => setEditJobId(e2.target.value)} style={{...S.input}}>
+                        <option value="">Unallocated</option>
+                        {scheduledJobsForDate.length > 0 && <option disabled>── Today's Jobs ──</option>}
+                        {scheduledJobsForDate.map(j=>(
+                          <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
+                        ))}
+                        {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).length > 0 && <option disabled>── Other Jobs ──</option>}
+                        {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).map(j=>(
+                          <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
+                        ))}
+                      </select>
                     </div>
                     <div style={{display:"flex", gap:8}}>
                       <button style={{...S.btnPrimary, flex:1, fontSize:12}} onClick={() => saveEdit(e)}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
