@@ -6287,7 +6287,7 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
     <div>
       {/* Date range controls */}
       <section style={S.section}>
-        <h2 style={S.h2}>EBITDA Report</h2>
+        <h2 style={S.h2}>Profitability Report</h2>
         <div style={{display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"flex-end"}}>
           <div style={{display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden"}}>
             {["ytd","custom"].map(r => (
@@ -6635,7 +6635,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
 
-  const [mode,          setMode]          = useState("profitability"); // "profitability" | "outstanding" | "ebitda"
+  const [mode,          setMode]          = useState("ebitda"); // "outstanding" | "ebitda"
   const [filterStatuses, setFilterStatuses] = useState([]); // empty = all statuses
   const [pdfLoading,   setPdfLoading]   = useState(false);
   const [ebitdaRange,   setEbitdaRange]   = useState("ytd"); // "ytd" | "custom"
@@ -6985,16 +6985,16 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 
   return (
     <div className="tps-page" style={S.page}>
-      <p style={S.subhead}>{mode==="profitability" ? "Profitability across all jobs" : mode==="outstanding" ? "Invoices sent but not yet paid" : "EBITDA breakdown with actual costs"}</p>
+      <p style={S.subhead}>{mode==="ebitda" ? "Profitability breakdown with actuals" : "Invoices sent but not yet paid"}</p>
 
       {/* Mode toggle */}
       <div style={{display:"flex", gap:8, marginBottom:16, flexWrap:"wrap"}}>
-        <button onClick={() => setMode("profitability")}
+        <button onClick={() => setMode("ebitda")}
           style={{
             flex:1, padding:"8px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
-            background: mode==="profitability" ? C.accent : C.surface2,
-            color: mode==="profitability" ? "#000" : C.textMuted,
-            border: `1px solid ${mode==="profitability" ? C.accent : C.border}`,
+            background: mode==="ebitda" ? C.accent : C.surface2,
+            color: mode==="ebitda" ? "#000" : C.textMuted,
+            border: `1px solid ${mode==="ebitda" ? C.accent : C.border}`,
           }}>
           📊 Profitability
         </button>
@@ -7007,20 +7007,11 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           }}>
           🧾 Outstanding Invoices
         </button>
-        <button onClick={() => setMode("ebitda")}
-          style={{
-            flex:1, padding:"8px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
-            background: mode==="ebitda" ? C.accent : C.surface2,
-            color: mode==="ebitda" ? "#000" : C.textMuted,
-            border: `1px solid ${mode==="ebitda" ? C.accent : C.border}`,
-          }}>
-          💰 EBITDA
-        </button>
       </div>
 
       {mode === "outstanding" ? (
         <OutstandingInvoicesSection jobs={jobs} setCurrentJob={setCurrentJob} setView={setView}/>
-      ) : mode === "ebitda" ? (
+      ) : (
         <EbitdaReport
           ebitdaJobData={ebitdaJobData}
           ebitdaTotals={ebitdaTotals}
@@ -7041,117 +7032,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           serviceTypeTotals={serviceTypeTotals}
           setCurrentJob={setCurrentJob} setView={setView}
         />
-      ) : (
-      <>
-      {/* Filters + print */}
-      <section style={S.section}>
-        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
-          <h2 style={{...S.h2, margin:0}}>Filter by Status</h2>
-          {filterStatuses.length > 0 && (
-            <button style={{...S.btnSecondary, fontSize:11, padding:"4px 10px"}} onClick={clearStatusFilter}>
-              ✕ Clear ({filterStatuses.length})
-            </button>
-          )}
-        </div>
-        <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:14}}>
-          {STATUS_OPTS.map(s => {
-            const selected = filterStatuses.includes(s);
-            return (
-              <button key={s} onClick={() => toggleStatus(s)}
-                style={{
-                  fontSize:12, fontWeight:600, padding:"6px 12px", borderRadius:20, cursor:"pointer",
-                  background: selected ? "#dcfce7" : C.surface2,
-                  color: selected ? "#15803d" : C.textMuted,
-                  border: `1px solid ${selected ? "#15803d" : C.border}`,
-                }}>
-                {selected ? "✓ " : ""}{statusLabel(s)}
-              </button>
-            );
-          })}
-        </div>
-        <p style={{fontSize:11, color:C.textDim, marginTop:-6, marginBottom:14}}>
-          {filterStatuses.length === 0 ? "No filter selected — showing all statuses." : `Showing: ${filterStatuses.map(statusLabel).join(", ")}`}
-        </p>
-        <button style={{...S.btnPrimary, width:"100%", opacity:pdfLoading?.5:1}}
-          onClick={printReport} disabled={pdfLoading}>
-          {pdfLoading?"⏳ Generating...":<><LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF</>}
-        </button>
-      </section>
-
-      {/* Summary cards */}
-      {reportJobs.length > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Summary ({reportJobs.length} jobs)</h2>
-          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
-            {[
-              ["Total Revenue",    formatCurrency(totals.revenue),                C.text],
-              ["Total Costs",      formatCurrency(totals.totalCosts),              C.text],
-              ["Materials",        formatCurrency(totals.totalMaterials),          C.textMuted],
-              ["Fuel (5%)",        formatCurrency(totals.fuelCost),               C.textMuted],
-              ["Labor (16%)",      formatCurrency(totals.laborCost),              C.textMuted],
-              ["Gross Profit",     formatCurrency(totals.grossProfit),            totals.grossProfit>=0?C.green:C.danger],
-              ["Gross Margin",     overallMargin.toFixed(1)+"%",                  overallMargin>=52?C.green:C.danger],
-              ["Overhead (16.45%)",formatCurrency(totals.overhead),               C.textMuted],
-              ["Net Profit",       formatCurrency(totals.netProfit),              totals.netProfit>=0?C.green:C.danger],
-              ["Net Margin",       overallNetMargin.toFixed(1)+"%",               overallNetMargin>=0?C.green:C.danger],
-            ].map(([label,val,color])=>(
-              <div key={label} style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px"}}>
-                <div style={{fontSize:11, color:C.textMuted, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em"}}>{label}</div>
-                <div style={{fontSize:20, fontWeight:800, color}}>{val}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Job rows */}
-      {reportJobs.length === 0 ? (
-        <div style={S.empty}>
-          <div style={S.emptyIcon}>📊</div>
-          <p style={S.emptyText}>No jobs with revenue yet. Complete estimates to see profitability data here.</p>
-        </div>
-      ) : (
-        <section style={S.section}>
-          <h2 style={S.h2}>Job Breakdown</h2>
-          {reportJobs.map(j => {
-            const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers);
-            const marginColor = f.actualMargin>=52 ? C.green : f.actualMargin>0 ? C.accent : C.danger;
-            return (
-              <div key={j.id} style={{...S.schedJobCard, marginBottom:10}}
-                onClick={()=>{ setCurrentJob(j); setView("costs"); }}>
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8}}>
-                  <div style={{flex:1, minWidth:0, marginRight:8}}>
-                    <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
-                    <div style={S.schedJobAddr}>{j.address||"No address"} · {j.date}</div>
-                  </div>
-                  <span style={{...S.statusBadge,...(S[`status_${j.status}`]||S.status_draft)}}>{j.status}</span>
-                </div>
-                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6}}>
-                  {[
-                    ["Revenue",      formatCurrency(f.revenue),        C.text],
-                    ["Labor (16%)",  formatCurrency(f.laborCost),      C.textMuted],
-                    ["Fuel (5%)",    formatCurrency(f.fuelCost),       C.textMuted],
-                    ["Total Costs",  formatCurrency(f.totalCosts),     C.text],
-                    ["Gross Profit", formatCurrency(f.grossProfit),    f.grossProfit>=0?C.green:C.danger],
-                    ["Gross Margin", f.actualMargin.toFixed(1)+"%",    f.actualMargin>=52?C.green:C.danger],
-                    ["Overhead",     formatCurrency(f.overhead),       C.textMuted],
-                    ["Net Profit",   formatCurrency(f.netProfit),      f.netProfit>=0?C.green:C.danger],
-                    ["Variance",     f.variance!==0?(f.variance>0?"+":"")+formatCurrency(f.variance):"On Est.", f.variance>0?C.danger:f.variance<0?C.green:C.textMuted],
-                  ].map(([label,val,color])=>(
-                    <div key={label} style={{background:C.surface, borderRadius:6, padding:"6px 8px"}}>
-                      <div style={{fontSize:10, color:C.textDim, marginBottom:2}}>{label}</div>
-                      <div style={{fontSize:12, fontWeight:700, color}}>{val}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{fontSize:11, color:C.textMuted, marginTop:6}}>Tap to open costs →</div>
-              </div>
-            );
-          })}
-        </section>
-      )}
-      </>
-      )}
+      }
     </div>
   );
 }
