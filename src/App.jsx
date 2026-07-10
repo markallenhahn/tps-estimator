@@ -6826,11 +6826,15 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   // Per-service-type aggregation
   const serviceTypeTotals = {};
   ebitdaJobData.forEach(d => {
-    // Allocate job-level labor and overhead to services by revenue share
-    const jobRevenue = d.revenue;
-    Object.entries(d.serviceBreakdown||{}).forEach(([svcType, svcData]) => {
+    const breakdown = d.serviceBreakdown || {};
+    const entries = Object.entries(breakdown);
+    if (!entries.length) return;
+    // Use sum of service revenues as denominator so shares always sum to 1
+    const svcRevenueTotal = entries.reduce((s, [, sv]) => s + sv.revenue, 0);
+    const denom = svcRevenueTotal > 0 ? svcRevenueTotal : d.revenue;
+    entries.forEach(([svcType, svcData]) => {
       if (!serviceTypeTotals[svcType]) serviceTypeTotals[svcType] = { revenue:0, cogs:0, labor:0, overhead:0, jobCount:0 };
-      const share = jobRevenue > 0 ? svcData.revenue / jobRevenue : 0;
+      const share = denom > 0 ? svcData.revenue / denom : 1 / entries.length;
       serviceTypeTotals[svcType].revenue  += svcData.revenue;
       serviceTypeTotals[svcType].cogs     += d.cogs * share;
       serviceTypeTotals[svcType].labor    += d.jobLabor * share;
