@@ -620,7 +620,7 @@ function TrialBanner({ tenantData, userRole, onGoToAccount }) {
 
 function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant, isPlatformAdmin, companySettings={} }) {
   const currentTenant = (myTenants||[]).find(t => t.tenantId === currentTenantId);
-  const currentLogo = companySettings?.logoB64 ? "data:image/png;base64," + companySettings.logoB64 : (currentTenant?.data?.logoUrl || ("data:image/png;base64," + B_LOGO_B64));
+  const currentLogo = "data:image/png;base64," + B_LOGO_B64;
   const currentCompanyAlt = currentTenant?.companyName || "Company logo";
 
   const tabsRef = useRef(null);
@@ -4141,7 +4141,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                           return s;
                         }, 0);
                         // Find unit cost from materials purchased in this period
-                        const periodMats = (materials||[]).filter(m=>m.category===reconcilMatType && m.date > p.openDate && m.date <= p.closeDate);
+                        const periodMats = (materials||[]).filter(m=>m.category===reconcilMatType && m.date >= p.openDate && m.date <= p.closeDate);
                         // Weighted average unit cost:
                         // Priority: total cost / qty > unitCost field > 0
                         const totalQty  = periodMats.reduce((s,m)=>s+Number(m.qty||0),0);
