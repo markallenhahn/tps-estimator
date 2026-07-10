@@ -3409,18 +3409,20 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
             <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
               min="0" step="0.5" style={{...S.input, flex:1}} placeholder="Hrs"
               onKeyDown={e => e.key==="Enter" && addEntry()}/>
-            <select value={newJobId} onChange={e => setNewJobId(e.target.value)} style={{...S.input, flex:2}}>
-              <option value="">Unallocated</option>
-              {scheduledJobsForDate.length > 0 && <option disabled>── Today's Jobs ──</option>}
-              {scheduledJobsForDate.map(j=>(
-                <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
-              ))}
-              {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).length > 0 && <option disabled>── Other Jobs ──</option>}
-              {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).map(j=>(
-                <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
-              ))}
-            </select>
-            <button style={{...S.btnPrimary, whiteSpace:"nowrap", padding:"8px 14px"}} onClick={addEntry}>+ Add</button>
+            <div style={{flex:2, minWidth:0, overflow:"hidden"}}>
+              <select value={newJobId} onChange={e => setNewJobId(e.target.value)} style={{...S.input}}>
+                <option value="">Unallocated</option>
+                {scheduledJobsForDate.length > 0 && <option disabled>── Today's Jobs ──</option>}
+                {scheduledJobsForDate.map(j=>(
+                  <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
+                ))}
+                {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).length > 0 && <option disabled>── Other Jobs ──</option>}
+                {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).map(j=>(
+                  <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
+                ))}
+              </select>
+            </div>
+            <button style={{...S.btnPrimary, whiteSpace:"nowrap", padding:"8px 14px", flexShrink:0}} onClick={addEntry}>+ Add</button>
           </div>
         )}
 
