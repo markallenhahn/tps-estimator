@@ -7665,7 +7665,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
 // ─── Permissions View (read-only for owner) ─────────────────────────────────────────────
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
 // ─── Owner Hub — company owner's settings (no platform-level features) ─────
-function OwnerHubView({ setView, iconStyle, syncIconStyle }) {
+function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, syncReportSettings }) {
   const cards = [
     { key:"company-settings", icon:"🏢", lucide:"Building2",    title:"Company Settings",      desc:"Update your company name, contact info, logo, and legal terms." },
     { key:"permissions",      icon:"🔐", lucide:"Lock",         title:"Permissions",           desc:"View what each role can see. Contact BlacktopIQ support to change." },
@@ -8398,7 +8398,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
 }
 
 // ─── Team View (owner/manager only) ────────────────────────────────────────────────────
-function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
+function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData, offAppWorkers=[], syncOffAppWorkers }) {
   const isManager = userRole === "manager";
   const [users,     setUsers]     = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -8694,6 +8694,139 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
       </section>
 
       <CrewsSection users={users} isManager={isManager} tFetch={tFetch}/>
+
+      {/* ── Off-App Workers ── */}
+      <section style={S.section}>
+        <h2 style={S.h2}>Off-App Workers</h2>
+        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:14}}>
+          Add workers who don't have a phone or email. They won't receive an invite but can be selected in the Labor tab for time tracking and cost calculations.
+        </p>
+        <OffAppWorkersSection offAppWorkers={offAppWorkers} syncOffAppWorkers={syncOffAppWorkers}/>
+      </section>
+    </div>
+  );
+}
+
+function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
+  const [newName,     setNewName]     = useState("");
+  const [saving,      setSaving]      = useState(false);
+  const [editingId,   setEditingId]   = useState(null);
+  const [editName,    setEditName]    = useState("");
+  const [newRate,     setNewRate]     = useState("");
+  const [newRateDate, setNewRateDate] = useState(new Date().toISOString().slice(0,10));
+  const [rateEditId,  setRateEditId]  = useState(null);
+
+  const addWorker = async () => {
+    if (!newName.trim()) return;
+    setSaving(true);
+    const worker = { id: Date.now(), name: newName.trim(), rateHistory: [] };
+    await syncOffAppWorkers([...offAppWorkers, worker]);
+    setNewName(""); setSaving(false);
+  };
+
+  const removeWorker = async (id) => {
+    if (!confirm("Remove this worker? Their past labor entries won't be affected.")) return;
+    await syncOffAppWorkers(offAppWorkers.filter(w => w.id !== id));
+  };
+
+  const saveRate = async (workerId) => {
+    if (!newRate || isNaN(Number(newRate))) { alert("Enter a valid rate."); return; }
+    const entry = { rate: Number(newRate), startDate: newRateDate };
+    const updated = offAppWorkers.map(w => {
+      if (w.id !== workerId) return w;
+      const rateHistory = [...(w.rateHistory||[]).filter(r => r.startDate !== newRateDate), entry]
+        .sort((a,b) => a.startDate.localeCompare(b.startDate));
+      return {...w, rateHistory};
+    });
+    await syncOffAppWorkers(updated);
+    setRateEditId(null); setNewRate(""); setNewRateDate(new Date().toISOString().slice(0,10));
+  };
+
+  const getCurrentRate = (w) => {
+    const today = new Date().toISOString().slice(0,10);
+    const hist = (w.rateHistory||[]).filter(r => r.startDate <= today);
+    return hist.length > 0 ? hist[hist.length-1].rate : null;
+  };
+
+  return (
+    <div>
+      {offAppWorkers.length === 0 && <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>No off-app workers added yet.</p>}
+      {offAppWorkers.map(w => {
+        const currentRate = getCurrentRate(w);
+        return (
+          <div key={w.id} style={{borderBottom:`1px solid ${C.border}`, padding:"12px 0"}}>
+            <div style={{display:"flex", alignItems:"center", gap:8}}>
+              <div style={{flex:1}}>
+                {editingId === w.id ? (
+                  <div style={{display:"flex", gap:8}}>
+                    <input value={editName} onChange={e=>setEditName(e.target.value)} style={{...S.input, flex:1}}/>
+                    <button style={S.btnPrimary} onClick={async () => {
+                      if (!editName.trim()) return;
+                      await syncOffAppWorkers(offAppWorkers.map(x=>x.id===w.id?{...x,name:editName.trim()}:x));
+                      setEditingId(null);
+                    }}>Save</button>
+                    <button style={S.btnSecondary} onClick={()=>setEditingId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div style={{display:"flex", alignItems:"center", gap:8}}>
+                    <span style={{fontWeight:600, fontSize:14}}>{w.name}</span>
+                    <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px", color:C.textMuted}}>Off-App</span>
+                    {currentRate != null && <span style={{fontSize:12, color:C.textMuted}}>${currentRate}/hr</span>}
+                  </div>
+                )}
+              </div>
+              {editingId !== w.id && (
+                <div style={{display:"flex", gap:6}}>
+                  <button style={S.btnSmall} onClick={()=>{setEditingId(w.id);setEditName(w.name);}}>
+                    <LucideIcons.Pencil size={12} strokeWidth={2}/>
+                  </button>
+                  <button style={{...S.btnSmall, color:C.danger}} onClick={()=>removeWorker(w.id)}>✕</button>
+                </div>
+              )}
+            </div>
+            <div style={{marginTop:8}}>
+              {(w.rateHistory||[]).length > 0 && (
+                <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:6}}>
+                  {[...(w.rateHistory||[])].sort((a,b)=>b.startDate.localeCompare(a.startDate)).map((r,i)=>(
+                    <span key={i} style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"2px 8px", color:C.textMuted}}>
+                      ${r.rate}/hr from {r.startDate}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {rateEditId === w.id ? (
+                <div style={{display:"flex", gap:8, flexWrap:"wrap", alignItems:"center"}}>
+                  <div style={{width:110, flexShrink:0, overflow:"hidden"}}>
+                    <input type="number" value={newRate} onChange={e=>setNewRate(e.target.value)}
+                      min="0" step="0.25" placeholder="Rate ($/hr)"
+                      style={{...S.input, height:42, padding:"8px 10px", boxSizing:"border-box"}}/>
+                  </div>
+                  <div style={{width:150, flexShrink:0, overflow:"hidden"}}>
+                    <input type="date" value={newRateDate} onChange={e=>setNewRateDate(e.target.value)}
+                      style={{...S.input, height:42, padding:"8px 10px", boxSizing:"border-box"}}/>
+                  </div>
+                  <button style={S.btnPrimary} onClick={()=>saveRate(w.id)}>Save Rate</button>
+                  <button style={S.btnSecondary} onClick={()=>setRateEditId(null)}>Cancel</button>
+                </div>
+              ) : (
+                <button style={{...S.btnSmall, fontSize:11}} onClick={()=>{setRateEditId(w.id);setNewRate("");setNewRateDate(new Date().toISOString().slice(0,10));}}>
+                  <LucideIcons.Plus size={11} strokeWidth={2} style={{verticalAlign:"middle",marginRight:3}}/>
+                  {(w.rateHistory||[]).length > 0 ? "Update Rate" : "Set Rate"}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <div style={{display:"flex", gap:8, marginTop:14, maxWidth:400}}>
+        <input value={newName} onChange={e=>setNewName(e.target.value)}
+          placeholder="Full name" style={{...S.input, flex:1}}
+          onKeyDown={e=>e.key==="Enter"&&addWorker()}/>
+        <button style={{...S.btnPrimary, flexShrink:0, opacity:saving?0.6:1}} onClick={addWorker} disabled={saving}>
+          <LucideIcons.Plus size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
+          Add
+        </button>
+      </div>
     </div>
   );
 }
@@ -14557,8 +14690,8 @@ function App() {
         {view==="referral"      && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
         {view==="help" && getAccessLevel(permissions,"help",userRoles)!=="hidden" && <HelpView tFetch={tFetch} currentTenantId={currentTenantId} session={session} userRole={userRole} accessToken={session?.access_token} currentUserName={currentUserName} currentTenant={currentTenant}/>}
         {view==="request-form"  && userRole==="owner" && <EstimateRequestLinkView setView={navigateTo} currentTenantId={currentTenantId}/>}
-        {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data}/>}
-        {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
+        {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data} offAppWorkers={offAppWorkers} syncOffAppWorkers={syncOffAppWorkers}/>}
+        {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle} reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>}
         {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token} permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions}/>}
         {view==="global-permissions" && isPlatformAdmin && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={false}/>}
         {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
