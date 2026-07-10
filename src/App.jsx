@@ -7665,6 +7665,153 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
 // ─── Permissions View (read-only for owner) ─────────────────────────────────────────────
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
 // ─── Owner Hub — company owner's settings (no platform-level features) ─────
+function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
+  const DEFAULT_SUBCATS = { "COGS": [], "Overhead": [] };
+  const DEFAULT_BUCKETS = { "COGS":"cogs", "Overhead":"overhead", "Labor":"labor" };
+  const defaults = { laborPct:15, cogsPct:35, overheadPct:15, ebitdaTargetDollars:"", categoryBuckets:DEFAULT_BUCKETS, customSubcategories:DEFAULT_SUBCATS };
+  const rs = { ...defaults, ...reportSettings, categoryBuckets:{...DEFAULT_BUCKETS,...(reportSettings.categoryBuckets||{})}, customSubcategories:{...DEFAULT_SUBCATS,...(reportSettings.customSubcategories||{})} };
+  const [draft, setDraft] = useState({...rs});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [newSubcatName, setNewSubcatName] = useState("");
+  const [newSubcatCat, setNewSubcatCat] = useState("COGS");
+  const setD = (k,v) => setDraft(p=>({...p,[k]:v}));
+  const totalEstPct = (draft.cogsPct||0) + (draft.laborPct||0) + (draft.overheadPct||0);
+  const calcEbitdaPct = Math.max(0, 100 - totalEstPct);
+
+  const autoSaveDraft = (updater) => {
+    setDraft(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (syncReportSettings) syncReportSettings(next);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setSaving(true);
+    if (syncReportSettings) await syncReportSettings(draft);
+    setSaving(false); setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const RECOMMENDED = {
+    "COGS": ["Materials","Subcontractors","Equipment Rental","Job Supplies","Crew Supplies","Fuel"],
+    "Overhead": ["Insurance","Office & Software","Vehicle Payments/Lease","Equipment Payments/Lease","Equipment Maintenance & Repairs","Marketing & Advertising","Phone & Utilities","Accounting & Legal","Owner Salary/Draw","Other G&A"],
+  };
+
+  return (
+    <section style={S.section}>
+      <h2 style={S.h2}>Report Settings</h2>
+      <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:20}}>
+        Configure how your expenses map to EBITDA buckets and set your estimated cost percentages.
+      </p>
+      <div style={{display:"flex", flexDirection:"column", gap:24}}>
+
+        {/* Subcategories */}
+        <div>
+          <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8}}>Subcategories</div>
+          <p style={{fontSize:12, color:C.textMuted, marginTop:-4, marginBottom:12}}>Click recommended subcategories to add them, or create custom ones.</p>
+          {(() => {
+            const customAssigned = new Set(Object.values(draft.customSubcategories||{}).flat());
+            const unassigned = { COGS: RECOMMENDED.COGS.filter(s=>!customAssigned.has(s)), Overhead: RECOMMENDED.Overhead.filter(s=>!customAssigned.has(s)) };
+            if (unassigned.COGS.length === 0 && unassigned.Overhead.length === 0) return null;
+            return (
+              <div style={{background:C.surface2, borderRadius:8, padding:12, marginBottom:12, border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:11, fontWeight:700, color:C.textMuted, marginBottom:8}}>RECOMMENDED — click to add</div>
+                {["COGS","Overhead"].map(cat => unassigned[cat].length > 0 && (
+                  <div key={cat} style={{marginBottom:8}}>
+                    <div style={{fontSize:11, fontWeight:600, color:C.textMuted, marginBottom:4}}>{cat}</div>
+                    <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                      {unassigned[cat].map(s => (
+                        <button key={s} onClick={() => {
+                          autoSaveDraft(p => {
+                            const ns = new Set([...(p.customSubcategories[cat]||[]), s]);
+                            return {...p, customSubcategories:{...p.customSubcategories,[cat]:[...ns]}};
+                          });
+                        }} style={{fontSize:11, padding:"3px 10px", borderRadius:20, cursor:"pointer",
+                          border:`1px dashed ${C.border}`, background:C.surface, color:C.textMuted}}>+ {s}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          {["COGS","Overhead"].map(cat => {
+            const builtIn = EXPENSE_CATEGORY_MAP[cat]||[];
+            const custom = draft.customSubcategories?.[cat]||[];
+            const all = [...builtIn,...custom];
+            if (!all.length) return null;
+            return (
+              <div key={cat} style={{marginBottom:12}}>
+                <div style={{fontSize:12, fontWeight:600, marginBottom:6}}>{cat}</div>
+                <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                  {all.map(s => {
+                    const isCustom = custom.includes(s);
+                    return (
+                      <span key={s} style={{display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:600,
+                        padding:"3px 8px 3px 10px", borderRadius:20,
+                        background:isCustom?"#fffbeb":C.surface2, border:`1px solid ${isCustom?C.accent:C.border}`, color:C.text}}>
+                        {s}
+                        {isCustom && <button onClick={()=>{
+                          autoSaveDraft(p => ({...p, customSubcategories:{...p.customSubcategories,[cat]:(p.customSubcategories[cat]||[]).filter(x=>x!==s)}}));
+                        }} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.textMuted}}>×</button>}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          <div style={{display:"flex", gap:8, maxWidth:420, marginTop:8}}>
+            <select value={newSubcatCat} onChange={e=>setNewSubcatCat(e.target.value)} style={{...S.input, width:120, flexShrink:0}}>
+              <option value="COGS">COGS</option>
+              <option value="Overhead">Overhead</option>
+            </select>
+            <input value={newSubcatName} onChange={e=>setNewSubcatName(e.target.value)}
+              placeholder="Custom subcategory…" style={{...S.input, flex:1}}
+              onKeyDown={e=>{if(e.key==="Enter"&&newSubcatName.trim()){autoSaveDraft(p=>{const ns=new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]);return{...p,customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}};});setNewSubcatName("");}}}/>
+            <button style={{...S.btnSmall, flexShrink:0}} onClick={()=>{if(!newSubcatName.trim())return;autoSaveDraft(p=>{const ns=new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]);return{...p,customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}};});setNewSubcatName("");}}>+ Add</button>
+          </div>
+        </div>
+
+        {/* Estimated %s */}
+        <div>
+          <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:4}}>Estimated Cost Percentages</div>
+          <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>Used when actual expense data isn't available. EBITDA % is calculated automatically.</p>
+          <div style={{display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end"}}>
+            {[["cogsPct","COGS %","#ef4444"],["laborPct","Labor %","#f59e0b"],["overheadPct","Overhead %","#8b5cf6"]].map(([key,label,color])=>(
+              <div key={key} style={{flex:1, minWidth:100}}>
+                <div style={{fontSize:12, fontWeight:600, marginBottom:4, color}}>{label}</div>
+                <div style={{display:"flex", alignItems:"center", gap:4}}>
+                  <input type="number" min="0" max="100" step="0.5" value={draft[key]}
+                    onChange={e=>setD(key,Number(e.target.value))} style={{...S.input, flex:1}}/>
+                  <span style={{fontSize:13, color:C.textMuted}}>%</span>
+                </div>
+              </div>
+            ))}
+            <div style={{flex:1, minWidth:100}}>
+              <div style={{fontSize:12, fontWeight:600, marginBottom:4, color:"#10b981"}}>EBITDA %</div>
+              <div style={{display:"flex", alignItems:"center", gap:4}}>
+                <div style={{flex:1, height:42, minHeight:42, maxHeight:42, display:"flex", alignItems:"center",
+                  padding:"8px 10px", background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, boxSizing:"border-box", overflow:"hidden"}}>
+                  <span style={{fontSize:14, fontWeight:800, color:calcEbitdaPct>=0?"#10b981":"#ef4444"}}>{calcEbitdaPct.toFixed(1)}%</span>
+                </div>
+                <span style={{fontSize:13, color:C.textMuted}}>%</span>
+              </div>
+            </div>
+          </div>
+          {totalEstPct > 100 && <div style={{fontSize:12, color:C.danger, marginTop:6}}>⚠️ Percentages exceed 100%</div>}
+        </div>
+
+        <button onClick={save} disabled={saving} style={{...S.btnPrimary, alignSelf:"flex-start", opacity:saving?0.6:1}}>
+          {saving?"Saving…":saved?"✓ Saved":"Save Settings"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, syncReportSettings }) {
   const cards = [
     { key:"company-settings", icon:"🏢", lucide:"Building2",    title:"Company Settings",      desc:"Update your company name, contact info, logo, and legal terms." },
@@ -7708,6 +7855,8 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, sy
           </button>
         </div>
       </section>
+
+      <ReportSettingsCard reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>
 
       {cards.map(c => (
         <button key={c.key} onClick={() => openCard(c.key)}
