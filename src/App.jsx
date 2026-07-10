@@ -6239,7 +6239,7 @@ function getFifoUnitCost(materialType, dateStr, materials) {
 }
 
 // ─── EBITDA Report ────────────────────────────────────────────────────────────
-function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, serviceTypeTotals={}, setCurrentJob, setView }) {
+function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCOGS=0, periodExpLabor=0, cogsBySubcat={}, overheadBySubcat={}, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
   const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
   const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
   const isDesktopLayout = useIsDesktop();
@@ -6260,6 +6260,24 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhea
               </button>
             ))}
           </div>
+          {/* Status filter pills */}
+          <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:8, alignItems:"center"}}>
+            <span style={{fontSize:12, color:C.textMuted, fontWeight:600, marginRight:4}}>Statuses:</span>
+            {["estimate","draft","sent","scheduled","completed","paid","lost"].map(s => {
+              const active = ebitdaStatuses.includes(s);
+              return (
+                <button key={s} onClick={() => setEbitdaStatuses(prev =>
+                  active ? prev.filter(x => x !== s) : [...prev, s]
+                )} style={{fontSize:11, fontWeight:600, padding:"3px 10px", borderRadius:20, cursor:"pointer",
+                  border:`1px solid ${active ? C.accent : C.border}`,
+                  background: active ? "#fffbeb" : C.surface2,
+                  color: active ? "#000" : C.textMuted}}>
+                  {s.charAt(0).toUpperCase()+s.slice(1)}
+                </button>
+              );
+            })}
+          </div>
+
           {ebitdaRange === "custom" && (
             <>
               <input type="date" value={ebitdaFrom} onChange={e => setEbitdaFrom(e.target.value)}
@@ -6271,31 +6289,102 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhea
           )}
         </div>
 
-        {/* Summary cards */}
-        <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px,1fr))", gap:10, marginBottom:16}}>
-          {[
-            { label:"Revenue",      value:fmtMoney(ebitdaTotals.revenue),      color:C.accent },
-            { label:"COGS",         value:fmtMoney(ebitdaTotals.cogs),          color:"#ef4444" },
-            { label:"Gross Profit", value:fmtMoney(ebitdaTotals.grossProfit),   color:"#3b82f6",
-              sub: fmtPct(ebitdaTotals.revenue > 0 ? (ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100 : 0) },
-            { label:"Labor",        value:fmtMoney(ebitdaTotals.jobLabor),      color:"#f59e0b" },
-            { label:"Overhead",     value:fmtMoney(ebitdaTotals.overheadAlloc), color:"#8b5cf6" },
-            { label:"EBITDA",       value:fmtMoney(ebitdaTotals.ebitda),        color:"#10b981",
-              sub: fmtPct(ebitdaTotals.revenue > 0 ? (ebitdaTotals.ebitda/ebitdaTotals.revenue)*100 : 0) },
-          ].map(c => (
-            <div key={c.label} style={{background:C.surface2, borderRadius:8, padding:"10px 14px", border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:11, color:C.textMuted, marginBottom:4}}>{c.label}</div>
-              <div style={{fontSize:18, fontWeight:800, color:c.color}}>{c.value}</div>
-              {c.sub && <div style={{fontSize:11, color:C.textMuted}}>{c.sub}</div>}
-            </div>
-          ))}
-        </div>
+        {/* Summary cards — actuals vs estimates */}
+        {(() => {
+          const estCOGS     = periodRevenue * (reportSettings.cogsPct||35) / 100;
+          const estLabor    = periodRevenue * (reportSettings.laborPct||15) / 100;
+          const estOverhead = periodRevenue * (reportSettings.overheadPct||15) / 100;
+          const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
+          const actLabor    = periodExpLabor > 0 ? periodExpLabor : null;
+          const actOverhead = periodOverhead  > 0 ? periodOverhead  : null;
+          const totalActCosts = ebitdaTotals.cogs + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
+          const actEbitda   = ebitdaTotals.revenue - totalActCosts;
+          const actEbitdaPct = ebitdaTotals.revenue > 0 ? (actEbitda / ebitdaTotals.revenue) * 100 : 0;
+          const targetPct   = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
 
-        {/* Overhead context */}
-        <div style={{fontSize:12, color:C.textMuted, marginBottom:16, background:C.surface2, borderRadius:8, padding:"10px 14px"}}>
-          <strong>Overhead</strong>: {fmtMoney(periodOverhead)} logged for this period · {fmtMoney(yearOverhead)} full year to date
-          {periodRevenue === 0 && <span style={{color:C.danger}}> — No revenue in period, overhead not allocated</span>}
-        </div>
+          const SummaryRow = ({label, actual, estimated, color, children}) => (
+            <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+              <div style={{width:110, fontSize:12, fontWeight:600, color:C.textMuted, flexShrink:0}}>{label}</div>
+              <div style={{flex:1}}>
+                {actual !== null ? (
+                  <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+                    <span style={{fontSize:16, fontWeight:800, color}}>{fmtMoney(actual)}</span>
+                    <span style={{fontSize:11, color:C.textMuted, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>actual</span>
+                    <span style={{fontSize:11, color:C.textMuted}}>est. {fmtMoney(estimated)}</span>
+                    {Math.abs(actual-estimated) > 1 && (
+                      <span style={{fontSize:11, fontWeight:600, color: actual>estimated ? "#ef4444" : "#10b981"}}>
+                        {actual>estimated?"+":""}{fmtMoney(actual-estimated)}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{display:"flex", alignItems:"center", gap:8}}>
+                    <span style={{fontSize:16, fontWeight:800, color}}>{fmtMoney(estimated)}</span>
+                    <span style={{fontSize:11, color:C.textMuted, background:"#fef3c7", border:"1px solid #f59e0b", borderRadius:4, padding:"1px 6px"}}>estimated</span>
+                  </div>
+                )}
+                {children}
+              </div>
+            </div>
+          );
+
+          return (
+            <div style={{background:C.surface2, borderRadius:10, padding:"4px 14px 10px", marginBottom:16, border:`1px solid ${C.border}`}}>
+              <SummaryRow label="Revenue" actual={ebitdaTotals.revenue} estimated={ebitdaTotals.revenue} color={C.accent}/>
+              <SummaryRow label="COGS" actual={actCOGS} estimated={estCOGS} color="#ef4444"/>
+              <SummaryRow label="Labor" actual={actLabor} estimated={estLabor} color="#f59e0b"/>
+              <SummaryRow label="Overhead" actual={actOverhead} estimated={estOverhead} color="#8b5cf6"/>
+              <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+                <div style={{width:110, fontSize:12, fontWeight:600, color:C.textMuted, flexShrink:0}}>Gross Profit</div>
+                <div style={{flex:1}}>
+                  <span style={{fontSize:16, fontWeight:800, color:"#3b82f6"}}>{fmtMoney(ebitdaTotals.grossProfit)}</span>
+                  <span style={{fontSize:12, color:"#3b82f6", marginLeft:8}}>{fmtPct(ebitdaTotals.revenue > 0 ? (ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100 : 0)}</span>
+                </div>
+              </div>
+              <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0"}}>
+                <div style={{width:110, fontSize:13, fontWeight:800, flexShrink:0}}>EBITDA</div>
+                <div style={{flex:1, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+                  <span style={{fontSize:20, fontWeight:800, color: actEbitda >= 0 ? "#10b981" : "#ef4444"}}>{fmtMoney(actEbitda)}</span>
+                  <span style={{fontSize:13, fontWeight:700, color: actEbitdaPct >= 0 ? "#10b981" : "#ef4444"}}>{fmtPct(actEbitdaPct)}</span>
+                  {targetPct > 0 && (
+                    <span style={{fontSize:11, color: actEbitdaPct >= targetPct ? "#10b981" : C.danger,
+                      background: actEbitdaPct >= targetPct ? "#dcfce7" : "#fee2e2",
+                      border:`1px solid ${actEbitdaPct >= targetPct ? "#16a34a" : "#ef4444"}`,
+                      borderRadius:4, padding:"1px 6px", fontWeight:600}}>
+                      {actEbitdaPct >= targetPct ? "✓" : "↓"} Target: {targetPct}%
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {periodRevenue === 0 && (
+          <div style={{fontSize:12, color:C.danger, marginBottom:12}}>No revenue in period — overhead not allocated per job.</div>
+        )}
+
+        {/* Subcategory breakdowns */}
+        {(Object.keys(cogsBySubcat).length > 0 || Object.keys(overheadBySubcat).length > 0) && (
+          <div style={{display:"flex", gap:12, flexWrap:"wrap", marginBottom:16}}>
+            {[["COGS Breakdown", cogsBySubcat, "#ef4444"], ["Overhead Breakdown", overheadBySubcat, "#8b5cf6"]].map(([title, breakdown, color]) => (
+              Object.keys(breakdown).length > 0 && (
+                <div key={title} style={{flex:1, minWidth:220, background:C.surface2, borderRadius:8, padding:"12px 14px", border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:11, fontWeight:700, color, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10}}>{title}</div>
+                  {Object.entries(breakdown).sort((a,b)=>b[1]-a[1]).map(([subcat, amt]) => (
+                    <div key={subcat} style={{display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${C.border}`, fontSize:12}}>
+                      <span>{subcat}</span>
+                      <div style={{textAlign:"right"}}>
+                        <span style={{fontWeight:600}}>{fmtMoney(amt)}</span>
+                        {periodRevenue > 0 && <span style={{fontSize:10, color:C.textMuted, marginLeft:6}}>{(amt/periodRevenue*100).toFixed(1)}%</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Per-job breakdown */}
@@ -6499,7 +6588,7 @@ function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
 }
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
-function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, laborEntries=[], expenses=[], teamUsers=[], materials=[], materialSettings={} }) {
+function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, laborEntries=[], expenses=[], teamUsers=[], materials=[], materialSettings={}, reportSettings={}, offAppWorkers=[] }) {
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
@@ -6513,6 +6602,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const [ebitdaRange,   setEbitdaRange]   = useState("ytd"); // "ytd" | "custom"
   const [ebitdaFrom,    setEbitdaFrom]    = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10));
   const [ebitdaTo,      setEbitdaTo]      = useState(new Date().toISOString().slice(0,10));
+  const [ebitdaStatuses, setEbitdaStatuses] = useState(["paid","completed","sent","scheduled"]);
 
   // ── Helper: get hourly rate for a user on a given date ──────────────────────
   const getRateForUser = (userId, dateStr) => {
@@ -6535,22 +6625,41 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const ebitdaJobs = jobs.filter(j => {
     if (!j.date) return false;
     const d = j.date.includes("/") ? new Date(j.date).toISOString().slice(0,10) : j.date;
-    return d >= ebitdaDateRange.from && d <= ebitdaDateRange.to && !["estimate","draft","lost"].includes(j.status);
+    return d >= ebitdaDateRange.from && d <= ebitdaDateRange.to && (ebitdaStatuses.length === 0 || ebitdaStatuses.includes(j.status));
   });
 
   // Total revenue for period (for overhead allocation %)
   const periodRevenue = ebitdaJobs.reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue, 0);
 
-  // Overhead expenses for period
-  const periodOverhead = expenses
-    .filter(e => e.category === "Overhead" && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to)
+  // Category bucket assignments
+  const catBuckets = {
+    "Subcontractors":"cogs","Job Supplies":"cogs","Crew Supplies":"cogs","Fuel":"cogs","Equipment":"overhead","Other":"exclude",
+    ...(reportSettings?.categoryBuckets || {"COGS":"cogs","Overhead":"overhead","Labor":"labor"}),
+  };
+
+  const periodExpByBucket = (bucket) => expenses
+    .filter(e => catBuckets[e.category] === bucket && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to)
     .reduce((s,e) => s + Number(e.amount||0), 0);
+
+  const periodOverhead = periodExpByBucket("overhead");
+  const periodExpCOGS  = periodExpByBucket("cogs");
+  const periodExpLabor = periodExpByBucket("labor");
+
+  // Subcategory breakdowns
+  const periodSubcatBreakdown = (bucket) => {
+    const out = {};
+    expenses.filter(e => catBuckets[e.category] === bucket && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to)
+      .forEach(e => { const k = e.subcategory||e.category||"Other"; out[k]=(out[k]||0)+Number(e.amount||0); });
+    return out;
+  };
+  const cogsBySubcat     = periodSubcatBreakdown("cogs");
+  const overheadBySubcat = periodSubcatBreakdown("overhead");
 
   // Also get full year overhead for context
   const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10);
   const yearEnd   = new Date().toISOString().slice(0,10);
   const yearOverhead = expenses
-    .filter(e => e.category === "Overhead" && e.date >= yearStart && e.date <= yearEnd)
+    .filter(e => catBuckets[e.category] === "overhead" && e.date >= yearStart && e.date <= yearEnd)
     .reduce((s,e) => s + Number(e.amount||0), 0);
   const yearRevenue = jobs
     .filter(j => {
@@ -6873,6 +6982,10 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           ebitdaJobData={ebitdaJobData}
           ebitdaTotals={ebitdaTotals}
           periodOverhead={periodOverhead}
+          periodExpCOGS={periodExpCOGS}
+          periodExpLabor={periodExpLabor}
+          cogsBySubcat={cogsBySubcat}
+          overheadBySubcat={overheadBySubcat}
           yearOverhead={yearOverhead}
           periodRevenue={periodRevenue}
           yearRevenue={yearRevenue}
@@ -6880,6 +6993,8 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           ebitdaFrom={ebitdaFrom} setEbitdaFrom={setEbitdaFrom}
           ebitdaTo={ebitdaTo} setEbitdaTo={setEbitdaTo}
           ebitdaDateRange={ebitdaDateRange}
+          ebitdaStatuses={ebitdaStatuses} setEbitdaStatuses={setEbitdaStatuses}
+          reportSettings={reportSettings}
           serviceTypeTotals={serviceTypeTotals}
           setCurrentJob={setCurrentJob} setView={setView}
         />
@@ -14432,7 +14547,7 @@ function App() {
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
-        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings}/></div>}
+        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings} reportSettings={reportSettings} offAppWorkers={offAppWorkers}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
           setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: {...t.data, servicesOffered: services}} : t));
           tFetch("tenants?id=eq." + currentTenantId, { method:"PATCH", body:JSON.stringify({ data: {...currentTenant.data, servicesOffered: services} }) });
