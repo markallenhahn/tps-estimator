@@ -3594,7 +3594,7 @@ const MATERIAL_TYPES = BUILTIN_MATERIAL_TYPES;
 const MATERIAL_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
 const materialStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
-function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole }) {
+function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole, updateJobById }) {
   const canEdit = userRole === "owner" || userRole === "manager";
   const allMatTypes = getMaterialTypes(materialSettings);
 
@@ -3620,6 +3620,15 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const [checkQty,       setCheckQty]       = useState("");
   const [checkDate,      setCheckDate]      = useState(todayStr);
   const [checkNotes,     setCheckNotes]     = useState("");
+
+  const [matTab, setMatTab] = useState("inventory"); // "inventory" | "reconciliation"
+
+  // Reconciliation state
+  const [reconcilMatType, setReconcilMatType] = useState("sealcoat");
+  const [reconcilFrom,    setReconcilFrom]    = useState("");
+  const [reconcilTo,      setReconcilTo]      = useState("");
+  const [reconcilSummary, setReconcilSummary] = useState(null); // computed summary
+  const [reconcilLog,     setReconcilLog]     = useState([]); // approved reconciliations
 
   const addCheck = () => {
     if (checkQty === "" || isNaN(Number(checkQty)) || Number(checkQty) < 0) { alert("Enter a valid quantity reading."); return; }
@@ -3840,6 +3849,300 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   return (
     <div className="tps-page" style={S.page}>
       <p style={S.subhead}>Log every material purchase and compare it against what the job estimates say should have been used.</p>
+
+      {/* Sub-tab nav */}
+      <div style={{display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden", marginBottom:16, alignSelf:"flex-start"}}>
+        {[["inventory","Inventory & Purchases"],["reconciliation","Reconciliation"]].map(([key,label]) => (
+          <button key={key} onClick={() => setMatTab(key)}
+            style={{padding:"8px 18px", fontSize:13, fontWeight:600, border:"none", cursor:"pointer",
+              background: matTab===key ? C.accent : C.surface2,
+              color: matTab===key ? "#000" : C.textMuted}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {matTab === "reconciliation" && userRole === "owner" && (() => {
+        // ── Reconciliation calculations ──
+        const matType = BUILTIN_MATERIAL_TYPES.find(m=>m.key===reconcilMatType);
+        const unit = matType?.defaultUnit || "unit";
+
+        // Get stock checks for this material type sorted ascending
+        const matChecks = (stockChecks||[])
+          .filter(c=>c.category===reconcilMatType)
+          .sort((a,b)=>a.date.localeCompare(b.date));
+
+        // Build periods between consecutive stock checks
+        const periods = [];
+        for (let i=0; i<matChecks.length-1; i++) {
+          const open = matChecks[i];
+          const close = matChecks[i+1];
+          // Purchases between open (exclusive) and close (inclusive)
+          const purchased = (materials||[])
+            .filter(m=>m.category===reconcilMatType && m.date > open.date && m.date <= close.date)
+            .reduce((s,m)=>s+Number(m.qty||0),0);
+          const actualUsed = open.qty + purchased - close.qty;
+          periods.push({ openDate:open.date, openQty:open.qty, closeDate:close.date, closeQty:close.qty, purchased, actualUsed });
+        }
+
+        // Filter by user-selected date range
+        const filteredPeriods = periods.filter(p =>
+          (!reconcilFrom || p.closeDate >= reconcilFrom) &&
+          (!reconcilTo   || p.openDate  <= reconcilTo)
+        );
+
+        // Get jobs with this material's service type scheduled in range
+        const svcMap = materialSettings?.serviceMappings || {};
+        const linkedSvcs = Object.keys(svcMap).filter(svc => (svcMap[svc]||[]).includes(reconcilMatType));
+
+        // For each period, find jobs with service dates in that period
+        const enrichedPeriods = filteredPeriods.map(p => {
+          const periodJobs = (jobs||[]).filter(j => {
+            return (j.scheduleDays||[]).some(day => {
+              if (!day.date) return false;
+              if (day.date < p.openDate || day.date > p.closeDate) return false;
+              return linkedSvcs.length === 0 ||
+                (day.services||[]).some(s=>linkedSvcs.includes(s.type)) ||
+                (j.areas||[]).some(a=>linkedSvcs.includes(a.serviceType));
+            });
+          });
+
+          // Estimate used across jobs in period
+          const estUsed = periodJobs.reduce((sum,j) => {
+            // Sum estimated qty for linked services
+            return sum + (j.areas||[])
+              .filter(a=>linkedSvcs.includes(a.serviceType))
+              .reduce((s,a) => {
+                if (reconcilMatType==="sealcoat") return s + (Number(a.measurement||0)/70);
+                if (reconcilMatType==="crackfill") return s + (Number(a.measurement||0)/7.5);
+                if (reconcilMatType==="patch") return s + (Number(a.measurement||0)*2/2000);
+                return s;
+              }, 0);
+          }, 0);
+
+          const wasteFactor = estUsed > 0 ? actualUsed / estUsed : null;
+
+          return { ...p, periodJobs, estUsed, wasteFactor };
+        });
+
+        // Running totals
+        const totalActual = enrichedPeriods.reduce((s,p)=>s+p.actualUsed,0);
+        const totalEst    = enrichedPeriods.reduce((s,p)=>s+p.estUsed,0);
+        const runningWF   = totalEst > 0 ? totalActual/totalEst : null;
+
+        return (
+          <div>
+            {/* Controls */}
+            <section style={S.section}>
+              <h2 style={S.h2}>Material Reconciliation</h2>
+              <p style={{fontSize:12, color:C.textMuted, marginBottom:14}}>
+                Compare actual material usage (from stock check-ins) against estimated usage across jobs. Reconciliation is only available between stock check-in periods.
+              </p>
+              <div style={{display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end"}}>
+                <label style={{fontSize:12, fontWeight:600}}>Material
+                  <select value={reconcilMatType} onChange={e=>setReconcilMatType(e.target.value)} style={{...S.input, marginTop:4, display:"block"}}>
+                    {BUILTIN_MATERIAL_TYPES.filter(m=>m.key!=="other"&&!m.key.startsWith("paint_")).map(m=>(
+                      <option key={m.key} value={m.key}>{m.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{fontSize:12, fontWeight:600}}>From
+                  <div style={{width:150, marginTop:4}}><input type="date" value={reconcilFrom} onChange={e=>setReconcilFrom(e.target.value)} style={{...S.input}}/></div>
+                </label>
+                <label style={{fontSize:12, fontWeight:600}}>To
+                  <div style={{width:150, marginTop:4}}><input type="date" value={reconcilTo} onChange={e=>setReconcilTo(e.target.value)} style={{...S.input}}/></div>
+                </label>
+                <button style={S.btnSecondary} onClick={()=>{setReconcilFrom(""); setReconcilTo("");}}>All Periods</button>
+              </div>
+            </section>
+
+            {/* No checks warning */}
+            {matChecks.length < 2 && (
+              <section style={S.section}>
+                <div style={{background:"#fef3c7", borderRadius:8, padding:"12px 16px", fontSize:13, color:"#92400e"}}>
+                  ⚠️ You need at least 2 stock check-ins for {matType?.label} to calculate reconciliation. Go to the Inventory tab to log stock checks.
+                </div>
+              </section>
+            )}
+
+            {/* Period breakdown */}
+            {enrichedPeriods.length > 0 && (
+              <section style={S.section}>
+                <h2 style={S.h2}>By Check-In Period</h2>
+                {enrichedPeriods.map((p, idx) => (
+                  <div key={idx} style={{border:`1px solid ${C.border}`, borderRadius:10, marginBottom:12, overflow:"hidden"}}>
+                    <div style={{background:C.surface2, padding:"10px 16px", display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+                      <div style={{fontWeight:700, fontSize:13}}>{p.openDate} → {p.closeDate}</div>
+                      {p.wasteFactor !== null && (
+                        <div style={{fontSize:13, fontWeight:700,
+                          color: p.wasteFactor > 1.25 ? "#ef4444" : p.wasteFactor > 1.1 ? "#f59e0b" : "#16a34a"}}>
+                          Waste Factor: {p.wasteFactor.toFixed(3)}x
+                        </div>
+                      )}
+                    </div>
+                    <div style={{padding:"12px 16px", display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:12}}>
+                      {[
+                        ["Opening Stock", `${p.openQty.toFixed(1)} ${unit}`],
+                        ["Purchased",     `${p.purchased.toFixed(1)} ${unit}`],
+                        ["Closing Stock", `${p.closeQty.toFixed(1)} ${unit}`],
+                        ["Actual Used",   `${p.actualUsed.toFixed(1)} ${unit}`],
+                        ["Est. Used",     p.estUsed > 0 ? `${p.estUsed.toFixed(1)} ${unit}` : "—"],
+                        ["Overage",       p.estUsed > 0 ? `${(p.actualUsed - p.estUsed).toFixed(1)} ${unit}` : "—"],
+                        ["Jobs in Period",`${p.periodJobs.length}`],
+                        ["Waste Factor",  p.wasteFactor !== null ? `${p.wasteFactor.toFixed(3)}x` : "—"],
+                      ].map(([label, val]) => (
+                        <div key={label} style={{background:C.surface, borderRadius:6, padding:"8px 10px"}}>
+                          <div style={{fontSize:10, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:2}}>{label}</div>
+                          <div style={{fontSize:14, fontWeight:700}}>{val}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Per-job breakdown */}
+                    {p.periodJobs.length > 0 && (
+                      <div style={{padding:"0 16px 12px"}}>
+                        <div style={{fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", marginBottom:6}}>Jobs in this period</div>
+                        <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+                          {p.periodJobs.map(j => {
+                            const estQty = (j.areas||[]).filter(a=>linkedSvcs.includes(a.serviceType)).reduce((s,a) => {
+                              if (reconcilMatType==="sealcoat") return s + (Number(a.measurement||0)/70);
+                              if (reconcilMatType==="crackfill") return s + (Number(a.measurement||0)/7.5);
+                              if (reconcilMatType==="patch") return s + (Number(a.measurement||0)*2/2000);
+                              return s;
+                            }, 0);
+                            const reconciled = p.wasteFactor !== null ? estQty * p.wasteFactor : null;
+                            return (
+                              <div key={j.id} style={{fontSize:12, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, padding:"6px 10px"}}>
+                                <div style={{fontWeight:600}}>{j.clientName||"Unnamed"}</div>
+                                <div style={{fontSize:11, color:C.textMuted}}>{j.address||""}</div>
+                                <div style={{fontSize:11, marginTop:2}}>
+                                  Est: {estQty.toFixed(1)} {unit}
+                                  {reconciled !== null && <span style={{color:C.accent, marginLeft:6}}>→ Reconciled: {reconciled.toFixed(1)} {unit}</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Running totals */}
+                <div style={{background:C.surface2, borderRadius:10, padding:"14px 16px", border:`1px solid ${C.border}`}}>
+                  <div style={{fontWeight:700, fontSize:14, marginBottom:10}}>Running Totals ({enrichedPeriods.length} period{enrichedPeriods.length!==1?"s":""})</div>
+                  <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12}}>
+                    {[
+                      ["Total Actual Used", `${totalActual.toFixed(1)} ${unit}`],
+                      ["Total Estimated",   `${totalEst.toFixed(1)} ${unit}`],
+                      ["Running Waste Factor", runningWF !== null ? `${runningWF.toFixed(3)}x` : "—"],
+                    ].map(([label, val]) => (
+                      <div key={label} style={{background:C.surface, borderRadius:6, padding:"8px 10px"}}>
+                        <div style={{fontSize:10, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:2}}>{label}</div>
+                        <div style={{fontSize:15, fontWeight:800, color:C.accent}}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Approve & apply */}
+                <div style={{marginTop:14}}>
+                  <button style={S.btnPrimary} onClick={() => {
+                    if (!confirm(`Apply reconciled actuals to ${enrichedPeriods.reduce((s,p)=>s+p.periodJobs.length,0)} jobs using period waste factors? This will set the reconciled actual for ${matType?.label} on each job.`)) return;
+                    const log = {
+                      id: Date.now(),
+                      date: new Date().toISOString().slice(0,10),
+                      matType: reconcilMatType,
+                      matLabel: matType?.label,
+                      from: reconcilFrom || enrichedPeriods[0]?.openDate,
+                      to: reconcilTo || enrichedPeriods[enrichedPeriods.length-1]?.closeDate,
+                      periodsCount: enrichedPeriods.length,
+                      runningWasteFactor: runningWF,
+                      jobsUpdated: [],
+                    };
+                    // Apply per-job reconciled actuals
+                    enrichedPeriods.forEach(p => {
+                      if (p.wasteFactor === null) return;
+                      p.periodJobs.forEach(j => {
+                        const estQty = (j.areas||[]).filter(a=>linkedSvcs.includes(a.serviceType)).reduce((s,a) => {
+                          if (reconcilMatType==="sealcoat") return s + (Number(a.measurement||0)/70);
+                          if (reconcilMatType==="crackfill") return s + (Number(a.measurement||0)/7.5);
+                          if (reconcilMatType==="patch") return s + (Number(a.measurement||0)*2/2000);
+                          return s;
+                        }, 0);
+                        // Find unit cost from materials purchased in this period
+                        const periodMats = (materials||[]).filter(m=>m.category===reconcilMatType && m.date > p.openDate && m.date <= p.closeDate);
+                        const avgUnitCost = periodMats.length > 0
+                          ? periodMats.reduce((s,m)=>s+(Number(m.cost||0)||0),0) / periodMats.reduce((s,m)=>s+Number(m.qty||0),0)
+                          : 0;
+                        const reconciledQty = estQty * p.wasteFactor;
+                        const reconciledCost = reconciledQty * avgUnitCost;
+                        // Write reconciled actual to job — don't overwrite manual actuals
+                        jobs.find(jj=>jj.id===j.id); // reference check
+                        // Write reconciled actual to job costs
+                        log.jobsUpdated.push({jobId:j.id, jobName:j.clientName, qty:reconciledQty.toFixed(2), cost:reconciledCost.toFixed(2), wasteFactor:p.wasteFactor, period:`${p.openDate}→${p.closeDate}`});
+                        // Write to job if updateJobById available and no manual actual exists
+                        if (updateJobById) {
+                          updateJobById(j.id, job => {
+                            const existingActual = job.costs?.actuals?.[reconcilMatType];
+                            const hasManualActual = existingActual !== null && existingActual !== "" && existingActual !== undefined;
+                            if (hasManualActual) return job; // don't overwrite manual actuals
+                            return {
+                              ...job,
+                              costs: {
+                                ...(job.costs||{}),
+                                reconciledActuals: {
+                                  ...(job.costs?.reconciledActuals||{}),
+                                  [reconcilMatType]: {
+                                    qty: reconciledQty,
+                                    cost: reconciledCost,
+                                    wasteFactor: p.wasteFactor,
+                                    period: `${p.openDate}→${p.closeDate}`,
+                                    reconciledAt: new Date().toISOString(),
+                                  }
+                                }
+                              }
+                            };
+                          });
+                        }
+                      });
+                    });
+                    setReconcilLog(prev => [log, ...prev]);
+                    alert(`Reconciliation complete. ${log.jobsUpdated.length} jobs updated. See the log below.`);
+                  }}>
+                    ✓ Approve & Apply Reconciled Actuals
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {/* Reconciliation log */}
+            {reconcilLog.length > 0 && (
+              <section style={S.section}>
+                <h2 style={S.h2}>Reconciliation Log</h2>
+                {reconcilLog.map(log => (
+                  <div key={log.id} style={{border:`1px solid ${C.border}`, borderRadius:8, padding:"12px 16px", marginBottom:10}}>
+                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                      <div>
+                        <div style={{fontWeight:700, fontSize:13}}>{log.matLabel} — {log.from} to {log.to}</div>
+                        <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>Run on {log.date} · {log.periodsCount} period{log.periodsCount!==1?"s":""} · {log.jobsUpdated.length} jobs updated · Running waste factor: {log.runningWasteFactor?.toFixed(3)}x</div>
+                      </div>
+                    </div>
+                    <div style={{marginTop:8, display:"flex", gap:6, flexWrap:"wrap"}}>
+                      {log.jobsUpdated.map((j,i) => (
+                        <div key={i} style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, padding:"4px 8px"}}>
+                          <strong>{j.jobName||"Job"}</strong> · {j.qty} units · ${j.cost} · {j.wasteFactor?.toFixed(3)}x · {j.period}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )}
+          </div>
+        );
+      })()}
+
+      {matTab !== "reconciliation" && <>
 
       {/* ── Service → Material Mappings ── */}
       {canEdit && (
@@ -8215,6 +8518,7 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
       </section>
 
       <CrewsSection users={users} isManager={isManager} tFetch={tFetch}/>
+      </>}
     </div>
   );
 }
@@ -14066,7 +14370,7 @@ function App() {
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
-        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
+        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
