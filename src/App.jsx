@@ -7032,7 +7032,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           serviceTypeTotals={serviceTypeTotals}
           setCurrentJob={setCurrentJob} setView={setView}
         />
-      }
+      )}
     </div>
   );
 }
@@ -9070,6 +9070,10 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const [filterMethod,setFilterMethod]= useState("All");
   const [filterJob,   setFilterJob]   = useState("All");
   const [uploading,   setUploading]   = useState(false);
+  const [editingExpId,  setEditingExpId]  = useState(null);
+  const [editForm,      setEditForm]      = useState({});
+  const setEF = (k,v) => setEditForm(p=>({...p,[k]:v}));
+  const [selectedIds,   setSelectedIds]   = useState(new Set());
   // Import state
   const [showImport,    setShowImport]    = useState(false);
   // COGS → Materials prompt state
@@ -9751,29 +9755,86 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         {filtered.length === 0 ? (
           <p style={{fontSize:13, color:C.textMuted}}>No expenses logged yet.</p>
         ) : filtered.map(e => {
+          const isSelected = selectedIds.has(e.id);
           const linkedJob = jobs.find(j=>String(j.id)===String(e.jobId));
           return (
-            <div key={e.id} style={{padding:"12px 0", borderBottom:`1px solid ${C.border}`}}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
-                <div style={{flex:1}}>
-                  <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
-                    <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
-                    <span style={{fontSize:12, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
-                    <span style={{fontSize:12, color:C.textMuted}}>{e.paymentMethod}</span>
-                  </div>
-                  <div style={{fontSize:13, fontWeight:600, marginTop:3}}>{e.vendorName || "Unknown vendor"}</div>
-                  <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
-                    {e.date}
-                    {linkedJob && <span style={{marginLeft:8}}>📋 {linkedJob.clientName||"Unnamed"} · {linkedJob.address||""}</span>}
-                  </div>
-                  {e.notes && <div style={{fontSize:12, color:C.textMuted, marginTop:2, fontStyle:"italic"}}>{e.notes}</div>}
-                  {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:12, color:C.accent, marginTop:2, display:"block"}}>📎 View Receipt</a>}
-                </div>
+            <div key={e.id} style={{padding:"10px 4px", borderBottom:`1px solid ${C.border}`,
+              background: isSelected ? "#fffbeb" : "transparent"}}>
+              <div style={{display:"flex", alignItems:"center", gap:8}}>
                 {canEdit && (
-                  <button style={{...S.btnSmall, color:C.danger, marginLeft:8, flexShrink:0}}
-                    onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
+                  <input type="checkbox" checked={isSelected} style={{flexShrink:0}}
+                    onChange={() => setSelectedIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(e.id)) next.delete(e.id); else next.add(e.id);
+                      return next;
+                    })}/>
+                )}
+                {/* Date */}
+                <div style={{width:90, flexShrink:0, fontSize:12, color:C.textMuted}}>{e.date}</div>
+                {/* Vendor */}
+                <div style={{flex:2, minWidth:0, fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                  {e.vendorName||"—"}
+                </div>
+                {/* Category + subcategory */}
+                <div style={{flex:2, minWidth:0, fontSize:12}}>
+                  <span style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
+                  {e.subcategory && <span style={{fontSize:11, color:C.textMuted, marginLeft:4}}>{e.subcategory}</span>}
+                </div>
+                {/* Amount */}
+                <div style={{width:90, flexShrink:0, textAlign:"right", fontWeight:700, fontSize:14}}>
+                  {formatCurrency(Number(e.amount||0))}
+                </div>
+                {/* Actions */}
+                {canEdit && (
+                  <div style={{display:"flex", gap:4, flexShrink:0}}>
+                    <button style={{...S.btnSmall, padding:"3px 6px"}}
+                      onClick={()=>{ setEditingExpId(e.id); setEditForm({...e}); }}>
+                      <LucideIcons.Pencil size={11} strokeWidth={2}/>
+                    </button>
+                    <button style={{...S.btnSmall, color:C.danger, padding:"3px 6px"}}
+                      onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
+                  </div>
                 )}
               </div>
+              {e.notes && <div style={{fontSize:11, color:C.textMuted, marginTop:4, paddingLeft:canEdit?24:0, fontStyle:"italic"}}>{e.notes}</div>}
+              {linkedJob && <div style={{fontSize:11, color:C.textMuted, marginTop:2, paddingLeft:canEdit?24:0}}>📋 {linkedJob.clientName||"Unnamed"} · {linkedJob.address||""}</div>}
+              {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:11, color:C.accent, marginTop:2, paddingLeft:canEdit?24:0, display:"block"}}>📎 Receipt</a>}
+              {/* Inline edit form */}
+              {editingExpId === e.id && (
+                <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:8}}>
+                  <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
+                    <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
+                      style={{...S.input, flex:1, minWidth:130}}/>
+                    <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
+                      placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
+                    <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
+                      placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
+                    <select value={editForm.category||""} onChange={ev=>{setEF("category",ev.target.value);setEF("subcategory","");}} style={{...S.input, flex:1, minWidth:110}}>
+                      {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
+                      <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
+                        <option value="">No subcategory</option>
+                        {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    )}
+                    <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+                      {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
+                      placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
+                  </div>
+                  <div style={{display:"flex", gap:8}}>
+                    <button style={S.btnPrimary} onClick={()=>{
+                      updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
+                      setEditingExpId(null);
+                    }}>Save</button>
+                    <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
