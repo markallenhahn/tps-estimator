@@ -3028,7 +3028,7 @@ ${email}`:""}`;
 }
 
 // ─── Labor View ───────────────────────────────────────────────────────────────
-function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId }) {
+function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId, offAppWorkers=[], jobs=[] }) {
   const isDesktop = useIsDesktop();
   const today = new Date().toISOString().slice(0,10);
   const [selectedDate, setSelectedDate] = useState(today);
@@ -3361,6 +3361,9 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                     const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
                     return <option key={u.id} value={label}/>;
                   })}
+                  {(offAppWorkers||[]).map(w => (
+                    <option key={"oaw-"+w.id} value={w.name}/>
+                  ))}
                 </datalist>
               </>
             ) : (
@@ -3371,6 +3374,10 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                   const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
                   return <option key={u.id} value={label}>{label}</option>;
                 })}
+                {(offAppWorkers||[]).length > 0 && <option disabled>── Off-App Workers ──</option>}
+                {(offAppWorkers||[]).map(w => (
+                  <option key={"oaw-"+w.id} value={w.name}>{w.name}</option>
+                ))}
               </select>
             )}
             <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
@@ -3427,6 +3434,8 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                         {!e.userId && !e.clockInTime && (
                           <span style={{fontSize:10, color:"#6b7280", background:C.surface, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 5px", marginLeft:6}}>unlinked</span>
                         )}
+                        {e.jobId && (() => { const j = (jobs||[]).find(x=>String(x.id)===String(e.jobId)); return j ? <div style={{fontSize:10, color:C.textMuted, marginTop:2}}>📋 {j.clientName||"Unnamed"} · {j.address||""}</div> : null; })()}
+                        {!e.jobId && e.unallocated && <div style={{fontSize:10, color:C.textMuted, marginTop:2, fontStyle:"italic"}}>⏱ Unallocated</div>}
                       </div>
                       <div style={{display:"flex", alignItems:"center", gap:8}}>
                         <span style={{fontSize:14, fontWeight:700, color:C.accent}}>{e.hours} hr{e.hours!==1?"s":""}</span>
@@ -14853,7 +14862,7 @@ function App() {
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
+        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings} reportSettings={reportSettings} offAppWorkers={offAppWorkers}/></div>}
