@@ -3364,12 +3364,14 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
             d.setDate(d.getDate() - 7);
             setSelectedDate(d.toISOString().slice(0,10));
           }}>← Prev Week</button>
-          <div style={{flex:1, overflow:"hidden"}}>
-            <input type="date" value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-              style={{...S.input, textAlign:"center", fontWeight:600, marginBottom:0,
-                colorScheme:"light", WebkitAppearance:"none"}}/>
-          </div>
+          <label style={{flex:1, overflow:"hidden", cursor:"pointer", position:"relative"}}>
+            <div style={{textAlign:"center", fontWeight:600, fontSize:14, padding:"8px 4px",
+              background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, lineHeight:"1.4"}}>
+              {new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+            </div>
+            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+              style={{position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}}/>
+          </label>
           <button style={{...S.btnSecondary, flexShrink:0, padding:"8px 12px"}} onClick={() => {
             const d = new Date(selectedDate+"T12:00:00");
             d.setDate(d.getDate() + 7);
