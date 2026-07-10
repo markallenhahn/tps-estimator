@@ -250,7 +250,7 @@ const S = {
   navTabIcon:{ fontSize:15 }, navTabLabel:{whiteSpace:"nowrap"},
   // Desktop sidebar nav
   sidebar:{ width:220, flexShrink:0, background:C.surface, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", overflowY:"auto" },
-  sidebarBrand:{ padding:"12px 20px 10px", display:"flex", justifyContent:"center" },
+  sidebarBrand:{ padding:"24px 20px 20px" },
   sidebarTabs:{ display:"flex", flexDirection:"column", gap:2, padding:"0 12px 20px" },
   sidebarTab:{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:8, background:"none", border:"none", outline:"none", color:C.textMuted, cursor:"pointer", fontSize:14, fontWeight:500, textAlign:"left", transition:"all .15s", WebkitTapHighlightColor:"transparent" },
   sidebarTabActive:{ background:C.surface2, color:C.accent, fontWeight:700 },
@@ -619,7 +619,7 @@ function TrialBanner({ tenantData, userRole, onGoToAccount }) {
 
 function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, iconStyle, myTenants, currentTenantId, switchTenant, isPlatformAdmin, companySettings={} }) {
   const currentTenant = (myTenants||[]).find(t => t.tenantId === currentTenantId);
-  const currentLogo = "data:image/png;base64," + B_LOGO_B64;
+  const currentLogo = companySettings?.logoB64 ? "data:image/png;base64," + companySettings.logoB64 : (currentTenant?.data?.logoUrl || ("data:image/png;base64," + B_LOGO_B64));
   const currentCompanyAlt = currentTenant?.companyName || "Company logo";
 
   const tabsRef = useRef(null);
@@ -639,7 +639,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
     return (
       <nav style={S.sidebar}>
         <div style={S.sidebarBrand}>
-          <img src={currentLogo} alt={currentCompanyAlt} style={{height:80, width:"auto", maxWidth:140, display:"block"}}/>
+          <img src={currentLogo} alt={currentCompanyAlt} style={{width:"100%", maxWidth:140, display:"block"}}/>
         </div>
         {myTenants && myTenants.length > 1 && (
           <div style={{padding:"0 16px 12px"}}>
@@ -1046,8 +1046,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   const [stream,    setStream]    = useState(null);
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
-  const fileInputRef  = useRef(null);
-  const cameraRollRef = useRef(null);
+  const fileInputRef = useRef(null);
   const sigCanvasRef = useRef(null);
   const sigDrawing   = useRef(false);
   const [lightbox, setLightbox] = useState(null);
@@ -1132,42 +1131,20 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     } catch { alert("Camera permission denied or not available."); }
   };
 
-  // Save photo to job immediately as base64, then upload to Storage in background
-  const addPhotoOptimistic = (dataUrl, file, label) => {
-    const photoId = Date.now() + "-" + Math.random().toString(36).slice(2);
-    const path = `${tenantId}/${currentJob.id}/${photoId}.jpg`;
-    // Add base64 version immediately so it shows up even with no signal
-    updateJob(j => ({...j, photos:[...(j.photos||[]), {
-      id: photoId, url: dataUrl, storagePath: path, label,
-      ts: new Date().toLocaleTimeString(), pending: true,
-    }]}));
-    // Upload in background and swap URL when done
-    const doUpload = async () => {
-      try {
-        const blob = file || dataUrlToBlob(dataUrl);
-        const url = await storageUpload(path, blob, accessToken, file?.type || "image/jpeg");
-        // Swap pending base64 with real Storage URL
-        updateJob(j => ({...j, photos:(j.photos||[]).map(p =>
-          p.id === photoId ? {...p, url, pending: false} : p
-        )}));
-      } catch(err) {
-        console.error("Photo upload failed, keeping base64:", err);
-        // Leave the base64 version in place — it will persist with the job
-        updateJob(j => ({...j, photos:(j.photos||[]).map(p =>
-          p.id === photoId ? {...p, pending: false, uploadFailed: true} : p
-        )}));
-      }
-    };
-    doUpload();
-  };
-
+  // Desktop fallback: upload existing photo files instead of capturing live
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     for (const file of files) {
       const label = prompt("Label for " + file.name + ":", "") || "Area of concern";
-      const reader = new FileReader();
-      reader.onload = (ev) => addPhotoOptimistic(ev.target.result, file, label);
-      reader.readAsDataURL(file);
+      const photoId = Date.now() + "-" + Math.random().toString(36).slice(2);
+      const path = `${tenantId}/${currentJob.id}/${photoId}.jpg`;
+      try {
+        const url = await storageUpload(path, file, accessToken, file.type);
+        updateJob(j => ({...j, photos:[...j.photos, {id: photoId, url, storagePath: path, label, ts: new Date().toLocaleTimeString()}]}));
+      } catch(err) {
+        console.error("Photo upload failed:", err);
+        alert("Failed to upload photo. Please try again.");
+      }
     }
     e.target.value = "";
   };
@@ -1178,9 +1155,17 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
     const label = prompt("Label for this photo:", "") || "Area of concern";
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    const photoId = Date.now() + "-" + Math.random().toString(36).slice(2);
+    const path = `${tenantId}/${currentJob.id}/${photoId}.jpg`;
     stopStream();
-    addPhotoOptimistic(dataUrl, null, label);
+    try {
+      const blob = dataUrlToBlob(canvas.toDataURL("image/jpeg", 0.85));
+      const url = await storageUpload(path, blob, accessToken);
+      updateJob(j => ({...j, photos:[...j.photos, {id: photoId, url, storagePath: path, label, ts: new Date().toLocaleTimeString()}]}));
+    } catch(err) {
+      console.error("Photo upload failed:", err);
+      alert("Failed to upload photo. Please try again.");
+    }
   };
 
   const removePhoto = (id) => {
@@ -1453,6 +1438,21 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
         const waitingOnReview = isEstimator && currentJob.assignedTo === userId && currentJob.readyForReview;
         const managerCanReview = canSeeAllJobs && currentJob.readyForReview;
         const canMarkCompleted = isCrewLead && currentJob.status === "scheduled" && myCrew && currentJob.crewId === myCrew.id;
+        // Check all service types from estimate have at least one scheduled day
+        const jobSvcTypes = [...new Set((currentJob.areas||[]).map(a=>a.serviceType).filter(Boolean))];
+        const unscheduledSvcs = jobSvcTypes.filter(svc =>
+          !(currentJob.scheduleDays||[]).some(d => (d.services||[]).some(s=>s.type===svc))
+        );
+        const svcPctValid = jobSvcTypes.every(svc => {
+          const days = (currentJob.scheduleDays||[]).filter(d=>(d.services||[]).some(s=>s.type===svc));
+          if (days.length <= 1) return true; // single day, no pct needed
+          const total = days.reduce((sum,d) => {
+            const entry = (d.services||[]).find(s=>s.type===svc);
+            return sum + Number(entry?.pct||0);
+          }, 0);
+          return total === 100;
+        });
+        const completionBlocked = unscheduledSvcs.length > 0 || !svcPctValid;
         const canMarkPaid = canSeeAllJobs && currentJob.status === "completed";
         const showSection = needsReview || waitingOnReview || managerCanReview || canMarkCompleted || canMarkPaid || currentJob.revisionNote;
         if (!showSection) return null;
@@ -1509,7 +1509,24 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               </div>
             )}
             {canMarkCompleted && (
-              <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"completed", statusChangedAt: new Date().toISOString()}))}>✓ Mark Completed</button>
+              <div>
+                {completionBlocked ? (
+                  <div>
+                    <button style={{...S.btnPrimary, opacity:0.5, cursor:"not-allowed"}} disabled>✓ Mark Completed</button>
+                    <div style={{fontSize:12, color:C.danger, marginTop:6}}>
+                      {unscheduledSvcs.length > 0 && (
+                        <div>⚠️ Schedule dates required for: {unscheduledSvcs.map(s => rates[s]?.label||s).join(", ")}</div>
+                      )}
+                      {!svcPctValid && (
+                        <div>⚠️ Service percentages must add up to 100% for each service on multiple days</div>
+                      )}
+                      <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>Go to the Schedule tab to assign dates.</div>
+                    </div>
+                  </div>
+                ) : (
+                  <button style={S.btnPrimary} onClick={() => updateJob(j => ({...j, status:"completed", statusChangedAt: new Date().toISOString()}))}>✓ Mark Completed</button>
+                )}
+              </div>
             )}
             {canMarkPaid && (
               <button style={S.btnPrimary} onClick={() => {
@@ -1570,25 +1587,149 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           // the earliest date for anything that still reads the old field.
           const days = (currentJob.scheduleDays && currentJob.scheduleDays.length)
             ? currentJob.scheduleDays
-            : (currentJob.scheduledDate ? [{date: currentJob.scheduledDate, label: ""}] : []);
+            : (currentJob.scheduledDate ? [{date: currentJob.scheduledDate, label: "", services: []}] : []);
           const setDays = (newDays) => updateJob(j => ({
             ...j, scheduleDays: newDays,
             scheduledDate: [...newDays].filter(d=>d.date).map(d=>d.date).sort()[0] || "",
           }));
           const updateDay = (i, field, value) => setDays(days.map((d, di) => di===i ? {...d, [field]: value} : d));
           const removeDay = (i) => setDays(days.filter((_, di) => di !== i));
-          const addDay = () => setDays([...days, {date:"", label:""}]);
+          const addDay = () => setDays([...days, {date:"", label:"", services:[]}]);
+
+          // Get unique service types from the job's estimate areas
+          const jobServiceTypes = [...new Set((currentJob.areas||[]).map(a=>a.serviceType).filter(Boolean))];
+
+          // Add a service type to a day
+          const addServiceToDay = (dayIdx, svcType) => {
+            const day = days[dayIdx];
+            if ((day.services||[]).some(s=>s.type===svcType)) return; // already added
+            const newSvc = {type: svcType, pct: 100};
+            // Check if this service type already exists on another day — if so, set pct to blank
+            const existsOnOtherDay = days.some((d, di) => di!==dayIdx && (d.services||[]).some(s=>s.type===svcType));
+            if (existsOnOtherDay) {
+              // Set all entries for this service to blank pct
+              const updatedDays = days.map((d, di) => ({
+                ...d,
+                services: (d.services||[]).map(s => s.type===svcType ? {...s, pct:""} : s)
+              }));
+              updatedDays[dayIdx] = {...updatedDays[dayIdx], services:[...(updatedDays[dayIdx].services||[]), {type:svcType, pct:""}]};
+              setDays(updatedDays);
+            } else {
+              updateDay(dayIdx, "services", [...(day.services||[]), newSvc]);
+            }
+          };
+
+          const removeSvcFromDay = (dayIdx, svcType) => {
+            const newDays = days.map((d, di) => di===dayIdx
+              ? {...d, services:(d.services||[]).filter(s=>s.type!==svcType)}
+              : d
+            );
+            // If only one day left with this service, reset pct to 100
+            const remaining = newDays.filter(d=>(d.services||[]).some(s=>s.type===svcType));
+            if (remaining.length === 1) {
+              setDays(newDays.map(d => ({
+                ...d,
+                services:(d.services||[]).map(s=>s.type===svcType?{...s,pct:100}:s)
+              })));
+            } else {
+              setDays(newDays);
+            }
+          };
+
+          const updateSvcPct = (dayIdx, svcType, pct) => {
+            setDays(days.map((d, di) => di===dayIdx
+              ? {...d, services:(d.services||[]).map(s=>s.type===svcType?{...s,pct:pct}:s)}
+              : d
+            ));
+          };
+
+          // Check if a service type appears on multiple days
+          const svcOnMultipleDays = (svcType) => days.filter(d=>(d.services||[]).some(s=>s.type===svcType)).length > 1;
+
+          // Validate pct totals per service type
+          const svcPctTotals = {};
+          jobServiceTypes.forEach(svc => {
+            svcPctTotals[svc] = days.reduce((sum,d) => {
+              const entry = (d.services||[]).find(s=>s.type===svc);
+              return sum + (entry ? Number(entry.pct||0) : 0);
+            }, 0);
+          });
+
           return (
             <>
               {days.length === 0 && <p style={{fontSize:12, color:C.textMuted, marginBottom:10}}>No dates scheduled yet.</p>}
               {days.map((d, i) => (
-                <div key={i} style={{display:"flex", gap:8, marginBottom:8, alignItems:"center"}}>
-                  <input type="date" value={d.date||""} onChange={e => updateDay(i, "date", e.target.value)} style={{...S.input, flex:1}}/>
-                  <input type="text" placeholder="Label (optional)" value={d.label||""} onChange={e => updateDay(i, "label", e.target.value)} style={{...S.input, flex:1}}/>
-                  <button onClick={() => removeDay(i)} style={S.btnSmallDanger}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
+                <div key={i} style={{marginBottom:12, background:C.surface2, borderRadius:8, padding:"10px 12px", border:`1px solid ${C.border}`}}>
+                  <div style={{display:"flex", gap:8, marginBottom:8, alignItems:"center"}}>
+                    <div style={{width:160, flexShrink:0}}>
+                      <input type="date" value={d.date||""} onChange={e => updateDay(i, "date", e.target.value)} style={{...S.input}}/>
+                    </div>
+                    <button onClick={() => removeDay(i)} style={{...S.btnSmallDanger, marginLeft:"auto"}}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
+                  </div>
+                  {/* Service types for this day */}
+                  <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center"}}>
+                    {(d.services||[]).map(svc => {
+                      const showPct = svcOnMultipleDays(svc.type);
+                      const pctTotal = svcPctTotals[svc.type];
+                      const pctError = showPct && Number(pct=>pct) && pctTotal !== 100;
+                      return (
+                        <div key={svc.type} style={{display:"flex", alignItems:"center", gap:4,
+                          background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:20,
+                          padding:"3px 8px 3px 10px", fontSize:12, fontWeight:600}}>
+                          {rates[svc.type]?.label || svc.type}
+                          {showPct && (
+                            <div style={{width:52, marginLeft:4}}>
+                              <input type="number" value={svc.pct||""} min="0" max="100" step="5"
+                                onChange={e => updateSvcPct(i, svc.type, e.target.value)}
+                                placeholder="%"
+                                style={{...S.input, fontSize:11, padding:"1px 4px", textAlign:"center"}}/>
+                            </div>
+                          )}
+                          <button onClick={() => removeSvcFromDay(i, svc.type)}
+                            style={{background:"none", border:"none", cursor:"pointer", fontSize:14, color:"#92400e", marginLeft:2, padding:0}}>×</button>
+                        </div>
+                      );
+                    })}
+                    {/* Add service dropdown */}
+                    {jobServiceTypes.filter(svc => !(d.services||[]).some(s=>s.type===svc)).length > 0 && (
+                      <select value="" onChange={e => { if(e.target.value) addServiceToDay(i, e.target.value); e.target.value=""; }}
+                        style={{...S.input, fontSize:11, padding:"3px 6px", width:"auto", display:"inline-block"}}>
+                        <option value="">+ Add service…</option>
+                        {jobServiceTypes.filter(svc => !(d.services||[]).some(s=>s.type===svc)).map(svc => (
+                          <option key={svc} value={svc}>{rates[svc]?.label || svc}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  {/* Pct validation warnings */}
+                  {(d.services||[]).filter(s=>svcOnMultipleDays(s.type)).map(s => {
+                    const total = svcPctTotals[s.type];
+                    if (total === 100 || !total) return null;
+                    return (
+                      <div key={s.type} style={{fontSize:11, color:C.danger, marginTop:4}}>
+                        ⚠️ {rates[s.type]?.label||s.type} totals {total}% across all days (must equal 100%)
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
               <button style={S.btnSecondary} onClick={addDay}>+ Add Date</button>
+              {/* Summary of service coverage */}
+              {jobServiceTypes.length > 0 && (
+                <div style={{marginTop:10, fontSize:12, color:C.textMuted}}>
+                  {jobServiceTypes.map(svc => {
+                    const assignedDays = days.filter(d=>(d.services||[]).some(s=>s.type===svc));
+                    return (
+                      <div key={svc} style={{display:"flex", alignItems:"center", gap:6, marginTop:4}}>
+                        {assignedDays.length > 0
+                          ? <span style={{color:"#16a34a"}}>✓</span>
+                          : <span style={{color:C.danger}}>✗</span>}
+                        <span>{rates[svc]?.label||svc}: {assignedDays.length > 0 ? assignedDays.map(d=>d.date).join(", ") : "not scheduled"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           );
         })()}
@@ -2062,30 +2203,19 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {/* ── MEDIA ── */}
       <section style={S.section}>
         <h2 style={S.h2}>Photos</h2>
-        {/* Hidden file inputs */}
-        <input ref={fileInputRef} type="file" accept="image/*" multiple style={{display:"none"}}
-          onChange={handleFileUpload}/>
-        <input ref={cameraRollRef} type="file" accept="image/*" multiple style={{display:"none"}}
-          onChange={handleFileUpload}/>
-
         {isDesktop ? (
           <>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple style={{display:"none"}}
+              onChange={handleFileUpload}/>
             <button style={{...S.btnCapture, maxWidth:220}} onClick={() => fileInputRef.current?.click()}>
-              <LucideIcons.Upload size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Upload Photo
+              📁 Upload Photo
             </button>
             <p style={{fontSize:11, color:C.textDim, marginTop:8, marginBottom:0}}>
-              Camera capture is available in the mobile app — upload photo files here instead.
+              Camera capture is for the mobile app — upload existing photo files here instead.
             </p>
           </>
         ) : !capturing ? (
-          <div style={{display:"flex", gap:10}}>
-            <button style={{...S.btnCapture, flex:1}} onClick={startCamera}>
-              <LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Take Photo
-            </button>
-            <button style={{...S.btnCapture, flex:1}} onClick={() => cameraRollRef.current?.click()}>
-              <LucideIcons.Upload size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Upload Photo
-            </button>
-          </div>
+          <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}><LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Take Photo</button>
         ) : (
           <div style={S.cameraBox}>
             <video ref={videoRef} autoPlay muted playsInline style={S.cameraPreview}/>
@@ -2104,19 +2234,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           <div style={S.mediaPhotoGrid}>
             {(currentJob.photos||[]).map(p => (
               <div key={p.id} style={S.mediaPhotoCard} onClick={() => setLightbox({type:'photo', item:p})}>
-                <img src={p.url || p.dataUrl} alt={p.label} style={{...S.mediaPhotoImg, opacity: p.pending ? 0.7 : 1}}/>
-                {p.pending && (
-                  <div style={{position:"absolute", top:6, left:6, background:"rgba(0,0,0,0.6)",
-                    color:"#fff", fontSize:9, fontWeight:700, borderRadius:4, padding:"2px 6px"}}>
-                    UPLOADING…
-                  </div>
-                )}
-                {p.uploadFailed && (
-                  <div style={{position:"absolute", top:6, left:6, background:"#ef4444",
-                    color:"#fff", fontSize:9, fontWeight:700, borderRadius:4, padding:"2px 6px"}}>
-                    SAVED OFFLINE
-                  </div>
-                )}
+                <img src={p.url || p.dataUrl} alt={p.label} style={S.mediaPhotoImg}/>
                 <div style={S.mediaPhotoOverlay}>
                   <div style={S.mediaPhotoLabel}>{p.label}</div>
                   <div style={S.mediaPhotoTime}>{p.ts}</div>
@@ -2909,17 +3027,12 @@ ${email}`:""}`;
 }
 
 // ─── Labor View ───────────────────────────────────────────────────────────────
-function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId, offAppWorkers=[], jobs=[] }) {
+function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId }) {
   const isDesktop = useIsDesktop();
   const today = new Date().toISOString().slice(0,10);
   const [selectedDate, setSelectedDate] = useState(today);
   const [newName,      setNewName]      = useState("");
   const [newHours,     setNewHours]     = useState("");
-  const [newJobId,     setNewJobId]     = useState("");
-  const [allocMode,    setAllocMode]    = useState(false); // multi-job allocation mode
-  const [allocName,    setAllocName]    = useState("");
-  const [allocRows,    setAllocRows]    = useState([]); // [{jobId, jobLabel, hours}]
-  const [allocUnalloc, setAllocUnalloc] = useState(""); // unallocated hours
   const [editingId,    setEditingId]    = useState(null);
   const [editName,     setEditName]     = useState("");
   const [editHours,    setEditHours]    = useState("");
@@ -3094,50 +3207,8 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
       hours: Number(newHours),
       userId: matched?.id || null,
       linked: !!matched,
-      jobId: newJobId || null,
     });
-    setNewName(""); setNewHours(""); setNewJobId("");
-  };
-
-  // Jobs scheduled for the selected date
-  const scheduledJobsForDate = (jobs||[]).filter(j => {
-    const days = j.scheduleDays?.filter(d=>d.date) || (j.scheduledDate ? [{date:j.scheduledDate}] : []);
-    return days.some(d => d.date === selectedDate);
-  });
-
-  const submitAllocation = () => {
-    if (!allocName.trim()) { alert("Enter a name."); return; }
-    const totalAlloc = allocRows.reduce((s,r) => s + Number(r.hours||0), 0) + Number(allocUnalloc||0);
-    if (totalAlloc <= 0) { alert("Enter hours for at least one job or unallocated."); return; }
-    if (totalAlloc > 24) { alert("Total hours exceed 24. Please check your entries."); return; }
-    const nameLower = allocName.trim().toLowerCase();
-    const matched = (teamUsers||[]).find(u => [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase() === nameLower);
-    // Add one entry per job
-    allocRows.filter(r => Number(r.hours||0) > 0).forEach(r => {
-      addLaborEntry({
-        id: Date.now() * 1000 + Math.floor(Math.random() * 999),
-        date: selectedDate,
-        name: allocName.trim(),
-        hours: Number(r.hours),
-        userId: matched?.id || null,
-        linked: !!matched,
-        jobId: r.jobId || null,
-      });
-    });
-    // Add unallocated entry if any
-    if (Number(allocUnalloc||0) > 0) {
-      addLaborEntry({
-        id: Date.now() * 1000 + Math.floor(Math.random() * 999) + 1,
-        date: selectedDate,
-        name: allocName.trim(),
-        hours: Number(allocUnalloc),
-        userId: matched?.id || null,
-        linked: !!matched,
-        jobId: null,
-        unallocated: true,
-      });
-    }
-    setAllocName(""); setAllocRows([]); setAllocUnalloc(""); setAllocMode(false);
+    setNewName(""); setNewHours("");
   };
 
   const startEdit = (e) => { setEditingId(e.id); setEditName(e.name); setEditHours(String(e.hours)); };
@@ -3279,129 +3350,32 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
           {new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
         </h2>
         {canManualEntry && (
-          <div style={{marginBottom:12}}>
-            {/* Scheduled jobs for this date */}
-            {scheduledJobsForDate.length > 0 && (
-              <div style={{fontSize:12, color:C.textMuted, marginBottom:8, padding:"8px 12px",
-                background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
-                <span style={{fontWeight:600, color:C.text}}>Scheduled today: </span>
-                {scheduledJobsForDate.map(j => (
-                  <span key={j.id} style={{marginRight:10}}>{j.clientName||"Unnamed"} · {j.address||""}</span>
-                ))}
-              </div>
-            )}
-
-            {/* Mode toggle */}
-            <div style={{display:"flex", gap:8, marginBottom:8}}>
-              <button onClick={() => setAllocMode(false)}
-                style={{...S.btnSmall, background: !allocMode ? C.accent : C.surface2,
-                  color: !allocMode ? "#000" : C.textMuted, border:`1px solid ${!allocMode ? C.accent : C.border}`}}>
-                Single Entry
-              </button>
-              <button onClick={() => { setAllocMode(true); setAllocRows(scheduledJobsForDate.map(j=>({jobId:String(j.id), jobLabel:(j.clientName||"Unnamed")+" · "+(j.address||""), hours:""}))); }}
-                style={{...S.btnSmall, background: allocMode ? C.accent : C.surface2,
-                  color: allocMode ? "#000" : C.textMuted, border:`1px solid ${allocMode ? C.accent : C.border}`}}>
-                Split Hours Across Jobs
-              </button>
-            </div>
-
-            {!allocMode ? (
-              <div style={{display:"flex", gap:8}}>
-                {canFreeTypeName ? (
-                  <>
-                    <input type="text" list="laborNamesList" value={newName} onChange={e => setNewName(e.target.value)}
-                      placeholder="Name" style={{...S.input, flex:2}}/>
-                    <datalist id="laborNamesList">
-                      {(teamUsers||[]).map(u => { const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email; return <option key={u.id} value={label}/>; })}
-                      {(offAppWorkers||[]).map(w => <option key={"oaw-"+w.id} value={w.name}/>)}
-                    </datalist>
-                  </>
-                ) : (
-                  <select value={newName} onChange={e => setNewName(e.target.value)} style={{...S.input, flex:2}}>
-                    <option value="">Select name...</option>
-                    {(teamUsers||[]).map(u => { const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email; return <option key={u.id} value={label}>{label}</option>; })}
-                    {(offAppWorkers||[]).length > 0 && <option disabled>── Off-App Workers ──</option>}
-                    {(offAppWorkers||[]).map(w => <option key={"oaw-"+w.id} value={w.name}>{w.name}</option>)}
-                  </select>
-                )}
-                <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
-                  min="0" step="0.5" style={{...S.input, flex:1}} placeholder="Hrs"
-                  onKeyDown={e => e.key==="Enter" && addEntry()}/>
-                <select value={newJobId} onChange={e => setNewJobId(e.target.value)} style={{...S.input, flex:2}}>
-                  <option value="">Unallocated</option>
-                  {scheduledJobsForDate.length > 0 && <option disabled>── Today's Jobs ──</option>}
-                  {scheduledJobsForDate.map(j=>(
-                    <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
-                  ))}
-                  {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).length > 0 && <option disabled>── Other Jobs ──</option>}
-                  {(jobs||[]).filter(j=>!["lost","draft"].includes(j.status)&&!scheduledJobsForDate.find(s=>s.id===j.id)).map(j=>(
-                    <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>
-                  ))}
-                </select>
-                <button style={{...S.btnPrimary, whiteSpace:"nowrap", padding:"8px 14px"}} onClick={addEntry}>+ Add</button>
-              </div>
+          <div style={{display:"flex", gap:8, marginBottom:10}}>
+            {canFreeTypeName ? (
+              <>
+                <input type="text" list="laborNamesList" value={newName} onChange={e => setNewName(e.target.value)}
+                  placeholder="Name (pick or type any name)" style={{...S.input, flex:2}}/>
+                <datalist id="laborNamesList">
+                  {(teamUsers||[]).map(u => {
+                    const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                    return <option key={u.id} value={label}/>;
+                  })}
+                </datalist>
+              </>
             ) : (
-              <div style={{background:C.surface2, borderRadius:10, padding:14, border:`1px solid ${C.border}`}}>
-                <div style={{marginBottom:10}}>
-                  {canFreeTypeName ? (
-                    <>
-                      <input type="text" list="laborNamesList2" value={allocName} onChange={e => setAllocName(e.target.value)}
-                        placeholder="Worker name" style={{...S.input, maxWidth:280}}/>
-                      <datalist id="laborNamesList2">
-                        {(teamUsers||[]).map(u => { const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email; return <option key={u.id} value={label}/>; })}
-                        {(offAppWorkers||[]).map(w => <option key={"oaw-"+w.id} value={w.name}/>)}
-                      </datalist>
-                    </>
-                  ) : (
-                    <select value={allocName} onChange={e => setAllocName(e.target.value)} style={{...S.input, maxWidth:280}}>
-                      <option value="">Select worker...</option>
-                      {(teamUsers||[]).map(u => { const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email; return <option key={u.id} value={label}>{label}</option>; })}
-                      {(offAppWorkers||[]).map(w => <option key={"oaw-"+w.id} value={w.name}>{w.name}</option>)}
-                    </select>
-                  )}
-                </div>
-
-                {/* Job rows */}
-                {allocRows.map((row, idx) => (
-                  <div key={row.jobId} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
-                    <div style={{flex:1, fontSize:13, color:C.text}}>{row.jobLabel}</div>
-                    <div style={{width:100, flexShrink:0}}>
-                      <input type="number" value={row.hours} onChange={e => setAllocRows(prev => prev.map((r,i) => i===idx ? {...r, hours:e.target.value} : r))}
-                        min="0" step="0.5" placeholder="Hrs" style={{...S.input}}/>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Add extra job not on schedule */}
-                <button style={{...S.btnSmall, fontSize:11, marginBottom:10}} onClick={() => {
-                  const allScheduledIds = new Set(allocRows.map(r=>r.jobId));
-                  const extra = (jobs||[]).find(j => !allScheduledIds.has(String(j.id)) && !["lost","draft"].includes(j.status));
-                  if (extra) setAllocRows(prev => [...prev, {jobId:String(extra.id), jobLabel:(extra.clientName||"Unnamed")+" · "+(extra.address||""), hours:""}]);
-                }}>+ Add another job</button>
-
-                {/* Unallocated */}
-                <div style={{display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderTop:`1px solid ${C.border}`}}>
-                  <div style={{flex:1, fontSize:13, color:C.textMuted, fontStyle:"italic"}}>Unallocated (drive time, shop, etc.)</div>
-                  <div style={{width:100, flexShrink:0}}>
-                    <input type="number" value={allocUnalloc} onChange={e => setAllocUnalloc(e.target.value)}
-                      min="0" step="0.5" placeholder="Hrs" style={{...S.input}}/>
-                  </div>
-                </div>
-
-                {/* Total */}
-                {(() => {
-                  const total = allocRows.reduce((s,r)=>s+Number(r.hours||0),0) + Number(allocUnalloc||0);
-                  return (
-                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:8, paddingTop:8, borderTop:`1px solid ${C.border}`}}>
-                      <span style={{fontSize:12, color: total > 10 ? C.danger : C.textMuted}}>
-                        Total: {total.toFixed(1)} hrs {total > 10 ? "⚠️ Over 10 hours" : ""}
-                      </span>
-                      <button style={S.btnPrimary} onClick={submitAllocation}>Save All Entries</button>
-                    </div>
-                  );
-                })()}
-              </div>
+              <select value={newName} onChange={e => setNewName(e.target.value)}
+                style={{...S.input, flex:2}}>
+                <option value="">Select name...</option>
+                {(teamUsers||[]).map(u => {
+                  const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                  return <option key={u.id} value={label}>{label}</option>;
+                })}
+              </select>
             )}
+            <input type="number" value={newHours} onChange={e => setNewHours(e.target.value)}
+              min="0" step="0.5" style={{...S.input, flex:1}} placeholder="Hrs"
+              onKeyDown={e => e.key==="Enter" && addEntry()}/>
+            <button style={{...S.btnPrimary, whiteSpace:"nowrap", padding:"8px 14px"}} onClick={addEntry}>+ Add</button>
           </div>
         )}
 
@@ -3410,8 +3384,6 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
             {dayEntries.map(e => (
               <div key={e.id} style={{background:C.surface2, borderRadius:8, marginBottom:6,
                 border: editingId===e.id ? `1px solid ${C.accent}` : `1px solid transparent`, padding:"10px 12px"}}>
-                {e.jobId && (() => { const j = (jobs||[]).find(x=>String(x.id)===String(e.jobId)); return j ? <div style={{fontSize:10, color:C.textMuted, marginBottom:4}}>📋 {j.clientName||"Unnamed"} · {j.address||""}</div> : null; })()}
-                {!e.jobId && e.unallocated && <div style={{fontSize:10, color:C.textMuted, marginBottom:4, fontStyle:"italic"}}>⏱ Unallocated (COGS)</div>}
                 {editingId === e.id ? (
                   <div>
                     <div style={{display:"flex", gap:8, marginBottom:8}}>
@@ -3424,9 +3396,6 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                               const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
                               return <option key={u.id} value={label}/>;
                             })}
-                            {(offAppWorkers||[]).map(w => (
-                              <option key={"oaw-"+w.id} value={w.name}/>
-                            ))}
                           </datalist>
                         </>
                       ) : (
@@ -4352,10 +4321,9 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
 
   // ── Which job status categories get geocoded/clustered/shown on the map ──
   // Defaults to Signed + Scheduled — the statuses you'd actually drive a route to.
-  const ZONE_STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
+  const ZONE_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
   const zoneStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
   const [filterStatuses, setFilterStatuses] = useState(zones?.filterStatuses || ["signed","scheduled"]);
-  const [showRoutingImportInfo, setShowRoutingImportInfo] = useState(false);
   const filterInitRef = useRef(false);
   useEffect(() => {
     if (!filterInitRef.current && zones?.filterStatuses) {
@@ -4407,27 +4375,9 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
     const file = e.target.files[0];
     if (!file) return;
     setCsvFile(file);
-    const ext = file.name.split(".").pop().toLowerCase();
-    if (ext === "csv") {
-      const reader = new FileReader();
-      reader.onload = (ev) => setCsvRows(parseCSV(ev.target.result));
-      reader.readAsText(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const wb = XLSX.read(ev.target.result, {type:"array"});
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, {defval:""});
-        // Normalize keys to lowercase
-        const normalized = rows.map(r => {
-          const out = {};
-          Object.keys(r).forEach(k => { out[k.toLowerCase().trim()] = String(r[k]||"").trim(); });
-          return out;
-        });
-        setCsvRows(normalized);
-      };
-      reader.readAsArrayBuffer(file);
-    }
+    const reader = new FileReader();
+    reader.onload = (ev) => setCsvRows(parseCSV(ev.target.result));
+    reader.readAsText(file);
   };
 
   const importHistorical = async () => {
@@ -4825,40 +4775,13 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
         <section style={S.section}>
           <h2 style={S.h2}>Import Historical Addresses</h2>
           <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
-            Upload a CSV or Excel file with columns: <strong>address, city, state, zip</strong> (header row required, extra columns are ignored).
+            Upload a CSV with columns: <strong>address, city, state, zip</strong> (header row required, extra columns are ignored).
             These are used only to weight zone calculation — they won't appear as live jobs.
           </p>
-          <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} style={{display:"none"}}/>
-          <div style={{display:"flex", alignItems:"center", gap:10}}>
-            <button style={S.btnSecondary} onClick={() => fileInputRef.current?.click()}>
-              <LucideIcons.Upload size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
-              Choose File (CSV or Excel)
-            </button>
-            <div style={{position:"relative"}}>
-              <LucideIcons.Info size={18} strokeWidth={2}
-                style={{color: showRoutingImportInfo ? C.accent : C.textMuted, cursor:"pointer", display:"block"}}
-                onClick={() => setShowRoutingImportInfo(p => !p)}/>
-              <div style={{display: showRoutingImportInfo ? "block" : "none", position:"absolute", left:0, top:24, zIndex:100,
-                background:"#fff", border:`1px solid ${C.border}`, borderRadius:10, padding:16,
-                boxShadow:"0 4px 20px rgba(0,0,0,0.12)", width:280}}>
-                <div style={{fontSize:12, fontWeight:700, marginBottom:10, color:C.text}}>Address Import Fields</div>
-                {[
-                  ["address","Required. Street address (e.g. 123 Main St)."],
-                  ["city","Required. City name."],
-                  ["state","Required. 2-letter state code (e.g. NJ)."],
-                  ["zip","Optional. 5-digit zip code."],
-                ].map(([field, desc]) => (
-                  <div key={field} style={{marginBottom:8}}>
-                    <div style={{fontSize:12, fontWeight:700, color:C.text}}>{field}</div>
-                    <div style={{fontSize:11, color:C.textMuted}}>{desc}</div>
-                  </div>
-                ))}
-                <div style={{fontSize:11, color:C.textMuted, marginTop:8, paddingTop:8, borderTop:`1px solid ${C.border}`}}>
-                  Column names must match exactly (case-insensitive). Extra columns are ignored.
-                </div>
-              </div>
-            </div>
-          </div>
+          <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileSelect} style={{display:"none"}}/>
+          <button style={S.btnSecondary} onClick={() => fileInputRef.current?.click()}>
+            📄 Choose CSV File
+          </button>
           {csvFile && (
             <div style={{marginTop:10, fontSize:13, color:C.textMuted}}>
               {csvFile.name} — {csvRows.length} addresses found
@@ -5718,185 +5641,15 @@ function buildCustomerGroups(jobs, customers, rates) {
 }
 
 function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJobById, crmLogs, addCrmLog, deleteCrmLog, setCurrentJob, setView, userRole }) {
-  const isDesktop = useIsDesktop();
   const canEdit = userRole === "estimator" || userRole === "manager" || userRole === "owner";
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [logType, setLogType] = useState("note");
-  const [sortField, setSortField] = useState("lastJobDate");
-  const [sortDir, setSortDir] = useState("desc");
-  const toggleSort = (field) => {
-    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortField(field); setSortDir("asc"); }
-  };
   const [logText, setLogText] = useState("");
   const [callOutcome, setCallOutcome] = useState("");
   const [editingContact, setEditingContact] = useState(false);
   const [contactDraft, setContactDraft] = useState(null);
   const backfilledRef = useRef(new Set());
-
-  // ── Add contact manually ──
-  const [showAddContact, setShowAddContact] = useState(false);
-  const blankContact = {name:"",phone:"",email:"",address:"",city:"",state:"",zip:""};
-  const [newContact, setNewContact] = useState({...blankContact});
-  const [addContactError, setAddContactError] = useState("");
-  const setNC = (k,v) => setNewContact(p => ({...p,[k]:v}));
-
-  // ── Import flow ──
-  const [showImport, setShowImport] = useState(false);
-  const [showImportInfo, setShowImportInfo] = useState(false);
-  const [importStep, setImportStep] = useState("upload");
-  const [importRows, setImportRows] = useState([]);
-  const [importHeaders, setImportHeaders] = useState([]);
-  const [importMapping, setImportMapping] = useState({name:"",phone:"",email:"",address:"",city:"",state:"",zip:"",amount:"",jobType:"",notes:""});
-  const [missingStateRows, setMissingStateRows] = useState([]);
-  const [sameStateForAll, setSameStateForAll] = useState(null);
-  const [globalState, setGlobalState] = useState("");
-  const [stateGroups, setStateGroups] = useState([]);
-  const [pendingStateRows, setPendingStateRows] = useState([]);
-  const [stateGroupInput, setStateGroupInput] = useState("");
-  const [stateGroupSelected, setStateGroupSelected] = useState(new Set());
-  const importFileRef = useRef(null);
-
-  const resetImport = () => {
-    setShowImport(false); setImportStep("upload");
-    setImportRows([]); setImportHeaders([]);
-    setImportMapping({name:"",phone:"",email:"",address:"",city:"",state:"",zip:"",amount:"",jobType:"",notes:""});
-    setMissingStateRows([]); setSameStateForAll(null);
-    setGlobalState(""); setStateGroups([]); setPendingStateRows([]);
-    setStateGroupInput(""); setStateGroupSelected(new Set());
-  };
-
-  const handleImportFile = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const wb = XLSX.read(ev.target.result, {type:"array"});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
-      if (rows.length < 2) { alert("File appears empty."); return; }
-      const headers = rows[0].map(h => String(h).trim());
-      setImportHeaders(headers);
-      setImportRows(rows.slice(1).filter(r => r.some(c => String(c).trim())));
-      const autoMap = {name:"",phone:"",email:"",address:"",city:"",state:"",zip:"",amount:"",jobType:"",notes:""};
-      headers.forEach(h => {
-        const hl = h.toLowerCase();
-        if (/name/.test(hl)) autoMap.name = h;
-        else if (/phone|cell|mobile/.test(hl)) autoMap.phone = h;
-        else if (/email/.test(hl)) autoMap.email = h;
-        else if (/address|street/.test(hl)) autoMap.address = h;
-        else if (/city/.test(hl)) autoMap.city = h;
-        else if (/state/.test(hl)) autoMap.state = h;
-        else if (/zip|postal/.test(hl)) autoMap.zip = h;
-        else if (/amount|revenue|price|total/.test(hl)) autoMap.amount = h;
-        else if (/type|service|job.?type/.test(hl)) autoMap.jobType = h;
-        else if (/note|comment/.test(hl)) autoMap.notes = h;
-      });
-      setImportMapping(autoMap);
-      setImportStep("map");
-    };
-    reader.readAsArrayBuffer(file);
-    e.target.value = "";
-  };
-
-  const getCell = (row, headerName) => {
-    if (!headerName) return "";
-    const idx = importHeaders.indexOf(headerName);
-    return idx >= 0 ? String(row[idx]||"").trim() : "";
-  };
-
-  const proceedFromMap = () => {
-    if (!importMapping.name) { alert("Name column is required."); return; }
-    const mapped = importRows.map((row, i) => ({
-      _idx: i,
-      name: getCell(row, importMapping.name),
-      phone: getCell(row, importMapping.phone),
-      email: getCell(row, importMapping.email),
-      address: getCell(row, importMapping.address),
-      city: getCell(row, importMapping.city),
-      state: getCell(row, importMapping.state),
-      zip: getCell(row, importMapping.zip),
-      amount: getCell(row, importMapping.amount),
-      jobType: getCell(row, importMapping.jobType),
-      notes: getCell(row, importMapping.notes),
-    })).filter(r => r.name);
-    setImportRows(mapped);
-    const noState = mapped.filter(r => !r.state);
-    if (noState.length > 0) {
-      setMissingStateRows(noState.map(r => r._idx));
-      setPendingStateRows(noState.map(r => r._idx));
-      setImportStep("state");
-    } else {
-      setImportStep("preview");
-    }
-  };
-
-  const applyGlobalState = () => {
-    if (!globalState.trim()) { alert("Enter a state."); return; }
-    const st = globalState.trim().toUpperCase().slice(0,2);
-    setImportRows(prev => prev.map(r => missingStateRows.includes(r._idx) ? {...r, state: st} : r));
-    setImportStep("preview");
-  };
-
-  const applyStateGroup = () => {
-    if (!stateGroupInput.trim()) { alert("Enter a state."); return; }
-    if (stateGroupSelected.size === 0) { alert("Select at least one contact."); return; }
-    const st = stateGroupInput.trim().toUpperCase().slice(0,2);
-    setImportRows(prev => prev.map(r => stateGroupSelected.has(r._idx) ? {...r, state: st} : r));
-    setPendingStateRows(prev => prev.filter(idx => !stateGroupSelected.has(idx)));
-    setStateGroups(prev => [...prev, {state: st, count: stateGroupSelected.size}]);
-    setStateGroupSelected(new Set());
-    setStateGroupInput("");
-  };
-
-  const runImportContacts = () => {
-    let added = 0, skipped = 0, noContactInfo = [];
-    importRows.forEach((r, i) => {
-      if (!r.phone && !r.email) { noContactInfo.push(r.name); skipped++; return; }
-      const isDupe = customers.some(c =>
-        (r.phone && c.phone && r.phone.replace(/[^0-9]/g,"") === (c.phone||"").replace(/[^0-9]/g,"")) ||
-        (r.email && c.email && r.email.toLowerCase() === c.email.toLowerCase())
-      );
-      if (isDupe) { skipped++; return; }
-      const jobHistory = (r.amount || r.jobType || r.notes) ? [{
-        id: Date.now() + i,
-        amount: r.amount ? Number(String(r.amount).replace(/[^0-9.]/g,"")) || 0 : 0,
-        jobType: r.jobType || "",
-        notes: r.notes || "",
-        importedAt: new Date().toISOString().slice(0,10),
-      }] : [];
-      addCustomer({
-        id: Date.now() * 1000 + i,
-        name: r.name, phone: r.phone, email: r.email,
-        address: r.address, city: r.city, state: r.state, zip: r.zip,
-        jobHistory, importedAt: new Date().toISOString().slice(0,10),
-      });
-      added++;
-    });
-    if (noContactInfo.length > 0) alert("Skipped " + noContactInfo.length + " with no phone or email: " + noContactInfo.slice(0,5).join(", ") + (noContactInfo.length>5?"...":""));
-    alert("Done! " + added + " contact" + (added!==1?"s":"") + " imported, " + skipped + " skipped.");
-    resetImport();
-  };
-
-  const saveNewContact = () => {
-    setAddContactError("");
-    if (!newContact.name.trim()) { setAddContactError("Name is required."); return; }
-    if (!newContact.phone.trim() && !newContact.email.trim()) { setAddContactError("Phone or email is required."); return; }
-    if (!newContact.address.trim()) { setAddContactError("Address is required."); return; }
-    if (!newContact.city.trim()) { setAddContactError("City is required."); return; }
-    if (!newContact.state.trim()) { setAddContactError("State is required."); return; }
-    addCustomer({
-      id: Date.now() + Math.floor(Math.random()*1000),
-      name: newContact.name.trim(), phone: newContact.phone.trim(),
-      email: newContact.email.trim(), address: newContact.address.trim(),
-      city: newContact.city.trim(), state: newContact.state.trim().toUpperCase().slice(0,2),
-      zip: newContact.zip.trim(), jobHistory: [],
-      importedAt: new Date().toISOString().slice(0,10),
-    });
-    setNewContact({...blankContact});
-    setShowAddContact(false);
-  };
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
 
@@ -5991,268 +5744,28 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
         <div style={{display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", marginBottom:14}}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, email, address..."
             style={{...S.input, flex:1, minWidth:200}}/>
-          {canEdit && (
-            <button style={S.btnPrimary} onClick={() => { setShowAddContact(p=>!p); setShowImport(false); }}>
-              <LucideIcons.UserPlus size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
-              Add Contact
-            </button>
-          )}
-          {canEdit && (
-            <button style={S.btnSecondary} onClick={() => { setShowImport(p=>!p); setShowAddContact(false); if (!showImport) setImportStep("upload"); }}>
-              <LucideIcons.Upload size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
-              Import
-            </button>
-          )}
-          <button style={S.btnSecondary} onClick={exportToExcel}><LucideIcons.Table2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Export</button>
+          <button style={S.btnSecondary} onClick={exportToExcel}><LucideIcons.Table2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Export to Excel</button>
         </div>
 
-        {/* ── Manual Add Contact Form ── */}
-        {showAddContact && canEdit && (
-          <div style={{background:C.surface2, borderRadius:10, padding:16, marginBottom:16, border:`1px solid ${C.border}`}}>
-            <h3 style={{fontSize:14, fontWeight:700, margin:"0 0 12px"}}>Add Contact</h3>
-            <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
-              <input value={newContact.name} onChange={e=>setNC("name",e.target.value)} placeholder="Full Name *" style={{...S.input, flex:2, minWidth:140}}/>
-              <input value={newContact.phone} onChange={e=>setNC("phone",e.target.value)} placeholder="Phone" style={{...S.input, flex:1, minWidth:120}}/>
-              <input value={newContact.email} onChange={e=>setNC("email",e.target.value)} placeholder="Email" style={{...S.input, flex:2, minWidth:160}}/>
-            </div>
-            <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
-              <input value={newContact.address} onChange={e=>setNC("address",e.target.value)} placeholder="Address *" style={{...S.input, flex:3, minWidth:180}}/>
-              <input value={newContact.city} onChange={e=>setNC("city",e.target.value)} placeholder="City *" style={{...S.input, flex:2, minWidth:120}}/>
-              <input value={newContact.state} onChange={e=>setNC("state",e.target.value)} placeholder="ST *" style={{...S.input, flex:"0 0 60px"}} maxLength={2}/>
-              <input value={newContact.zip} onChange={e=>setNC("zip",e.target.value)} placeholder="Zip" style={{...S.input, flex:"0 0 80px"}}/>
-            </div>
-            {addContactError && <div style={{fontSize:12, color:C.danger, marginBottom:8}}>{addContactError}</div>}
-            <div style={{display:"flex", gap:8}}>
-              <button style={S.btnPrimary} onClick={saveNewContact}>Save Contact</button>
-              <button style={S.btnSecondary} onClick={() => { setShowAddContact(false); setNewContact({...blankContact}); setAddContactError(""); }}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Import Flow ── */}
-        {showImport && canEdit && (
-          <div style={{background:C.surface2, borderRadius:10, padding:16, marginBottom:16, border:`1px solid ${C.border}`}}>
-            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
-              <h3 style={{fontSize:14, fontWeight:700, margin:0}}>Import Contacts</h3>
-              <button style={S.btnSmall} onClick={resetImport}>✕ Cancel</button>
-            </div>
-
-            {importStep === "upload" && (
-              <div>
-                <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
-                  Upload an Excel or CSV file. Column names will be auto-detected.
-                </p>
-                <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={handleImportFile}/>
-                <div style={{display:"flex", alignItems:"center", gap:10}}>
-                  <button style={S.btnPrimary} onClick={() => importFileRef.current?.click()}>
-                    <LucideIcons.Upload size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/>
-                    Choose File
-                  </button>
-                  <div style={{position:"relative"}}>
-                    <LucideIcons.Info size={18} strokeWidth={2} style={{color: showImportInfo ? C.accent : C.textMuted, cursor:"pointer", display:"block"}}
-                      onClick={() => setShowImportInfo(p => !p)}/>
-                    <div style={{display: showImportInfo ? "block" : "none", position:"absolute", left:0, top:24, zIndex:100,
-                      background:"#fff", border:`1px solid ${C.border}`, borderRadius:10, padding:16,
-                      boxShadow:"0 4px 20px rgba(0,0,0,0.12)", width:300}}>
-                      <div style={{fontSize:12, fontWeight:700, marginBottom:10, color:C.text}}>Import Field Reference</div>
-                      {[
-                        ["Name","Required. Full name of the contact."],
-                        ["Phone","Required if no email. Customer's phone number — any format."],
-                        ["Email","Required if no phone. Customer's email address."],
-                        ["Address","Required. Street address (e.g. 123 Main St)."],
-                        ["City","Required. City name."],
-                        ["State","Required. 2-letter state code (e.g. NJ). Missing states can be assigned during import."],
-                        ["Zip","Optional. 5-digit zip code."],
-                        ["Amount","Optional. Dollar value of their prior job (e.g. 1500 or $1,500)."],
-                        ["Job Type","Optional. Type of work done (e.g. Sealcoating, Crack Fill)."],
-                        ["Notes","Optional. Any notes about the contact or prior job."],
-                      ].map(([field, desc]) => (
-                        <div key={field} style={{marginBottom:8}}>
-                          <div style={{fontSize:12, fontWeight:700, color:C.text}}>{field}</div>
-                          <div style={{fontSize:11, color:C.textMuted}}>{desc}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {importStep === "map" && (
-              <div>
-                <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
-                  Match your spreadsheet columns to contact fields. We've auto-detected what we can.
-                </p>
-                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:12}}>
-                  {[["name","Name *"],["phone","Phone"],["email","Email"],["address","Address"],["city","City"],["state","State"],["zip","Zip"],["amount","Job Amount"],["jobType","Job Type"],["notes","Notes"]].map(([key,label]) => (
-                    <label key={key} style={{fontSize:12, fontWeight:600, flex:1, minWidth:120}}>
-                      {label}
-                      <select value={importMapping[key]} onChange={e => setImportMapping(p=>({...p,[key]:e.target.value}))}
-                        style={{...S.input, marginTop:4, display:"block", width:"100%"}}>
-                        <option value="">— skip —</option>
-                        {importHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                      </select>
-                    </label>
-                  ))}
-                </div>
-                <button style={S.btnPrimary} onClick={proceedFromMap}>Next →</button>
-              </div>
-            )}
-
-            {importStep === "state" && (
-              <div>
-                <p style={{fontSize:13, fontWeight:600, marginBottom:8}}>
-                  {missingStateRows.length} contact{missingStateRows.length!==1?"s":""} {missingStateRows.length!==1?"are":"is"} missing a state.
-                </p>
-                {sameStateForAll === null && (
-                  <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
-                    <button style={S.btnPrimary} onClick={() => setSameStateForAll(true)}>Yes — same state for all</button>
-                    <button style={S.btnSecondary} onClick={() => setSameStateForAll(false)}>No — different states</button>
-                  </div>
-                )}
-                {sameStateForAll === true && (
-                  <div style={{display:"flex", gap:8, alignItems:"center", marginTop:10}}>
-                    <input value={globalState} onChange={e=>setGlobalState(e.target.value.toUpperCase().slice(0,2))}
-                      placeholder="ST" maxLength={2} style={{...S.input, width:70}}/>
-                    <button style={S.btnPrimary} onClick={applyGlobalState}>Apply to All</button>
-                    <button style={S.btnSecondary} onClick={() => setSameStateForAll(null)}>Back</button>
-                  </div>
-                )}
-                {sameStateForAll === false && (
-                  <div style={{marginTop:10}}>
-                    <p style={{fontSize:12, color:C.textMuted, marginBottom:8}}>
-                      {pendingStateRows.length} remaining. Select contacts, enter their state, and click Apply.
-                    </p>
-                    <div style={{maxHeight:200, overflowY:"auto", border:`1px solid ${C.border}`, borderRadius:8, marginBottom:8}}>
-                      {importRows.filter(r => pendingStateRows.includes(r._idx)).map(r => (
-                        <div key={r._idx} onClick={() => setStateGroupSelected(prev => {
-                          const next = new Set(prev);
-                          next.has(r._idx) ? next.delete(r._idx) : next.add(r._idx);
-                          return next;
-                        })} style={{display:"flex", alignItems:"center", gap:8, padding:"8px 12px",
-                          borderBottom:`1px solid ${C.border}`, cursor:"pointer",
-                          background: stateGroupSelected.has(r._idx) ? "#fffbeb" : "transparent"}}>
-                          <input type="checkbox" readOnly checked={stateGroupSelected.has(r._idx)} style={{flexShrink:0}}/>
-                          <div style={{flex:1, fontSize:13}}>
-                            <strong>{r.name}</strong>
-                            <span style={{fontSize:11, color:C.textMuted, marginLeft:8}}>{r.city||""}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
-                      <button style={{...S.btnSmall}} onClick={() => setStateGroupSelected(new Set(pendingStateRows))}>Select All Remaining</button>
-                      <input value={stateGroupInput} onChange={e=>setStateGroupInput(e.target.value.toUpperCase().slice(0,2))}
-                        placeholder="ST" maxLength={2} style={{...S.input, width:70}}/>
-                      <button style={S.btnPrimary} onClick={applyStateGroup} disabled={stateGroupSelected.size===0}>
-                        Apply to {stateGroupSelected.size} selected
-                      </button>
-                    </div>
-                    {pendingStateRows.length === 0 && (
-                      <button style={{...S.btnPrimary, marginTop:10}} onClick={() => setImportStep("preview")}>Continue →</button>
-                    )}
-                    {stateGroups.length > 0 && (
-                      <div style={{fontSize:11, color:C.textMuted, marginTop:8}}>
-                        Applied: {stateGroups.map(g => `${g.state} (${g.count})`).join(", ")}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {importStep === "preview" && (
-              <div>
-                <p style={{fontSize:13, marginBottom:10}}>
-                  Ready to import <strong>{importRows.filter(r=>r.phone||r.email).length}</strong> contacts.
-                  {importRows.filter(r=>!r.phone&&!r.email).length > 0 && (
-                    <span style={{color:C.danger}}> {importRows.filter(r=>!r.phone&&!r.email).length} will be skipped (no phone or email).</span>
-                  )}
-                </p>
-                <div style={{maxHeight:200, overflowY:"auto", border:`1px solid ${C.border}`, borderRadius:8, marginBottom:12}}>
-                  {importRows.slice(0,20).map((r,i) => (
-                    <div key={i} style={{display:"flex", gap:8, padding:"6px 12px", borderBottom:`1px solid ${C.border}`,
-                      fontSize:12, opacity:(!r.phone&&!r.email)?0.4:1}}>
-                      <span style={{flex:2, fontWeight:600}}>{r.name}</span>
-                      <span style={{flex:1, color:C.textMuted}}>{r.phone||r.email||"⚠️ missing"}</span>
-                      <span style={{flex:1, color:C.textMuted}}>{[r.city,r.state].filter(Boolean).join(", ")}</span>
-                    </div>
-                  ))}
-                  {importRows.length > 20 && <div style={{padding:"6px 12px", fontSize:11, color:C.textMuted}}>...and {importRows.length-20} more</div>}
-                </div>
-                <div style={{display:"flex", gap:8}}>
-                  <button style={S.btnPrimary} onClick={runImportContacts}>Import Contacts</button>
-                  <button style={S.btnSecondary} onClick={() => setImportStep("map")}>← Back</button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Customer list — hidden on mobile when detail is open */}
-        {!selected && (
-          <div>
-            {/* Column headers */}
-            <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
-              borderBottom:`2px solid ${C.border}`, fontSize:11, fontWeight:700,
-              color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em"}}>
-              {(isDesktop
-                ? [["name","Name",2],["phone","Phone",1],["email","Email",2],["address","Address",2],["city","City",1],["state","State","60px"],["lastJobDate","Date",1],["status","Status",1]]
-                : [["name","Name",2],["phone","Phone",1]]
-              ).map(([field,label,flex]) => (
-                <div key={field} onClick={() => toggleSort(field)}
-                  style={{cursor:"pointer", flex: typeof flex==="number"?flex:undefined, width:typeof flex==="string"?flex:undefined,
-                    flexShrink:0, userSelect:"none", color: sortField===field ? C.accent : C.textMuted}}>
-                  {label}{sortField===field ? (sortDir==="asc"?" ↑":" ↓"):""}
-                </div>
-              ))}
-            </div>
-
-            {filtered.length === 0 ? (
-              <p style={{fontSize:12, color:C.textMuted, marginTop:12}}>No customers match that search.</p>
-            ) : [...filtered].sort((a,b) => {
-              let av, bv;
-              if (sortField==="name")        { av=a.name||""; bv=b.name||""; }
-              else if (sortField==="address") { av=a.address||""; bv=b.address||""; }
-              else if (sortField==="city")    { av=a.city||""; bv=b.city||""; }
-              else if (sortField==="state")   { av=a.state||""; bv=b.state||""; }
-              else if (sortField==="phone")   { av=a.phone||""; bv=b.phone||""; }
-              else if (sortField==="lastJobDate") { av=a.lastJobDate||""; bv=b.lastJobDate||""; }
-              else if (sortField==="status")  { av=a.jobs[0]?.status||""; bv=b.jobs[0]?.status||""; }
-              else { av=""; bv=""; }
-              const cmp = av<bv?-1:av>bv?1:0;
-              return sortDir==="asc" ? cmp : -cmp;
-            }).map(c => (
-              <div key={c.id} onClick={() => setSelectedId(c.id)}
-                style={{display:"flex", alignItems:"center", gap:8, padding:"10px 4px",
-                  borderBottom:`1px solid ${C.border}`, cursor:"pointer"}}
-                onMouseEnter={e => e.currentTarget.style.background=C.surface2}
-                onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                <div style={{flex:2, minWidth:0}}>
-                  <div style={{fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.name||"Unnamed"}</div>
-                </div>
-                <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>
-                  {c.phone ? (() => { const d = c.phone.replace(/\D/g,""); return d.length===10 ? `(${d.slice(0,3)}) ${d.slice(3,6)} ${d.slice(6)}` : c.phone; })() : "—"}
-                </div>
-                {isDesktop && <>
-                  <div style={{flex:2, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.email||"—"}</div>
-                  <div style={{flex:2, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.address||"—"}</div>
-                  <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.city||"—"}</div>
-                  <div style={{width:60, flexShrink:0, fontSize:12, color:C.textMuted}}>{c.state||"—"}</div>
-                  <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted}}>{c.lastJobDate||"—"}</div>
-                  <div style={{flex:1, minWidth:0}}>
-                    {c.jobs[0]?.status ? (
-                      <span style={{fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:20,
-                        ...(S[`status_${c.jobs[0].status}`]||{background:C.surface2, color:C.textMuted})}}>
-                        {pipelineStatusLabel(c.jobs[0].status)}
-                      </span>
-                    ) : <span style={{fontSize:12, color:C.textMuted}}>—</span>}
-                  </div>
-                </>}
+        <div style={{display: selected ? "none" : "block"}}>
+          {filtered.length === 0 ? (
+            <p style={{fontSize:12, color:C.textMuted}}>No customers match that search.</p>
+          ) : filtered.map(c => (
+            <div key={c.id} onClick={() => setSelectedId(c.id)}
+              style={{
+                padding:"12px 14px", borderRadius:8, marginBottom:8, cursor:"pointer",
+                background: C.surface2,
+                border:`1px solid ${C.border}`,
+              }}>
+              <div style={{fontWeight:700, fontSize:14}}>{c.name || "Unnamed"}</div>
+              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>{c.phone || c.email || "no contact info"}</div>
+              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
+                {c.jobCount} job{c.jobCount!==1?"s":""} · {formatCurrency(c.totalRevenue)}
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          ))}
+        </div>
 
         {/* Customer detail — full screen on mobile */}
         {selected && (
@@ -6307,21 +5820,6 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                     </span>
                   </div>
                 ))}
-                {(selected.jobHistory||[]).length > 0 && (
-                  <>
-                    <h3 style={{fontSize:13, fontWeight:700, margin:"12px 0 8px"}}>Pre-App Job History</h3>
-                    {selected.jobHistory.map((h,i) => (
-                      <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
-                        padding:"8px 10px", borderRadius:6, background:C.surface2, marginBottom:4, fontSize:12}}>
-                        <span style={{color:C.textMuted}}>{h.importedAt||""}{h.jobType ? ` · ${h.jobType}` : ""}</span>
-                        <span style={{display:"flex", alignItems:"center", gap:8}}>
-                          {h.notes && <span style={{color:C.textMuted, fontStyle:"italic", fontSize:11}}>{h.notes}</span>}
-                          {h.amount > 0 && <strong>{formatCurrency(h.amount)}</strong>}
-                        </span>
-                      </div>
-                    ))}
-                  </>
-                )}
               </div>
 
               {canEdit && (
@@ -6382,7 +5880,7 @@ function getFifoUnitCost(materialType, dateStr, materials) {
 }
 
 // ─── EBITDA Report ────────────────────────────────────────────────────────────
-function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCOGS=0, periodExpLabor=0, cogsBySubcat={}, overheadBySubcat={}, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
+function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, serviceTypeTotals={}, setCurrentJob, setView }) {
   const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
   const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
   const isDesktopLayout = useIsDesktop();
@@ -6391,27 +5889,7 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
     <div>
       {/* Date range controls */}
       <section style={S.section}>
-        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
-          <h2 style={{...S.h2, margin:0}}>EBITDA Report</h2>
-          <button style={S.btnSmall} onClick={() => {
-            const rows = [["Job","Date","Revenue","COGS","Gross Profit","GP%","Labor","Overhead","EBITDA","EBITDA%"]];
-            ebitdaJobData.forEach(d => rows.push([
-              d.job.clientName||"Unnamed", d.job.date||"",
-              d.revenue, d.cogs, d.grossProfit,
-              (d.grossMarginPct/100).toFixed(4),
-              d.jobLabor, d.overheadAlloc, d.ebitda,
-              (d.ebitdaPct/100).toFixed(4),
-            ]));
-            const ws = XLSX.utils.aoa_to_sheet(rows);
-            ws["!cols"] = [20,12,12,12,14,8,12,12,12,10].map(w=>({wch:w}));
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "EBITDA");
-            XLSX.writeFile(wb, "ebitda-report.xlsx");
-          }}>
-            <LucideIcons.Download size={13} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
-            Export to Excel
-          </button>
-        </div>
+        <h2 style={S.h2}>EBITDA Report</h2>
         <div style={{display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"flex-end"}}>
           <div style={{display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden"}}>
             {["ytd","custom"].map(r => (
@@ -6423,24 +5901,6 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
               </button>
             ))}
           </div>
-          {/* Status filter */}
-          <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:8, alignItems:"center"}}>
-            <span style={{fontSize:12, color:C.textMuted, fontWeight:600, marginRight:4}}>Statuses:</span>
-            {["estimate","draft","sent","scheduled","completed","paid","lost"].map(s => {
-              const active = ebitdaStatuses.includes(s);
-              return (
-                <button key={s} onClick={() => setEbitdaStatuses(prev =>
-                  active ? prev.filter(x => x !== s) : [...prev, s]
-                )} style={{fontSize:11, fontWeight:600, padding:"3px 10px", borderRadius:20, cursor:"pointer",
-                  border:`1px solid ${active ? C.accent : C.border}`,
-                  background: active ? "#fffbeb" : C.surface2,
-                  color: active ? "#000" : C.textMuted}}>
-                  {s.charAt(0).toUpperCase()+s.slice(1)}
-                </button>
-              );
-            })}
-          </div>
-
           {ebitdaRange === "custom" && (
             <>
               <input type="date" value={ebitdaFrom} onChange={e => setEbitdaFrom(e.target.value)}
@@ -6452,110 +5912,31 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
           )}
         </div>
 
-        {/* Summary cards — actuals vs estimates */}
-        {(() => {
-          const estCOGS     = periodRevenue * (reportSettings.cogsPct||25) / 100;
-          const estLabor    = periodRevenue * (reportSettings.laborPct||16) / 100;
-          const estFuel     = periodRevenue * (reportSettings.fuelPct||5)  / 100;
-          const estOverhead = periodRevenue * (reportSettings.overheadPct||15) / 100;
-          const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
-          const actLabor    = periodExpLabor > 0 ? periodExpLabor : null;
-          const actOverhead = periodOverhead  > 0 ? periodOverhead  : null;
-          const totalActCosts = ebitdaTotals.cogs + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
-          const actEbitda   = ebitdaTotals.revenue - totalActCosts;
-          const actEbitdaPct = ebitdaTotals.revenue > 0 ? (actEbitda / ebitdaTotals.revenue) * 100 : 0;
-          const targetPct   = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
-
-          const SummaryRow = ({label, actual, estimated, color, pct}) => (
-            <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-              <div style={{width:110, fontSize:12, fontWeight:600, color:C.textMuted, flexShrink:0}}>{label}</div>
-              <div style={{flex:1}}>
-                {actual !== null ? (
-                  <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
-                    <span style={{fontSize:16, fontWeight:800, color}}>{fmtMoney(actual)}</span>
-                    <span style={{fontSize:11, color:C.textMuted, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>
-                      actual
-                    </span>
-                    <span style={{fontSize:11, color:C.textMuted}}>est. {fmtMoney(estimated)}</span>
-                    {Math.abs(actual-estimated) > 1 && (
-                      <span style={{fontSize:11, fontWeight:600, color: actual>estimated ? "#ef4444" : "#10b981"}}>
-                        {actual>estimated?"+":""}{fmtMoney(actual-estimated)}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{display:"flex", alignItems:"center", gap:8}}>
-                    <span style={{fontSize:16, fontWeight:800, color}}>{fmtMoney(estimated)}</span>
-                    <span style={{fontSize:11, color:C.textMuted, background:"#fef3c7", border:"1px solid #f59e0b", borderRadius:4, padding:"1px 6px"}}>
-                      estimated
-                    </span>
-                  </div>
-                )}
-              </div>
-              {pct !== undefined && <div style={{fontSize:12, color:C.textMuted, flexShrink:0}}>{fmtPct(pct)}</div>}
+        {/* Summary cards */}
+        <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px,1fr))", gap:10, marginBottom:16}}>
+          {[
+            { label:"Revenue",      value:fmtMoney(ebitdaTotals.revenue),      color:C.accent },
+            { label:"COGS",         value:fmtMoney(ebitdaTotals.cogs),          color:"#ef4444" },
+            { label:"Gross Profit", value:fmtMoney(ebitdaTotals.grossProfit),   color:"#3b82f6",
+              sub: fmtPct(ebitdaTotals.revenue > 0 ? (ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100 : 0) },
+            { label:"Labor",        value:fmtMoney(ebitdaTotals.jobLabor),      color:"#f59e0b" },
+            { label:"Overhead",     value:fmtMoney(ebitdaTotals.overheadAlloc), color:"#8b5cf6" },
+            { label:"EBITDA",       value:fmtMoney(ebitdaTotals.ebitda),        color:"#10b981",
+              sub: fmtPct(ebitdaTotals.revenue > 0 ? (ebitdaTotals.ebitda/ebitdaTotals.revenue)*100 : 0) },
+          ].map(c => (
+            <div key={c.label} style={{background:C.surface2, borderRadius:8, padding:"10px 14px", border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:11, color:C.textMuted, marginBottom:4}}>{c.label}</div>
+              <div style={{fontSize:18, fontWeight:800, color:c.color}}>{c.value}</div>
+              {c.sub && <div style={{fontSize:11, color:C.textMuted}}>{c.sub}</div>}
             </div>
-          );
+          ))}
+        </div>
 
-          return (
-            <div style={{background:C.surface2, borderRadius:10, padding:"4px 14px 10px", marginBottom:16, border:`1px solid ${C.border}`}}>
-              <SummaryRow label="Revenue"      actual={ebitdaTotals.revenue} estimated={ebitdaTotals.revenue} color={C.accent}/>
-              <SummaryRow label="COGS"         actual={actCOGS}    estimated={estCOGS}    color="#ef4444"/>
-              <SummaryRow label="Labor"        actual={actLabor}   estimated={estLabor}   color="#f59e0b"/>
-              <SummaryRow label="Overhead"     actual={actOverhead}estimated={estOverhead} color="#8b5cf6"/>
-              <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-                <div style={{width:110, fontSize:12, fontWeight:600, color:C.textMuted, flexShrink:0}}>Gross Profit</div>
-                <div style={{flex:1}}>
-                  <span style={{fontSize:16, fontWeight:800, color:"#3b82f6"}}>{fmtMoney(ebitdaTotals.grossProfit)}</span>
-                  <span style={{fontSize:12, color:"#3b82f6", marginLeft:8}}>{fmtPct(ebitdaTotals.revenue > 0 ? (ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100 : 0)}</span>
-                </div>
-              </div>
-              <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0"}}>
-                <div style={{width:110, fontSize:13, fontWeight:800, flexShrink:0}}>EBITDA</div>
-                <div style={{flex:1, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
-                  <span style={{fontSize:20, fontWeight:800, color: actEbitda >= 0 ? "#10b981" : "#ef4444"}}>{fmtMoney(actEbitda)}</span>
-                  <span style={{fontSize:13, fontWeight:700, color: actEbitdaPct >= 0 ? "#10b981" : "#ef4444"}}>{fmtPct(actEbitdaPct)}</span>
-                  {targetPct > 0 && (
-                    <span style={{fontSize:11, color: actEbitdaPct >= targetPct ? "#10b981" : C.danger,
-                      background: actEbitdaPct >= targetPct ? "#dcfce7" : "#fee2e2",
-                      border:`1px solid ${actEbitdaPct >= targetPct ? "#16a34a" : "#ef4444"}`,
-                      borderRadius:4, padding:"1px 6px", fontWeight:600}}>
-                      {actEbitdaPct >= targetPct ? "✓" : "↓"} Target: {targetPct}%
-                    </span>
-                  )}
-                  {reportSettings.ebitdaTargetDollars > 0 && (
-                    <span style={{fontSize:11, color:C.textMuted}}>Target $: {fmtMoney(Number(reportSettings.ebitdaTargetDollars))}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
-        {periodRevenue === 0 && (
-          <div style={{fontSize:12, color:C.danger, marginBottom:12}}>No revenue in period — overhead not allocated per job.</div>
-        )}
-
-        {/* Subcategory breakdowns */}
-        {(Object.keys(cogsBySubcat).length > 0 || Object.keys(overheadBySubcat).length > 0) && (
-          <div style={{display:"flex", gap:12, flexWrap:"wrap", marginBottom:16}}>
-            {[["COGS Breakdown", cogsBySubcat, "#ef4444"], ["Overhead Breakdown", overheadBySubcat, "#8b5cf6"]].map(([title, breakdown, color]) => (
-              Object.keys(breakdown).length > 0 && (
-                <div key={title} style={{flex:1, minWidth:220, background:C.surface2, borderRadius:8, padding:"12px 14px", border:`1px solid ${C.border}`}}>
-                  <div style={{fontSize:11, fontWeight:700, color, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10}}>{title}</div>
-                  {Object.entries(breakdown).sort((a,b) => b[1]-a[1]).map(([subcat, amt]) => (
-                    <div key={subcat} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0", borderBottom:`1px solid ${C.border}`, fontSize:12}}>
-                      <span style={{color:C.text}}>{subcat}</span>
-                      <div style={{textAlign:"right"}}>
-                        <span style={{fontWeight:600}}>{fmtMoney(amt)}</span>
-                        {periodRevenue > 0 && <span style={{fontSize:10, color:C.textMuted, marginLeft:6}}>{(amt/periodRevenue*100).toFixed(1)}%</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            ))}
-          </div>
-        )}
+        {/* Overhead context */}
+        <div style={{fontSize:12, color:C.textMuted, marginBottom:16, background:C.surface2, borderRadius:8, padding:"10px 14px"}}>
+          <strong>Overhead</strong>: {fmtMoney(periodOverhead)} logged for this period · {fmtMoney(yearOverhead)} full year to date
+          {periodRevenue === 0 && <span style={{color:C.danger}}> — No revenue in period, overhead not allocated</span>}
+        </div>
       </section>
 
       {/* Per-job breakdown */}
@@ -6759,7 +6140,7 @@ function OutstandingInvoicesSection({ jobs, setCurrentJob, setView }) {
 }
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
-function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, laborEntries=[], expenses=[], teamUsers=[], materials=[], materialSettings={}, reportSettings={}, offAppWorkers=[] }) {
+function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, laborEntries=[], expenses=[], teamUsers=[], materials=[], materialSettings={} }) {
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
@@ -6771,7 +6152,6 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const [filterStatuses, setFilterStatuses] = useState([]); // empty = all statuses
   const [pdfLoading,   setPdfLoading]   = useState(false);
   const [ebitdaRange,   setEbitdaRange]   = useState("ytd"); // "ytd" | "custom"
-  const [ebitdaStatuses, setEbitdaStatuses] = useState(["paid","completed","sent","scheduled"]);
   const [ebitdaFrom,    setEbitdaFrom]    = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10));
   const [ebitdaTo,      setEbitdaTo]      = useState(new Date().toISOString().slice(0,10));
 
@@ -6796,53 +6176,22 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const ebitdaJobs = jobs.filter(j => {
     if (!j.date) return false;
     const d = j.date.includes("/") ? new Date(j.date).toISOString().slice(0,10) : j.date;
-    return d >= ebitdaDateRange.from && d <= ebitdaDateRange.to && (ebitdaStatuses.length === 0 || ebitdaStatuses.includes(j.status));
+    return d >= ebitdaDateRange.from && d <= ebitdaDateRange.to && !["estimate","draft","lost"].includes(j.status);
   });
 
   // Total revenue for period (for overhead allocation %)
   const periodRevenue = ebitdaJobs.reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue, 0);
 
-  // Category bucket assignments from report settings
-  // Include legacy category names in bucket mapping
-  const catBuckets = {
-    // Legacy top-level categories mapped to new buckets
-    "Subcontractors": "cogs",
-    "Job Supplies":   "cogs",
-    "Crew Supplies":  "cogs",
-    "Fuel":           "cogs",
-    "Equipment":      "overhead",
-    "Other":          "exclude",
-    // Current categories from reportSettings
-    ...(reportSettings?.categoryBuckets || {"COGS":"cogs","Overhead":"overhead","Labor":"labor"}),
-  };
-
-  // Expenses grouped by bucket for the period
-  const periodExpByBucket = (bucket) => expenses
-    .filter(e => catBuckets[e.category] === bucket && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to)
+  // Overhead expenses for period
+  const periodOverhead = expenses
+    .filter(e => e.category === "Overhead" && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to)
     .reduce((s,e) => s + Number(e.amount||0), 0);
-
-  const periodOverhead   = periodExpByBucket("overhead");
-  const periodExpCOGS    = periodExpByBucket("cogs");
-  const periodExpLabor   = periodExpByBucket("labor");
-
-  // Subcategory breakdown for period
-  const periodSubcatBreakdown = (bucket) => {
-    const bucketExps = expenses.filter(e => catBuckets[e.category] === bucket && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to);
-    const breakdown = {};
-    bucketExps.forEach(e => {
-      const key = e.subcategory || e.category || "Other";
-      breakdown[key] = (breakdown[key] || 0) + Number(e.amount||0);
-    });
-    return breakdown;
-  };
-  const cogsBySubcat     = periodSubcatBreakdown("cogs");
-  const overheadBySubcat = periodSubcatBreakdown("overhead");
 
   // Also get full year overhead for context
   const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10);
   const yearEnd   = new Date().toISOString().slice(0,10);
   const yearOverhead = expenses
-    .filter(e => catBuckets[e.category] === "overhead" && e.date >= yearStart && e.date <= yearEnd)
+    .filter(e => e.category === "Overhead" && e.date >= yearStart && e.date <= yearEnd)
     .reduce((s,e) => s + Number(e.amount||0), 0);
   const yearRevenue = jobs
     .filter(j => {
@@ -6861,30 +6210,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     // COGS: actuals first, then FIFO material calc, then estimated
     const actuals = j.costs?.actuals || {};
     const hasActuals = Object.values(actuals).some(av => av !== null && av !== "" && Number(av) > 0);
-    // For each cost key, use actual if entered, else fall back to estimated value
-    const estByKey = {
-      sealcoat:  fin.totalMaterials > 0 ? (fin.totalMaterials - (fin.fuelCost||0) - (fin.laborCost||0)) / Math.max(1, Object.keys(actuals).length) : 0,
-    };
-    // Use calcJobFinancials actVal pattern: blend actuals with estimates per line
-    const blendedCost = (() => {
-      const a = j.costs?.actuals || {};
-      const revenue_ = fin.revenue;
-      const areas_ = j.areas || [];
-      const sealcoatSqFt_ = areas_.filter(ar=>ar.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
-      const crackFillLinFt_ = areas_.filter(ar=>ar.serviceType==="crackfill").reduce((s,ar)=>s+Number(ar.measurement||0),0);
-      const patchTons_ = calcPatchTons(areas_.filter(ar=>ar.serviceType==="patch").reduce((s,ar)=>s+Number(ar.measurement||0),0));
-      const estSealcoat_ = (sealcoatSqFt_/70)*4.33;
-      const estCrackFill_ = crackFillLinFt_*0.14;
-      const estAsphalt_ = patchTons_*80;
-      const estFuel_ = revenue_*0.05;
-      const estStone_ = Number(j.costs?.stoneTons||0)*20;
-      const estOther_ = Number(j.costs?.otherCost||0);
-      const estLabor_ = revenue_*0.16;
-      const av = (key, est) => (a[key]!=null && a[key]!=="" ? Number(a[key]) : est);
-      return av("sealcoat",estSealcoat_) + av("crackfill",estCrackFill_) + av("asphalt",estAsphalt_) +
-             av("fuel",estFuel_) + av("stone",estStone_) + av("other",estOther_) + av("labor",estLabor_);
-    })();
-    const actualsCOGS = hasActuals ? blendedCost : 0;
+    const actualsCOGS = Object.values(actuals).reduce((s,av) => s + Number(av||0), 0);
 
     // FIFO material cost: for each area, look up material type via serviceMappings, get FIFO unit cost × qty ÷ coverage
     const jobDate = j.date?.includes("/") ? new Date(j.date).toISOString().slice(0,10) : (j.date||"");
@@ -6920,19 +6246,14 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     const cogsIsEstimated = !hasActuals && !hasFifo;
     const cogsSource = hasActuals ? "actual" : hasFifo ? "fifo" : "estimated";
 
-    // Labor: actual hours × rate (job-linked entries)
-    const jobLaborEntries = laborEntries.filter(e => String(e.jobId) === String(j.id));
-    const jobLabor = jobLaborEntries.reduce((s,e) => {
-      let rate = getRateForUser(e.userId, e.date || jobDate);
-      // Also check offAppWorkers by name if no userId rate found
-      if (!rate && e.name) {
-        const oaw = (offAppWorkers||[]).find(w => w.name === e.name);
-        const hist = (oaw?.rateHistory||[]).filter(r => r.startDate <= (e.date||jobDate)).sort((a,b)=>b.startDate.localeCompare(a.startDate));
-        rate = hist[0]?.rate || 0;
-      }
-      return s + (Number(e.hours||0) * (rate||0));
-    }, 0);
-    const laborIsEstimated = jobLaborEntries.length === 0;
+    // Labor: actual hours × rate
+    const jobLabor = laborEntries
+      .filter(e => e.jobId === j.id || (e.date && e.date === jobDate)) // by jobId or date match
+      .reduce((s,e) => {
+        const rate = getRateForUser(e.userId, e.date || jobDate);
+        return s + (Number(e.hours||0) * (rate||0));
+      }, 0);
+    const laborIsEstimated = jobLabor === 0;
 
     // Overhead: allocate by revenue %
     const revenueShare = periodRevenue > 0 ? revenue / periodRevenue : 0;
@@ -6982,7 +6303,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   });
 
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
-  const STATUS_OPTS = ["estimate","draft","sent","signed","scheduled","completed","paid","lost"];
+  const STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
   const statusLabel = (s) => s==="pending_review" ? "Pending Review" : s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
   // Filter jobs that have any revenue
@@ -7193,10 +6514,6 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           ebitdaJobData={ebitdaJobData}
           ebitdaTotals={ebitdaTotals}
           periodOverhead={periodOverhead}
-          periodExpCOGS={periodExpCOGS}
-          periodExpLabor={periodExpLabor}
-          cogsBySubcat={cogsBySubcat}
-          overheadBySubcat={overheadBySubcat}
           yearOverhead={yearOverhead}
           periodRevenue={periodRevenue}
           yearRevenue={yearRevenue}
@@ -7204,8 +6521,6 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           ebitdaFrom={ebitdaFrom} setEbitdaFrom={setEbitdaFrom}
           ebitdaTo={ebitdaTo} setEbitdaTo={setEbitdaTo}
           ebitdaDateRange={ebitdaDateRange}
-          ebitdaStatuses={ebitdaStatuses} setEbitdaStatuses={setEbitdaStatuses}
-          reportSettings={reportSettings}
           serviceTypeTotals={serviceTypeTotals}
           setCurrentJob={setCurrentJob} setView={setView}
         />
@@ -7325,7 +6640,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 }
 
 // ─── Costs View ───────────────────────────────────────────────────────────────
-function CostsView({ currentJob, updateJob, rates, expenses, laborEntries=[], teamUsers=[], offAppWorkers=[] }) {
+function CostsView({ currentJob, updateJob, rates, expenses }) {
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const SEALCOAT_PRICE_PER_GAL = 4.33;
@@ -7334,26 +6649,6 @@ function CostsView({ currentJob, updateJob, rates, expenses, laborEntries=[], te
   const ASPHALT_PER_TON        = 80;
   const STONE_PER_TON          = 20;
   const FUEL_PCT               = 0.05;
-
-  // Calculate actual labor cost from labor tab entries linked to this job
-  const jobLaborEntries = laborEntries.filter(e => String(e.jobId) === String(currentJob.id));
-  const laborFromEntries = jobLaborEntries.reduce((s, e) => {
-    const userId = e.userId;
-    const entryDate = e.date || "";
-    let rate = 0;
-    if (userId) {
-      const user = teamUsers.find(u => u.id === userId);
-      const hist = (user?.rateHistory || []).filter(r => r.startDate <= entryDate).sort((a,b) => b.startDate.localeCompare(a.startDate));
-      rate = hist[0]?.rate || 0;
-    }
-    if (!rate) {
-      const oaw = offAppWorkers.find(w => w.name === e.name);
-      const hist = (oaw?.rateHistory || []).filter(r => r.startDate <= entryDate).sort((a,b) => b.startDate.localeCompare(a.startDate));
-      rate = hist[0]?.rate || 0;
-    }
-    return s + (Number(e.hours||0) * rate);
-  }, 0);
-  const hasLaborEntries = jobLaborEntries.length > 0 && laborFromEntries > 0;
   const TARGET_MARGIN          = 0.52;
 
   const sealcoatSqFt   = (currentJob.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
@@ -7483,24 +6778,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, laborEntries=[], te
           `${patchTons.toFixed(2)} tons × $${ASPHALT_PER_TON}/ton`
         )}
         {costRow("Fuel (5%)", estFuel, "fuel", `${formatCurrency(revenue)} × 5%`)}
-        {hasLaborEntries ? (
-          <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
-              <div>
-                <div style={{fontSize:13, color:C.text, fontWeight:600}}>Labor</div>
-                <div style={{fontSize:11, color:C.textMuted, marginTop:1}}>
-                  {jobLaborEntries.length} entr{jobLaborEntries.length===1?"y":"ies"} from Labor tab · {jobLaborEntries.reduce((s,e)=>s+Number(e.hours||0),0).toFixed(1)} hrs
-                </div>
-              </div>
-              <div style={{textAlign:"right"}}>
-                <div style={{fontSize:11, color:C.textMuted}}>Est: {formatCurrency(estLabor)}</div>
-                <div style={{fontSize:12, fontWeight:700, color: laborFromEntries > estLabor ? C.danger : C.green}}>
-                  Act: {formatCurrency(laborFromEntries)} ({laborFromEntries > estLabor ? "+" : ""}{formatCurrency(laborFromEntries - estLabor)})
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : costRow("Labor (16%)", estLabor, "labor", `${formatCurrency(revenue)} × 16%`)}
+        {costRow("Labor (16%)", estLabor, "labor", `${formatCurrency(revenue)} × 16%`)}
 
         {/* Stone */}
         <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
@@ -7908,221 +7186,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
 // ─── Permissions View (read-only for owner) ─────────────────────────────────────────────
 // ─── Admin Hub (admin only) — landing screen linking to admin tools ───────────
 // ─── Owner Hub — company owner's settings (no platform-level features) ─────
-function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
-  const DEFAULT_SUBCATS = { "COGS": [], "Overhead": [] };
-  const DEFAULT_BUCKETS = {
-    "COGS":     "cogs",
-    "Overhead": "overhead",
-    "Labor":    "labor",
-  };
-  const defaults = {
-    laborPct:16, fuelPct:5, cogsPct:25, overheadPct:15,
-    ebitdaTargetPct:20, ebitdaTargetDollars:"",
-    categoryBuckets: DEFAULT_BUCKETS,
-  };
-  const rs = { ...defaults, ...reportSettings, categoryBuckets: {...DEFAULT_BUCKETS, ...(reportSettings.categoryBuckets||{})}, customSubcategories: {...DEFAULT_SUBCATS, ...(reportSettings.customSubcategories||{})} };
-  const [draft, setDraft] = useState({...rs});
-  const [newSubcatName, setNewSubcatName] = useState("");
-  const [newSubcatCat, setNewSubcatCat] = useState("COGS");
-  const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(false);
-  const [newCatName, setNewCatName] = useState("");
-  const setD = (k, v) => setDraft(p => ({...p, [k]: v}));
-  const setBucket = (cat, bucket) => setDraft(p => ({...p, categoryBuckets:{...p.categoryBuckets,[cat]:bucket}}));
-
-  const totalEstPct = (draft.cogsPct||0) + (draft.laborPct||0) + (draft.overheadPct||0);
-  const calcEbitdaPct = Math.max(0, 100 - totalEstPct);
-
-  const save = async () => {
-    setSaving(true);
-    await syncReportSettings(draft);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  // Auto-save helper for pill clicks — updates draft and immediately persists
-  const autoSaveDraft = (updater) => {
-    setDraft(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      syncReportSettings(next);
-      return next;
-    });
-  };
-
-  const BUCKET_OPTS = [
-    {value:"cogs",    label:"COGS",    color:"#ef4444"},
-    {value:"labor",   label:"Labor",   color:"#f59e0b"},
-    {value:"overhead",label:"Overhead",color:"#8b5cf6"},
-    {value:"exclude", label:"Exclude", color:C.textMuted},
-  ];
-
-  const allCats = Object.keys(draft.categoryBuckets);
-
-  return (
-    <section style={S.section}>
-      <h2 style={S.h2}>Report Settings</h2>
-      <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:20}}>
-        Configure how your expenses map to EBITDA buckets, set estimated percentages for when actuals aren't available, and set your EBITDA target.
-      </p>
-
-      <div style={{display:"flex", flexDirection:"column", gap:24}}>
-
-
-
-        {/* Subcategories */}
-        <div>
-          <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8}}>
-            Subcategories
-          </div>
-          <p style={{fontSize:12, color:C.textMuted, marginTop:-4, marginBottom:12}}>
-            Assign subcategories to COGS or Overhead buckets. Recommended ones are shown below — click to add them. You can also create custom ones.
-          </p>
-
-          {/* Recommended subcategories */}
-          {(() => {
-            const RECOMMENDED = {
-              "COGS": ["Materials","Subcontractors","Equipment Rental","Job Supplies","Crew Supplies","Fuel"],
-              "Overhead": ["Insurance","Office & Software","Vehicle Payments/Lease","Equipment Payments/Lease","Equipment Maintenance & Repairs","Marketing & Advertising","Phone & Utilities","Accounting & Legal","Owner Salary/Draw","Other G&A"],
-            };
-            // Only filter out items already in customSubcategories (built-ins are always shown separately)
-            const customAssigned = new Set(Object.values(draft.customSubcategories||{}).flat());
-            const unassigned = {
-              COGS: RECOMMENDED.COGS.filter(s=>!customAssigned.has(s)),
-              Overhead: RECOMMENDED.Overhead.filter(s=>!customAssigned.has(s)),
-            };
-            if (unassigned.COGS.length === 0 && unassigned.Overhead.length === 0) return null;
-            return (
-              <div style={{background:C.surface2, borderRadius:8, padding:12, marginBottom:12, border:`1px solid ${C.border}`}}>
-                <div style={{fontSize:11, fontWeight:700, color:C.textMuted, marginBottom:8}}>RECOMMENDED — click to add</div>
-                {["COGS","Overhead"].map(cat => unassigned[cat].length > 0 && (
-                  <div key={cat} style={{marginBottom:8}}>
-                    <div style={{fontSize:11, fontWeight:600, color:C.textMuted, marginBottom:4}}>{cat}</div>
-                    <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
-                      {unassigned[cat].map(s => (
-                        <button key={s} onClick={() => {
-                          autoSaveDraft(p => {
-                            const ns = new Set([...(p.customSubcategories[cat]||[]), s]);
-                            return {...p, customSubcategories:{...p.customSubcategories,[cat]:[...ns]}};
-                          });
-                        }} style={{fontSize:11, padding:"3px 10px", borderRadius:20, cursor:"pointer",
-                          border:`1px dashed ${C.border}`, background:C.surface, color:C.textMuted}}>
-                          + {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-
-          {/* Current subcategories */}
-          {["COGS","Overhead"].map(cat => {
-            const builtIn = EXPENSE_CATEGORY_MAP[cat] || [];
-            const custom = draft.customSubcategories?.[cat] || [];
-            const all = [...builtIn, ...custom];
-            if (all.length === 0) return null;
-            return (
-              <div key={cat} style={{marginBottom:12}}>
-                <div style={{fontSize:12, fontWeight:600, marginBottom:6}}>{cat}</div>
-                <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
-                  {all.map(s => {
-                    const isCustom = custom.includes(s);
-                    return (
-                      <span key={s} style={{display:"inline-flex", alignItems:"center", gap:4,
-                        fontSize:11, fontWeight:600, padding:"3px 8px 3px 10px", borderRadius:20,
-                        background: isCustom ? "#fffbeb" : C.surface2,
-                        border:`1px solid ${isCustom ? C.accent : C.border}`, color:C.text}}>
-                        {s}
-                        {isCustom && (
-                          <button onClick={() => {
-                            autoSaveDraft(p => {
-                              return {...p, customSubcategories:{...p.customSubcategories,[cat]:(p.customSubcategories[cat]||[]).filter(x=>x!==s)}};
-                            });
-                          }} style={{background:"none", border:"none", cursor:"pointer", fontSize:13, color:C.textMuted}}>×</button>
-                        )}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Add custom subcategory */}
-          <div style={{display:"flex", gap:8, maxWidth:420, marginTop:8}}>
-            <select value={newSubcatCat} onChange={e=>setNewSubcatCat(e.target.value)} style={{...S.input, width:120, flexShrink:0}}>
-              <option value="COGS">COGS</option>
-              <option value="Overhead">Overhead</option>
-            </select>
-            <input value={newSubcatName} onChange={e=>setNewSubcatName(e.target.value)}
-              placeholder="Custom subcategory…" style={{...S.input, flex:1}}
-              onKeyDown={e => {
-                if (e.key==="Enter" && newSubcatName.trim()) {
-                  autoSaveDraft(p => { const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
-                  setNewSubcatName("");
-                }
-              }}/>
-            <button style={{...S.btnSmall, flexShrink:0}} onClick={() => {
-              if (!newSubcatName.trim()) return;
-              autoSaveDraft(p => { const ns = new Set([...(p.customSubcategories[newSubcatCat]||[]),newSubcatName.trim()]); return {...p, customSubcategories:{...p.customSubcategories,[newSubcatCat]:[...ns]}}; });
-              setNewSubcatName("");
-            }}>+ Add</button>
-          </div>
-        </div>
-
-        {/* Estimated cost %s */}
-        <div>
-          <div style={{fontSize:12, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:4}}>
-            Estimated Cost Percentages
-          </div>
-          <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>
-            Used when actual expense data isn't available. EBITDA % is calculated automatically.
-          </p>
-          <div style={{display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end"}}>
-            {[
-              ["cogsPct",     "COGS %",     "#ef4444"],
-              ["laborPct",    "Labor %",    "#f59e0b"],
-              ["overheadPct", "Overhead %", "#8b5cf6"],
-            ].map(([key, label, color]) => (
-              <div key={key} style={{flex:1, minWidth:100}}>
-                <div style={{fontSize:12, fontWeight:600, marginBottom:4, color}}>{label}</div>
-                <div style={{display:"flex", alignItems:"center", gap:4}}>
-                  <input type="number" min="0" max="100" step="0.5"
-                    value={draft[key]}
-                    onChange={e => setD(key, Number(e.target.value))}
-                    style={{...S.input, flex:1}}/>
-                  <span style={{fontSize:13, color:C.textMuted}}>%</span>
-                </div>
-              </div>
-            ))}
-            <div style={{flex:1, minWidth:100}}>
-              <div style={{fontSize:12, fontWeight:600, marginBottom:4, color:"#10b981"}}>EBITDA %</div>
-              <div style={{display:"flex", alignItems:"center", gap:4}}>
-                <input readOnly value={calcEbitdaPct.toFixed(1)}
-                  style={{...S.input, flex:1, fontWeight:800,
-                    color: calcEbitdaPct >= 0 ? "#10b981" : "#ef4444",
-                    background:C.surface2, cursor:"default"}}/>
-                <span style={{fontSize:13, color:C.textMuted}}>%</span>
-              </div>
-            </div>
-          </div>
-          {totalEstPct > 100 && (
-            <div style={{fontSize:12, color:C.danger, marginTop:6}}>⚠️ Percentages exceed 100%</div>
-          )}
-        </div>
-
-        <button onClick={save} disabled={saving}
-          style={{...S.btnPrimary, alignSelf:"flex-start", opacity: saving ? 0.6 : 1}}>
-          {saving ? "Saving…" : saved ? "✓ Saved" : "Save Settings"}
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, syncReportSettings }) {
+function OwnerHubView({ setView, iconStyle, syncIconStyle }) {
   const cards = [
     { key:"company-settings", icon:"🏢", lucide:"Building2",    title:"Company Settings",      desc:"Update your company name, contact info, logo, and legal terms." },
     { key:"permissions",      icon:"🔐", lucide:"Lock",         title:"Permissions",           desc:"View what each role can see. Contact BlacktopIQ support to change." },
@@ -8165,9 +7229,6 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, sy
           </button>
         </div>
       </section>
-
-      {/* Report Settings card */}
-      <ReportSettingsCard reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>
 
       {cards.map(c => (
         <button key={c.key} onClick={() => openCard(c.key)}
@@ -8858,7 +7919,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
 }
 
 // ─── Team View (owner/manager only) ────────────────────────────────────────────────────
-function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData, offAppWorkers=[], syncOffAppWorkers }) {
+function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
   const isManager = userRole === "manager";
   const [users,     setUsers]     = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -9154,156 +8215,6 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData, offAppW
       </section>
 
       <CrewsSection users={users} isManager={isManager} tFetch={tFetch}/>
-
-      {/* ── Off-App Workers ── */}
-      <section style={S.section}>
-        <h2 style={S.h2}>Off-App Workers</h2>
-        <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:14}}>
-          Add workers who don't have a phone or email. They won't receive an invite but can be selected in the Labor tab for time tracking and cost calculations.
-        </p>
-        <OffAppWorkersSection offAppWorkers={offAppWorkers} syncOffAppWorkers={syncOffAppWorkers}/>
-      </section>
-    </div>
-  );
-}
-
-function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
-  const [newName,    setNewName]    = useState("");
-  const [saving,     setSaving]     = useState(false);
-  const [editingId,  setEditingId]  = useState(null);
-  const [editName,   setEditName]   = useState("");
-  const [newRate,    setNewRate]    = useState("");
-  const [newRateDate,setNewRateDate]= useState(new Date().toISOString().slice(0,10));
-  const [rateEditId, setRateEditId] = useState(null);
-
-  const addWorker = async () => {
-    if (!newName.trim()) return;
-    setSaving(true);
-    const worker = { id: Date.now(), name: newName.trim(), rateHistory: [] };
-    await syncOffAppWorkers([...offAppWorkers, worker]);
-    setNewName("");
-    setSaving(false);
-  };
-
-  const removeWorker = async (id) => {
-    if (!confirm("Remove this worker? Their past labor entries won't be affected.")) return;
-    await syncOffAppWorkers(offAppWorkers.filter(w => w.id !== id));
-  };
-
-  const saveRate = async (workerId) => {
-    if (!newRate || isNaN(Number(newRate)) || Number(newRate) < 0) { alert("Enter a valid rate."); return; }
-    if (!newRateDate) { alert("Enter a start date."); return; }
-    const entry = { rate: Number(newRate), startDate: newRateDate };
-    const updated = offAppWorkers.map(w => {
-      if (w.id !== workerId) return w;
-      const rateHistory = [...(w.rateHistory||[]).filter(r => r.startDate !== newRateDate), entry]
-        .sort((a,b) => a.startDate.localeCompare(b.startDate));
-      return {...w, rateHistory};
-    });
-    await syncOffAppWorkers(updated);
-    setRateEditId(null);
-    setNewRate(""); setNewRateDate(new Date().toISOString().slice(0,10));
-  };
-
-  const getCurrentRate = (w) => {
-    const today = new Date().toISOString().slice(0,10);
-    const hist = (w.rateHistory||[]).filter(r => r.startDate <= today);
-    return hist.length > 0 ? hist[hist.length-1].rate : null;
-  };
-
-  return (
-    <div style={{display:"flex", flexDirection:"column", gap:0}}>
-      {offAppWorkers.length === 0 && (
-        <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>No off-app workers added yet.</p>
-      )}
-      {offAppWorkers.map(w => {
-        const currentRate = getCurrentRate(w);
-        return (
-          <div key={w.id} style={{borderBottom:`1px solid ${C.border}`, padding:"12px 0"}}>
-            <div style={{display:"flex", alignItems:"center", gap:8}}>
-              <div style={{flex:1}}>
-                {editingId === w.id ? (
-                  <div style={{display:"flex", gap:8}}>
-                    <input value={editName} onChange={e => setEditName(e.target.value)}
-                      style={{...S.input, flex:1}}/>
-                    <button style={S.btnPrimary} onClick={async () => {
-                      if (!editName.trim()) return;
-                      await syncOffAppWorkers(offAppWorkers.map(x => x.id===w.id ? {...x, name:editName.trim()} : x));
-                      setEditingId(null);
-                    }}>Save</button>
-                    <button style={S.btnSecondary} onClick={() => setEditingId(null)}>Cancel</button>
-                  </div>
-                ) : (
-                  <div style={{display:"flex", alignItems:"center", gap:8}}>
-                    <span style={{fontWeight:600, fontSize:14}}>{w.name}</span>
-                    <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`,
-                      borderRadius:4, padding:"1px 6px", color:C.textMuted}}>Off-App</span>
-                    {currentRate != null && (
-                      <span style={{fontSize:12, color:C.textMuted}}>${currentRate}/hr</span>
-                    )}
-                  </div>
-                )}
-              </div>
-              {editingId !== w.id && (
-                <div style={{display:"flex", gap:6}}>
-                  <button style={{...S.btnSmall}} onClick={() => { setEditingId(w.id); setEditName(w.name); }}>
-                    <LucideIcons.Pencil size={12} strokeWidth={2}/>
-                  </button>
-                  <button style={{...S.btnSmall, color:C.danger}} onClick={() => removeWorker(w.id)}>✕</button>
-                </div>
-              )}
-            </div>
-
-            {/* Rate history */}
-            <div style={{marginTop:8, paddingLeft:0}}>
-              {(w.rateHistory||[]).length > 0 && (
-                <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:6}}>
-                  {[...(w.rateHistory||[])].sort((a,b)=>b.startDate.localeCompare(a.startDate)).map((r,i) => (
-                    <span key={i} style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`,
-                      borderRadius:4, padding:"2px 8px", color:C.textMuted}}>
-                      ${r.rate}/hr from {r.startDate}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {rateEditId === w.id ? (
-                <div style={{display:"flex", gap:8, flexWrap:"wrap", alignItems:"center"}}>
-                  <div style={{width:110, flexShrink:0}}>
-                    <input type="number" value={newRate} onChange={e=>setNewRate(e.target.value)}
-                      min="0" step="0.25" placeholder="Rate ($/hr)"
-                      style={{...S.input, height:42, padding:"8px 10px", boxSizing:"border-box"}}/>
-                  </div>
-                  <div style={{width:150, flexShrink:0, overflow:"hidden"}}>
-                    <input type="date" value={newRateDate} onChange={e=>setNewRateDate(e.target.value)}
-                      style={{...S.input, height:42, padding:"8px 10px", boxSizing:"border-box", WebkitAppearance:"none", appearance:"none"}}/>
-                  </div>
-                  <button style={S.btnPrimary} onClick={() => saveRate(w.id)}>Save Rate</button>
-                  <button style={S.btnSecondary} onClick={() => setRateEditId(null)}>Cancel</button>
-                </div>
-              ) : (
-                <button style={{...S.btnSmall, fontSize:11}} onClick={() => {
-                  setRateEditId(w.id);
-                  setNewRate(""); setNewRateDate(new Date().toISOString().slice(0,10));
-                }}>
-                  <LucideIcons.Plus size={11} strokeWidth={2} style={{verticalAlign:"middle",marginRight:3}}/>
-                  {(w.rateHistory||[]).length > 0 ? "Update Rate" : "Set Rate"}
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Add new worker */}
-      <div style={{display:"flex", gap:8, marginTop:14, maxWidth:400}}>
-        <input value={newName} onChange={e => setNewName(e.target.value)}
-          placeholder="Full name" style={{...S.input, flex:1}}
-          onKeyDown={e => e.key==="Enter" && addWorker()}/>
-        <button style={{...S.btnPrimary, flexShrink:0, opacity: saving?0.6:1}} onClick={addWorker} disabled={saving}>
-          <LucideIcons.Plus size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
-          Add
-        </button>
-      </div>
     </div>
   );
 }
@@ -9457,15 +8368,13 @@ function CrewsSection({ users, isManager, tFetch }) {
 // ─── Export View (secret) ──────────────────────────────────────────────────────
 
 // ─── Expenses View ─────────────────────────────────────────────────────────────
-const EXPENSE_CATEGORY_MAP = {
-  "COGS":     ["Materials","Subcontractors","Equipment Rental","Job Supplies","Crew Supplies","Fuel"],
-  "Overhead": ["Insurance","Office & Software","Vehicle Payments/Lease","Equipment Payments/Lease","Equipment Maintenance & Repairs","Marketing & Advertising","Phone & Utilities","Accounting & Legal","Owner Salary/Draw","Other G&A"],
-  "Labor":    [],
-};
-const EXPENSE_CATEGORIES = ["COGS","Overhead","Labor"];
+const EXPENSE_CATEGORIES = [
+  "Overhead","Labor","Fuel","COGS",
+  "Subcontractors","Equipment","Job Supplies","Crew Supplies","Other",
+];
 const PAYMENT_METHODS = ["Company Card","Cash","Personal Card","Check","ACH/Transfer"];
 
-function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial, customSubcategories={} }) {
+function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial }) {
   const canEdit = userRole === "owner" || userRole === "manager";
   const [showForm,    setShowForm]    = useState(false);
   const [showVendors, setShowVendors] = useState(false);
@@ -9475,17 +8384,6 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const [filterCat,   setFilterCat]   = useState("All");
   const [filterMethod,setFilterMethod]= useState("All");
   const [filterJob,   setFilterJob]   = useState("All");
-  const [filterSearch,setFilterSearch]= useState("");
-  const [filterDateFrom,setFilterDateFrom]= useState("");
-  const [filterDateTo,  setFilterDateTo]  = useState("");
-  const [filterAmtMin,  setFilterAmtMin]  = useState("");
-  const [filterAmtMax,  setFilterAmtMax]  = useState("");
-  const [selectedIds,   setSelectedIds]   = useState(new Set());
-  const [sortField,     setSortField]     = useState("date");
-  const [sortDir,       setSortDir]       = useState("desc");
-  const [editingExpId,  setEditingExpId]  = useState(null);
-  const [editForm,      setEditForm]      = useState({});
-  const setEF = (k,v) => setEditForm(p=>({...p,[k]:v}));
   const [uploading,   setUploading]   = useState(false);
   // Import state
   const [showImport,    setShowImport]    = useState(false);
@@ -9540,6 +8438,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const parseSpreadsheet = async (file) => {
     setImportError("");
     try {
+      const XLSX = await import("https://esm.sh/xlsx@0.18.5");
       const ab = await file.arrayBuffer();
       const wb = XLSX.read(ab, { type:"array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -9622,12 +8521,9 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     setImporting(true);
     let added = 0, skipped = 0;
     const newVendors = {};
-    const baseId = Date.now();
 
-    importRows.forEach((row, idx) => {
-      const mapping = importMapping[row.sheetCat];
-      const appCat = (typeof mapping === "object" ? mapping.cat : mapping) || "Other";
-      const appSubcat = typeof mapping === "object" ? (mapping.subcat || "") : "";
+    importRows.forEach(row => {
+      const appCat = importMapping[row.sheetCat] || "Other";
       const amount = row.amount;
       const date   = row.date;
       const notes  = [row.item, row.invoice ? "Inv#"+row.invoice : ""].filter(Boolean).join(" — ");
@@ -9641,11 +8537,10 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         } else if (newVendors[row.payee.toLowerCase()]) {
           vendorId = newVendors[row.payee.toLowerCase()];
         } else {
-          const nvId = baseId * 1000 + idx * 2;
-          const nv = { id: nvId, name: row.payee };
+          const nv = { id: Date.now() + Math.random(), name: row.payee };
           addVendor(nv);
-          newVendors[row.payee.toLowerCase()] = nvId;
-          vendorId = nvId;
+          newVendors[row.payee.toLowerCase()] = nv.id;
+          vendorId = nv.id;
         }
       }
 
@@ -9663,8 +8558,8 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         ? (payMethodMap[row.paidBy] || "Check")
         : "Check";
       addExpense({
-        id: baseId * 1000 + idx * 2 + 1,
-        date, category: appCat, subcategory: appSubcat, amount, vendorId, vendorName: row.payee,
+        id: Date.now() + Math.random(),
+        date, category: appCat, amount, vendorId, vendorName: row.payee,
         notes, paymentMethod: payMethod, jobId: "", receiptUrl: "",
       });
       added++;
@@ -9675,7 +8570,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     if (added > 0) {
       // Queue COGS expenses for Materials prompt
       const cogsEntries = importRows
-        .filter(r => { const m = importMapping[r.sheetCat]; return (typeof m==="object"?m.cat:m) === "COGS"; })
+        .filter(r => (importMapping[r.sheetCat]||"Other") === "COGS")
         .map(r => ({
           id: Date.now() + Math.random(),
           date: r.date,
@@ -9704,7 +8599,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const blankForm = () => ({
     date: new Date().toISOString().slice(0,10),
     vendorId: "", vendorName: "",
-    category: "COGS", subcategory: "", amount: "", paymentMethod: "Company Card",
+    category: "Overhead", amount: "", paymentMethod: "Company Card",
     jobId: "", notes: "", receiptUrl: "",
   });
   const [form, setForm] = useState(blankForm());
@@ -9754,91 +8649,18 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     setNewVendorName(""); setNewVendorPhone(""); setNewVendorEmail("");
   };
 
-  // Filters + sort
-  const filtered = expenses.filter(e => {
-    if (filterCat    !== "All" && e.category      !== filterCat)    return false;
-    if (filterMethod !== "All" && e.paymentMethod !== filterMethod)  return false;
-    if (filterJob    !== "All" && String(e.jobId) !== String(filterJob)) return false;
-    if (filterSearch) {
-      const q = filterSearch.toLowerCase();
-      const vendorMatch = (e.vendorName||"").toLowerCase().includes(q);
-      const notesMatch  = (e.notes||"").toLowerCase().includes(q);
-      if (!vendorMatch && !notesMatch) return false;
-    }
-    if (filterDateFrom && e.date < filterDateFrom) return false;
-    if (filterDateTo   && e.date > filterDateTo)   return false;
-    if (filterAmtMin   && Number(e.amount||0) < Number(filterAmtMin)) return false;
-    if (filterAmtMax   && Number(e.amount||0) > Number(filterAmtMax)) return false;
-    return true;
-  }).sort((a, b) => {
-    let av, bv;
-    if (sortField === "date")   { av = a.date||""; bv = b.date||""; }
-    else if (sortField === "amount") { av = Number(a.amount||0); bv = Number(b.amount||0); }
-    else if (sortField === "vendor") { av = (a.vendorName||"").toLowerCase(); bv = (b.vendorName||"").toLowerCase(); }
-    else if (sortField === "category") { av = a.category||""; bv = b.category||""; }
-    else { av = a.date||""; bv = b.date||""; }
-    if (av < bv) return sortDir === "asc" ? -1 : 1;
-    if (av > bv) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
-
-  const toggleSort = (field) => {
-    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortField(field); setSortDir("desc"); }
-  };
-
-  const allSelected = filtered.length > 0 && filtered.every(e => selectedIds.has(e.id));
-  const toggleSelectAll = () => {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filtered.map(e => e.id)));
-  };
-
-  const exportToExcel = () => {
-    const toExport = filtered.filter(e => selectedIds.size === 0 || selectedIds.has(e.id));
-    const rows = [["Date","Vendor","Category","Payment Method","Amount","Job","Notes","Receipt"]];
-    toExport.forEach(e => {
-      const linkedJob = jobs.find(j => String(j.id) === String(e.jobId));
-      rows.push([
-        e.date||"",
-        e.vendorName||"",
-        e.category||"",
-        e.paymentMethod||"",
-        Number(e.amount||0),
-        linkedJob ? (linkedJob.clientName||"Unnamed") + " · " + (linkedJob.address||"") : "",
-        e.notes||"",
-        e.receiptUrl||"",
-      ]);
-    });
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws["!cols"] = [10,24,16,16,12,30,30,30].map(w => ({wch:w}));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Expenses");
-    XLSX.writeFile(wb, "expenses.xlsx");
-  };
-
-  const massDelete = () => {
-    if (selectedIds.size === 0) return;
-    if (!confirm(`Delete ${selectedIds.size} expense${selectedIds.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
-    selectedIds.forEach(id => deleteExpense(id));
-    setSelectedIds(new Set());
-  };
+  // Filters
+  const filtered = expenses.filter(e =>
+    (filterCat    === "All" || e.category      === filterCat) &&
+    (filterMethod === "All" || e.paymentMethod === filterMethod) &&
+    (filterJob    === "All" || String(e.jobId) === String(filterJob))
+  );
 
   // Totals by category and payment method
   const totalAmt = filtered.reduce((s,e) => s + Number(e.amount||0), 0);
-  // Get all unique categories from actual expenses (includes legacy ones)
-  const allExpCats = [...new Set(filtered.map(e=>e.category).filter(Boolean))];
-  const byCatRaw = allExpCats.map(cat => ({
+  const byCat    = EXPENSE_CATEGORIES.map(cat => ({
     cat, amt: filtered.filter(e=>e.category===cat).reduce((s,e)=>s+Number(e.amount||0),0)
-  })).filter(r=>r.amt>0).sort((a,b)=>b.amt-a.amt);
-  const byCat = [];
-  byCatRaw.forEach(({cat, amt}) => {
-    byCat.push({cat, amt});
-    const subcats = {};
-    filtered.filter(e=>e.category===cat && e.subcategory).forEach(e => {
-      subcats[e.subcategory] = (subcats[e.subcategory]||0) + Number(e.amount||0);
-    });
-    Object.entries(subcats).sort((a,b)=>b[1]-a[1]).forEach(([sub, tot]) => byCat.push({cat:"  "+sub, amt:tot, isSub:true}));
-  });
+  })).filter(r=>r.amt>0);
   const byMethod = PAYMENT_METHODS.map(m => ({
     method: m, amt: filtered.filter(e=>e.paymentMethod===m).reduce((s,e)=>s+Number(e.amount||0),0)
   })).filter(r=>r.amt>0);
@@ -10041,21 +8863,11 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                       <div key={sheetCat} style={{display:"flex", alignItems:"center", gap:10, marginBottom:8}}>
                         <div style={{flex:1, fontSize:13, fontWeight:600}}>{sheetCat || "(blank)"}</div>
                         <span style={{fontSize:12, color:C.textMuted}}>→</span>
-                        <select value={importMapping[sheetCat]?.cat || importMapping[sheetCat] || ""}
-                          onChange={e => setImportMapping(prev => ({...prev, [sheetCat]: {...(typeof prev[sheetCat]==="object"?prev[sheetCat]:{}), cat: e.target.value, subcat:""}}))}
-                          style={{...S.input, width:130}}>
+                        <select value={importMapping[sheetCat]}
+                          onChange={e => setImportMapping(prev => ({...prev, [sheetCat]: e.target.value}))}
+                          style={{...S.input, width:160}}>
                           {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
-                        {["COGS","Overhead"].includes(importMapping[sheetCat]?.cat || importMapping[sheetCat]) && (
-                          <select value={importMapping[sheetCat]?.subcat || ""}
-                            onChange={e => setImportMapping(prev => ({...prev, [sheetCat]: {...(typeof prev[sheetCat]==="object"?prev[sheetCat]:{}), subcat: e.target.value}}))}
-                            style={{...S.input, width:160}}>
-                            <option value="">No subcategory</option>
-                            {[...(EXPENSE_CATEGORY_MAP[importMapping[sheetCat]?.cat || importMapping[sheetCat]]||[]), ...(customSubcategories?.[importMapping[sheetCat]?.cat || importMapping[sheetCat]]||[])].map(s=>(
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
-                        )}
                         <div style={{fontSize:11, color:C.textMuted, flexShrink:0}}>
                           ({importRows.filter(r=>r.sheetCat===sheetCat).length} rows)
                         </div>
@@ -10147,20 +8959,10 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 style={{...S.input, marginTop:4}} placeholder="Or type vendor name (one-time)"/>
             </label>
             <label style={S.formLabel}>Category *
-              <select value={form.category} onChange={e=>setF({category:e.target.value, subcategory:""})} style={S.input}>
+              <select value={form.category} onChange={e=>setF({category:e.target.value})} style={S.input}>
                 {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </label>
-            {(EXPENSE_CATEGORY_MAP[form.category]||[]).length > 0 && (
-              <label style={S.formLabel}>Subcategory
-                <select value={form.subcategory} onChange={e=>setF({subcategory:e.target.value})} style={S.input}>
-                  <option value="">— Select subcategory —</option>
-                  {[...(EXPENSE_CATEGORY_MAP[form.category]||[]), ...(customSubcategories?.[form.category]||[])].map(s=>(
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </label>
-            )}
             <label style={S.formLabel}>Payment Method
               <select value={form.paymentMethod} onChange={e=>setF({paymentMethod:e.target.value})} style={S.input}>
                 {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
@@ -10225,11 +9027,8 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
             <div>
               <div style={{fontSize:11, fontWeight:700, color:C.textMuted, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em"}}>By Category</div>
               {byCat.map(r=>(
-                <div key={r.cat} style={{display:"flex", justifyContent:"space-between",
-                  fontSize: r.isSub ? 11 : 13, padding:"3px 0",
-                  color: r.isSub ? C.textMuted : C.text}}>
-                  <span>{r.cat}</span>
-                  <span style={{fontWeight: r.isSub ? 400 : 600}}>{formatCurrency(r.amt)}</span>
+                <div key={r.cat} style={{display:"flex", justifyContent:"space-between", fontSize:13, padding:"3px 0"}}>
+                  <span>{r.cat}</span><span style={{fontWeight:600}}>{formatCurrency(r.amt)}</span>
                 </div>
               ))}
             </div>
@@ -10247,10 +9046,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
 
       {/* Filters */}
       <section style={S.section}>
-        {/* Row 1: search + dropdowns */}
-        <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
-          <input value={filterSearch} onChange={e=>setFilterSearch(e.target.value)}
-            placeholder="Search vendor or notes…" style={{...S.input, flex:2, minWidth:160}}/>
+        <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:12}}>
           <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{...S.input, flex:1, minWidth:120}}>
             <option value="All">All Categories</option>
             {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
@@ -10265,146 +9061,34 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
             {jobs.map(j=><option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No addr"}</option>)}
           </select>
         </div>
-        {/* Row 2: date range + amount range + clear */}
-        <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:10, alignItems:"center"}}>
-          <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} style={{...S.input, flex:1, minWidth:130}}/>
-          <span style={{fontSize:12, color:C.textMuted, flexShrink:0}}>to</span>
-          <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)} style={{...S.input, flex:1, minWidth:130}}/>
-          <input type="number" value={filterAmtMin} onChange={e=>setFilterAmtMin(e.target.value)}
-            placeholder="Min $" style={{...S.input, flex:1, minWidth:80}}/>
-          <input type="number" value={filterAmtMax} onChange={e=>setFilterAmtMax(e.target.value)}
-            placeholder="Max $" style={{...S.input, flex:1, minWidth:80}}/>
-          {(filterSearch||filterCat!=="All"||filterMethod!=="All"||filterJob!=="All"||filterDateFrom||filterDateTo||filterAmtMin||filterAmtMax) && (
-            <button style={{...S.btnSmall, flexShrink:0}} onClick={() => {
-              setFilterSearch(""); setFilterCat("All"); setFilterMethod("All"); setFilterJob("All");
-              setFilterDateFrom(""); setFilterDateTo(""); setFilterAmtMin(""); setFilterAmtMax("");
-            }}>Clear filters</button>
-          )}
-        </div>
-        {/* Row 3: count + bulk actions */}
-        <div style={{display:"flex", gap:8, alignItems:"center", marginBottom:8, flexWrap:"wrap"}}>
-          <span style={{fontSize:13, color:C.textMuted}}>
-            {filtered.length} expense{filtered.length!==1?"s":""} · {formatCurrency(filtered.reduce((s,e)=>s+Number(e.amount||0),0))}
-          </span>
-          <div style={{flex:1}}/>
-          {selectedIds.size > 0 && canEdit && (
-            <button style={{...S.btnSmall, color:C.danger, borderColor:C.danger}} onClick={massDelete}>
-              <LucideIcons.Trash2 size={13} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
-              Delete {selectedIds.size} selected
-            </button>
-          )}
-          <button style={S.btnSmall} onClick={exportToExcel}>
-            <LucideIcons.Download size={13} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
-            {selectedIds.size > 0 ? `Export ${selectedIds.size} selected` : "Export to Excel"}
-          </button>
-        </div>
-        {/* Sort + select-all header */}
-        {filtered.length > 0 && (
-          <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
-            borderBottom:`2px solid ${C.border}`, fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em"}}>
-            {canEdit && <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{flexShrink:0}}/>}
-            {[["date","Date",1],["vendor","Vendor",2],["category","Category",1]].map(([field,label,flex]) => (
-              <div key={field} onClick={() => toggleSort(field)}
-                style={{cursor:"pointer", flex, minWidth:0, userSelect:"none",
-                  color: sortField===field ? C.accent : C.textMuted}}>
-                {label}{sortField===field ? (sortDir==="asc" ? " ↑" : " ↓") : ""}
-              </div>
-            ))}
-            <div onClick={() => toggleSort("amount")}
-              style={{cursor:"pointer", flex:1, minWidth:0, userSelect:"none", display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8,
-                color: sortField==="amount" ? C.accent : C.textMuted}}>
-              {"Amount"}{sortField==="amount" ? (sortDir==="asc" ? " ↑" : " ↓") : ""}
-              {canEdit && <div style={{width:24, flexShrink:0}}/>}
-            </div>
-          </div>
-        )}
 
         {/* Expense list */}
         {filtered.length === 0 ? (
-          <p style={{fontSize:13, color:C.textMuted, marginTop:12}}>No expenses match your filters.</p>
+          <p style={{fontSize:13, color:C.textMuted}}>No expenses logged yet.</p>
         ) : filtered.map(e => {
           const linkedJob = jobs.find(j=>String(j.id)===String(e.jobId));
-          const isSelected = selectedIds.has(e.id);
           return (
-            <div key={e.id} style={{display:"block"}}>
-            <div style={{display:"flex", alignItems:"center", gap:8, padding:"10px 4px",
-              borderBottom:`1px solid ${C.border}`, background: isSelected ? "#fffbeb" : "transparent"}}>
-              {canEdit && (
-                <input type="checkbox" checked={isSelected} style={{flexShrink:0}}
-                  onChange={() => setSelectedIds(prev => {
-                    const next = new Set(prev);
-                    next.has(e.id) ? next.delete(e.id) : next.add(e.id);
-                    return next;
-                  })}/>
-              )}
-              {/* Date col */}
-              <div style={{flex:1, minWidth:0}}>
-                <div style={{fontSize:12, color:C.textMuted}}>{e.date}</div>
-                {e.paymentMethod && <div style={{fontSize:11, color:C.textMuted}}>{e.paymentMethod}</div>}
-              </div>
-              {/* Vendor col */}
-              <div style={{flex:2, minWidth:0}}>
-                <div style={{fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{e.vendorName || "Unknown vendor"}</div>
-                {e.notes && <div style={{fontSize:11, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontStyle:"italic"}}>{e.notes}</div>}
-                {linkedJob && <div style={{fontSize:11, color:C.textMuted}}>📋 {linkedJob.clientName||"Unnamed"}</div>}
-                {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:11, color:C.accent}}>📎 Receipt</a>}
-              </div>
-              {/* Category col */}
-              <div style={{flex:1, minWidth:0}}>
-                <span style={{fontSize:11, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"2px 7px"}}>{e.category}</span>
-                {e.subcategory && <span style={{fontSize:10, color:C.textMuted, marginLeft:4}}>{e.subcategory}</span>}
-              </div>
-              {/* Amount + actions col */}
-              <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:6}}>
-                <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
+            <div key={e.id} style={{padding:"12px 0", borderBottom:`1px solid ${C.border}`}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+                    <span style={{fontWeight:700, fontSize:14}}>{formatCurrency(Number(e.amount||0))}</span>
+                    <span style={{fontSize:12, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
+                    <span style={{fontSize:12, color:C.textMuted}}>{e.paymentMethod}</span>
+                  </div>
+                  <div style={{fontSize:13, fontWeight:600, marginTop:3}}>{e.vendorName || "Unknown vendor"}</div>
+                  <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
+                    {e.date}
+                    {linkedJob && <span style={{marginLeft:8}}>📋 {linkedJob.clientName||"Unnamed"} · {linkedJob.address||""}</span>}
+                  </div>
+                  {e.notes && <div style={{fontSize:12, color:C.textMuted, marginTop:2, fontStyle:"italic"}}>{e.notes}</div>}
+                  {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{fontSize:12, color:C.accent, marginTop:2, display:"block"}}>📎 View Receipt</a>}
+                </div>
                 {canEdit && (
-                  <button style={{...S.btnSmall, flexShrink:0, width:24, padding:0}}
-                    onClick={()=>{ setEditingExpId(e.id); setEditForm({...e}); }}>
-                    <LucideIcons.Pencil size={11} strokeWidth={2}/>
-                  </button>
-                )}
-                {canEdit && (
-                  <button style={{...S.btnSmall, color:C.danger, flexShrink:0, width:24, padding:0}}
+                  <button style={{...S.btnSmall, color:C.danger, marginLeft:8, flexShrink:0}}
                     onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
                 )}
               </div>
-            </div>
-            {/* Inline edit form */}
-            {editingExpId === e.id && (
-              <div style={{padding:"12px 14px", background:"#fffbeb", border:`1px solid ${C.accent}`, borderRadius:8, marginTop:4}}>
-                <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:8}}>
-                  <input type="date" value={editForm.date||""} onChange={ev=>setEF("date",ev.target.value)}
-                    style={{...S.input, flex:1, minWidth:130}}/>
-                  <input type="number" value={editForm.amount||""} onChange={ev=>setEF("amount",ev.target.value)}
-                    placeholder="Amount" style={{...S.input, flex:1, minWidth:100}}/>
-                  <input value={editForm.vendorName||""} onChange={ev=>setEF("vendorName",ev.target.value)}
-                    placeholder="Vendor" style={{...S.input, flex:2, minWidth:140}}/>
-                  <select value={editForm.category||""} onChange={ev=>setEF("category",ev.target.value)} style={{...S.input, flex:1, minWidth:110}}>
-                    {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                  </select>
-                  {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
-                    <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
-                      <option value="">No subcategory</option>
-                      {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  )}
-                  <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
-                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
-                    placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
-                </div>
-                <div style={{display:"flex", gap:8}}>
-                  <button style={S.btnPrimary} onClick={()=>{
-                    updateExpense(e.id, {...editForm, amount: Number(editForm.amount||0)});
-                    setEditingExpId(null);
-                  }}>Save</button>
-                  <button style={S.btnSecondary} onClick={()=>setEditingExpId(null)}>Cancel</button>
-                </div>
-              </div>
-            )}
             </div>
           );
         })}
@@ -11323,9 +10007,6 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
           )}
           {!job.assignedTo && ["estimate","draft"].includes(job.status) && (
             <div style={{fontSize:9, fontWeight:700, color:"#6b7280", background:"#f3f4f6", borderRadius:4, padding:"1px 5px", flexShrink:0}}>!</div>
-          )}
-          {job.invoiceSentDate && job.status === "completed" && (
-            <div style={{fontSize:9, fontWeight:700, color:"#0e7490", background:"#e0f2fe", borderRadius:4, padding:"1px 5px", flexShrink:0}}>INV</div>
           )}
         </div>
         <div style={{fontSize:11, color:C.textMuted, textTransform:"capitalize", marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
@@ -14315,19 +12996,6 @@ function AdminApp() {
 }
 
 function App() {
-  // Prevent browser back navigation on backspace when not in an input field
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key !== "Backspace") return;
-      const tag = document.activeElement?.tagName?.toLowerCase();
-      const isEditable = tag === "input" || tag === "textarea" || tag === "select" ||
-        document.activeElement?.isContentEditable;
-      if (!isEditable) e.preventDefault();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
-
   const [view,          setViewRaw]      = useState("home");
   const [viewHistory,   setViewHistory]  = useState([]); // stack of previous views, for global Back button
   // navigateTo: use this for all "go to a new screen" navigation — pushes the
@@ -14350,9 +13018,6 @@ function App() {
   const [currentJobId,  setCurrentJobId] = useState(null);
   const [loading,       setLoading]      = useState(true);
   const [syncStatus,    setSyncStatus]   = useState("");
-  const [offlineQueue,  setOfflineQueue]  = useState(() => {
-    try { return JSON.parse(localStorage.getItem("biq_offline_jobs") || "[]"); } catch(e) { return []; }
-  });
   const [laborEntries,  setLaborEntries] = useState([]);
   const [zones,         setZones]        = useState(null);
   const [permissions,   setPermissions]  = useState(null);
@@ -14363,17 +13028,6 @@ function App() {
     street: "", city: "", state: "", zip: "", website: "", googleReviewUrl: "",
   });
   const [iconStyle,     setIconStyle]    = useState("emoji"); // "emoji" | "lucide" — global, admin-set
-  const [offAppWorkers, setOffAppWorkers] = useState([]);
-  const [reportSettings, setReportSettings] = useState({
-    laborPct: 16, fuelPct: 5, cogsPct: 25, overheadPct: 15,
-    ebitdaTargetPct: 20, ebitdaTargetDollars: "",
-    customSubcategories: { "COGS": [], "Overhead": [] },
-    categoryBuckets: {
-      "COGS":     "cogs",
-      "Overhead": "overhead",
-      "Labor":    "labor",
-    },
-  });
   const [teamUsers,     setTeamUsers]    = useState([]);
   const [crews,         setCrews]        = useState([]);
   const [materials,         setMaterials]         = useState([]);
@@ -14748,11 +13402,7 @@ function App() {
 
         const sr = await tFetch("appsettings?select=data&order=id.desc&limit=1");
         const sd = await sr.json();
-        if (Array.isArray(sd) && sd.length > 0) {
-          if (sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
-          if (sd[0].data?.reportSettings) setReportSettings(prev => ({...prev, ...sd[0].data.reportSettings}));
-          if (sd[0].data?.offAppWorkers) setOffAppWorkers(sd[0].data.offAppWorkers);
-        }
+        if (Array.isArray(sd) && sd.length > 0 && sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
 
         const mr = await tFetch("materials?select=id,data&order=id.desc");
         const md = await mr.json();
@@ -14878,34 +13528,15 @@ function App() {
     } catch(e) { console.error("syncCompanySettings error:", e); }
   };
 
-  // Single writer for appsettings — always merges all keys so no field overwrites another
-  const syncAppSettings = async (patch) => {
+  const syncIconStyle = async (style) => {
+    setIconStyle(style);
     try {
-      // Fetch current data first so we can merge
-      const r = await tFetch("appsettings?select=data&order=id.desc&limit=1");
-      const rows = await r.json();
-      const current = (Array.isArray(rows) && rows[0]?.data) || {};
       await tFetch("appsettings?on_conflict=tenant_id", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ data: { ...current, ...patch } }),
+        body: JSON.stringify({ data: { iconStyle: style } }),
       });
-    } catch(e) { console.error("syncAppSettings error:", e); }
-  };
-
-  const syncIconStyle = async (style) => {
-    setIconStyle(style);
-    await syncAppSettings({ iconStyle: style });
-  };
-
-  const syncOffAppWorkers = async (workers) => {
-    setOffAppWorkers(workers);
-    await syncAppSettings({ offAppWorkers: workers });
-  };
-
-  const syncReportSettings = async (settings) => {
-    setReportSettings(settings);
-    await syncAppSettings({ reportSettings: settings });
+    } catch(e) { console.error("syncIconStyle error:", e); }
   };
 
   // Assign a newly created/edited job to its nearest existing zone centroid
@@ -15168,47 +13799,14 @@ function App() {
     } catch(e) {
       console.error("syncJob error:", e);
       if (!isRetry) {
+        // One automatic retry after a short delay — covers transient
+        // network blips and the tenant-not-yet-resolved race above.
         setTimeout(() => syncJob(job, true), 1000);
       } else {
-        // Queue for retry when back online
-        setSyncStatus("⚠️ Saved offline");
-        setOfflineQueue(prev => {
-          const next = [...prev.filter(j => j.id !== job.id), job];
-          try { localStorage.setItem("biq_offline_jobs", JSON.stringify(next)); } catch(e) {}
-          return next;
-        });
+        setSyncStatus("⚠️ Save failed");
       }
     }
   };
-
-  // Flush offline queue when connectivity returns
-  const flushOfflineQueue = async () => {
-    const queue = (() => { try { return JSON.parse(localStorage.getItem("biq_offline_jobs") || "[]"); } catch(e) { return []; } })();
-    if (!queue.length) return;
-    setSyncStatus("Syncing offline changes...");
-    let remaining = [...queue];
-    for (const job of queue) {
-      try {
-        const res = await tFetch("jobs", {
-          method: "POST",
-          headers: { "Prefer": "resolution=merge-duplicates" },
-          body: JSON.stringify({ id: job.id, data: job }),
-        });
-        if (res.ok) remaining = remaining.filter(j => j.id !== job.id);
-      } catch(e) { /* keep in queue */ }
-    }
-    try { localStorage.setItem("biq_offline_jobs", JSON.stringify(remaining)); } catch(e) {}
-    setOfflineQueue(remaining);
-    setSyncStatus(remaining.length === 0 ? "✓ All changes synced" : `⚠️ ${remaining.length} changes still pending`);
-    setTimeout(() => setSyncStatus(""), 3000);
-  };
-
-  // Auto-flush when coming back online
-  useEffect(() => {
-    const handler = () => { if (offlineQueue.length > 0) flushOfflineQueue(); };
-    window.addEventListener("online", handler);
-    return () => window.removeEventListener("online", handler);
-  }, [offlineQueue]);
 
   // ── Upsert rates ──
   const syncRates = async (r) => {
@@ -15422,18 +14020,6 @@ function App() {
       {!isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
-        {offlineQueue.length > 0 && (
-          <div style={{background:"#fef3c7", color:"#92400e", fontSize:12, textAlign:"center",
-            padding:"6px 12px", display:"flex", alignItems:"center", justifyContent:"center", gap:10}}>
-            <LucideIcons.WifiOff size={13} strokeWidth={2}/>
-            {offlineQueue.length} unsaved change{offlineQueue.length!==1?"s":""} — waiting for connection
-            <button onClick={flushOfflineQueue}
-              style={{fontSize:11, fontWeight:700, padding:"2px 10px", borderRadius:6,
-                background:"#92400e", color:"#fff", border:"none", cursor:"pointer"}}>
-              Retry Now
-            </button>
-          </div>
-        )}
         {syncStatus && (
           <div style={{
             background: syncStatus.startsWith("⚠️") ? "#fee2e2" : "#dcfce7",
@@ -15476,13 +14062,13 @@ function App() {
         }
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} laborEntries={laborEntries} teamUsers={teamUsers} offAppWorkers={offAppWorkers}/>}
-        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
+        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
+        {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
-        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings} reportSettings={reportSettings} offAppWorkers={offAppWorkers}/></div>}
+        {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
           setMyTenants(prev => prev.map(t => t.tenantId===currentTenantId ? {...t, data: {...t.data, servicesOffered: services}} : t));
           tFetch("tenants?id=eq." + currentTenantId, { method:"PATCH", body:JSON.stringify({ data: {...currentTenant.data, servicesOffered: services} }) });
@@ -15492,8 +14078,8 @@ function App() {
         {view==="referral"      && userRole==="owner" && <ReferralView setView={navigateTo} userId={session?.user?.id}/>}
         {view==="help" && getAccessLevel(permissions,"help",userRoles)!=="hidden" && <HelpView tFetch={tFetch} currentTenantId={currentTenantId} session={session} userRole={userRole} accessToken={session?.access_token} currentUserName={currentUserName} currentTenant={currentTenant}/>}
         {view==="request-form"  && userRole==="owner" && <EstimateRequestLinkView setView={navigateTo} currentTenantId={currentTenantId}/>}
-        {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data} offAppWorkers={offAppWorkers} syncOffAppWorkers={syncOffAppWorkers}/>}
-        {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle} reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>}
+        {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data}/>}
+        {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle}/>}
         {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token} permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions}/>}
         {view==="global-permissions" && isPlatformAdmin && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={false}/>}
         {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
