@@ -9297,6 +9297,23 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
     }
   };
 
+  // Get most-used category+subcategory for a vendor from expense history
+  const getVendorDefaults = (vendorName) => {
+    if (!vendorName) return null;
+    const prior = expenses.filter(e => (e.vendorName||"").toLowerCase() === vendorName.toLowerCase());
+    if (!prior.length) return null;
+    // Count category+subcategory combinations
+    const counts = {};
+    prior.forEach(e => {
+      const key = e.category + (e.subcategory ? "|" + e.subcategory : "");
+      counts[key] = (counts[key]||0) + 1;
+    });
+    const best = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+    if (!best) return null;
+    const [cat, sub] = best[0].split("|");
+    return { category: cat, subcategory: sub||"" };
+  };
+
   const blankForm = () => ({
     date: new Date().toISOString().slice(0,10),
     vendorId: "", vendorName: "",
@@ -9659,7 +9676,9 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 <select value={form.vendorId}
                   onChange={e => {
                     const v = vendors.find(v=>String(v.id)===e.target.value);
-                    setF({ vendorId: e.target.value, vendorName: v ? v.name : "" });
+                    const name = v ? v.name : "";
+                    const defaults = getVendorDefaults(name);
+                    setF({ vendorId: e.target.value, vendorName: name, ...(defaults||{}) });
                   }}
                   style={{...S.input, flex:1}}>
                   <option value="">— Select vendor or type below —</option>
@@ -9667,7 +9686,23 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 </select>
               </div>
               <input value={form.vendorName} onChange={e=>setF({vendorName:e.target.value, vendorId:""})}
+                onBlur={e => {
+                  const defaults = getVendorDefaults(e.target.value);
+                  if (defaults && !form.subcategory) setF(defaults);
+                }}
                 style={{...S.input, marginTop:4}} placeholder="Or type vendor name (one-time)"/>
+              {(() => {
+                const defaults = getVendorDefaults(form.vendorName);
+                if (!defaults || (form.category === defaults.category && form.subcategory === defaults.subcategory)) return null;
+                return (
+                  <div style={{fontSize:11, color:C.accent, marginTop:4, display:"flex", alignItems:"center", gap:6}}>
+                    <span>💡 Usually: <strong>{defaults.category}{defaults.subcategory ? " → " + defaults.subcategory : ""}</strong></span>
+                    <button style={{...S.btnSmall, fontSize:10, padding:"1px 8px"}} onClick={()=>setF({category:defaults.category, subcategory:defaults.subcategory||""})}>
+                      Use this
+                    </button>
+                  </div>
+                );
+              })()}
             </label>
             <label style={S.formLabel}>Category *
               <select value={form.category} onChange={e=>setF({category:e.target.value, subcategory:""})} style={S.input}>
