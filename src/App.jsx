@@ -3631,6 +3631,8 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const [reconcilSummary, setReconcilSummary] = useState(null); // computed summary
   const [reconcilLog,     setReconcilLog]     = useState([]); // approved reconciliations
 
+  const [expandedCheckKey, setExpandedCheckKey] = useState(null);
+
   const addCheck = () => {
     if (checkQty === "" || isNaN(Number(checkQty)) || Number(checkQty) < 0) { alert("Enter a valid quantity reading."); return; }
     addStockCheck({ id: Date.now(), date: checkDate, category: checkCategory, qty: Number(checkQty), notes: checkNotes.trim() });
@@ -4443,12 +4445,38 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
             {BUILTIN_MATERIAL_TYPES.filter(m => m.key !== "other" && !m.key.startsWith("paint_") && !m.key.startsWith("custom_")).map(m => {
               const lc = lastCheckFor(m.key);
               const u = m.key==="crackfill" ? settings.crackfillUnitLabel : m.defaultUnit;
+              const allChecks = (stockChecks||[]).filter(c=>c.category===m.key).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+              const isExpanded = expandedCheckKey === m.key;
               return (
-                <div key={m.key} style={{fontSize:12, color:C.textMuted, background:C.surface2, borderRadius:8, padding:"6px 10px", border:`1px solid ${C.border}`}}>
-                  <strong style={{color:C.text}}>{m.label}:</strong>{" "}
-                  {lc ? `${lc.qty} ${u} on ${new Date(lc.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}` : "no check logged"}
-                  {lc && canEdit && (
-                    <button style={{...S.btnSmallDanger, marginLeft:6}} onClick={() => { if (confirm("Delete this stock check?")) deleteStockCheck(lc.id); }}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
+                <div key={m.key} style={{fontSize:12, background:C.surface2, borderRadius:8, border:`1px solid ${isExpanded ? C.accent : C.border}`, overflow:"hidden"}}>
+                  <div onClick={() => setExpandedCheckKey(isExpanded ? null : m.key)}
+                    style={{padding:"6px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:6,
+                      color: lc ? C.text : C.textMuted}}>
+                    <strong style={{color:C.text}}>{m.label}:</strong>
+                    <span style={{color:C.textMuted}}>
+                      {lc ? `${lc.qty} ${u} on ${new Date(lc.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}` : "no check logged"}
+                    </span>
+                    <LucideIcons.ChevronDown size={12} strokeWidth={2} style={{marginLeft:"auto", transform: isExpanded?"rotate(180deg)":"none", transition:"transform 0.15s"}}/>
+                  </div>
+                  {isExpanded && (
+                    <div style={{borderTop:`1px solid ${C.border}`, padding:"8px 10px", minWidth:240}}>
+                      {allChecks.length === 0 ? (
+                        <div style={{fontSize:11, color:C.textMuted}}>No stock checks logged yet.</div>
+                      ) : allChecks.map(c => (
+                        <div key={c.id} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"4px 0", borderBottom:`1px solid ${C.border}`, fontSize:12}}>
+                          <div>
+                            <span style={{fontWeight:600}}>{c.qty} {u}</span>
+                            <span style={{color:C.textMuted, marginLeft:8}}>{new Date(c.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>
+                            {c.notes && <span style={{color:C.textMuted, marginLeft:8, fontStyle:"italic"}}>{c.notes}</span>}
+                          </div>
+                          {canEdit && (
+                            <button style={{...S.btnSmallDanger, marginLeft:8}} onClick={e => { e.stopPropagation(); if(confirm("Delete this stock check?")) deleteStockCheck(c.id); }}>
+                              <LucideIcons.Trash2 size={12} strokeWidth={2} style={{verticalAlign:"middle"}}/>
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               );
