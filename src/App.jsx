@@ -3202,12 +3202,14 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
       const full = [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase();
       return full === nameLower;
     });
+    const matchedOAW = !matched && (offAppWorkers||[]).find(w => w.name.toLowerCase() === nameLower);
     addLaborEntry({
       id: Date.now(), date: selectedDate,
       name: newName.trim(),
       hours: Number(newHours),
       userId: matched?.id || null,
-      linked: !!matched,
+      offAppWorkerId: matchedOAW?.id || null,
+      linked: !!(matched || matchedOAW),
     });
     setNewName(""); setNewHours("");
   };
@@ -3221,8 +3223,12 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
       const full = [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase();
       return full === nameLower;
     });
+    const matchedOAW2 = !matched && (offAppWorkers||[]).find(w => w.name.toLowerCase() === nameLower);
     deleteLaborEntry(entry.id);
-    addLaborEntry({ id: Date.now(), date: entry.date, name: editName.trim(), hours: Number(editHours), userId: matched?.id || entry.userId || null, linked: !!matched || !!entry.userId });
+    addLaborEntry({ id: Date.now(), date: entry.date, name: editName.trim(), hours: Number(editHours),
+      userId: matched?.id || entry.userId || null,
+      offAppWorkerId: matchedOAW2?.id || entry.offAppWorkerId || null,
+      linked: !!(matched || matchedOAW2 || entry.userId || entry.offAppWorkerId) });
     cancelEdit();
   };
 
@@ -5586,9 +5592,11 @@ function calcJobFinancials(job, rates, laborEntries=[], offAppWorkers=[], teamUs
         rate = hist[0]?.rate || 0;
       }
     }
-    // Fall back to off-app workers by name
-    if (!rate && e.name) {
-      const oaw = offAppWorkers.find(w => w.name === e.name);
+    // Check off-app workers by ID first, then name fallback
+    if (!rate) {
+      const oaw = e.offAppWorkerId
+        ? offAppWorkers.find(w => String(w.id) === String(e.offAppWorkerId))
+        : offAppWorkers.find(w => w.name === e.name);
       if (oaw) {
         const hist = (oaw.rateHistory||[]).filter(r => r.startDate <= entryDate).sort((a,b)=>b.startDate.localeCompare(a.startDate));
         rate = hist[0]?.rate || 0;
@@ -5596,7 +5604,9 @@ function calcJobFinancials(job, rates, laborEntries=[], offAppWorkers=[], teamUs
     }
     return s + (Number(e.hours||0) * rate);
   }, 0);
-  const hasLinkedLaborEntries = linkedLaborEntries.length > 0;
+  // Only treat as "has actuals" if we actually got a non-zero calculated cost
+  // (avoids zeroing out labor when workers have no rate set)
+  const hasLinkedLaborEntries = linkedLaborEntries.length > 0 && laborFromLinkedEntries > 0;
 
   const actVal    = (key, est) => {
     if (key === "labor" && hasLinkedLaborEntries) return laborFromLinkedEntries;
@@ -6770,21 +6780,9 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     const cogsIsEstimated = !hasActuals && !hasFifo;
     const cogsSource = hasActuals ? "actual" : hasFifo ? "fifo" : "estimated";
 
-    // Labor: actual hours × rate from Labor tab entries linked to this job
+    // Labor: use calcJobFinancials result (already handles teamUsers + offAppWorkers)
     const jobLaborEntries = laborEntries.filter(e => String(e.jobId) === String(j.id));
-    const jobLabor = jobLaborEntries.reduce((s,e) => {
-      let rate = 0;
-      const entryDate = e.date || jobDate;
-      if (e.userId) {
-        rate = getRateForUser(e.userId, entryDate) || 0;
-      }
-      if (!rate && e.name) {
-        const oaw = (offAppWorkers||[]).find(w => w.name === e.name);
-        const hist = (oaw?.rateHistory||[]).filter(r => r.startDate <= entryDate).sort((a,b)=>b.startDate.localeCompare(a.startDate));
-        rate = hist[0]?.rate || 0;
-      }
-      return s + (Number(e.hours||0) * rate);
-    }, 0);
+    const jobLabor = fin.laborCost;
     const laborIsEstimated = jobLaborEntries.length === 0;
 
     // Overhead: allocate by revenue %
