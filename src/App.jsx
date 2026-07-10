@@ -4601,6 +4601,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           );
         })}
       </section>
+      </>}
     </div>
   );
 }
