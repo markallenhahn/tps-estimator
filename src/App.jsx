@@ -8519,7 +8519,6 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData }) {
       </section>
 
       <CrewsSection users={users} isManager={isManager} tFetch={tFetch}/>
-      </>}
     </div>
   );
 }
