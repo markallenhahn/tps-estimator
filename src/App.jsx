@@ -1141,7 +1141,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       const path = `${tenantId}/${currentJob.id}/${photoId}.jpg`;
       try {
         const url = await storageUpload(path, file, accessToken, file.type);
-        updateJob(j => ({...j, photos:[...j.photos, {id: photoId, url, storagePath: path, label, ts: new Date().toLocaleTimeString()}]}));
+        updateJob(j => ({...j, photos:[...(j.photos||[]), {id: photoId, url, storagePath: path, label, ts: new Date().toLocaleTimeString()}]}));
       } catch(err) {
         console.error("Photo upload failed:", err);
         alert("Failed to upload photo. Please try again.");
@@ -1162,7 +1162,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
     try {
       const blob = dataUrlToBlob(canvas.toDataURL("image/jpeg", 0.85));
       const url = await storageUpload(path, blob, accessToken);
-      updateJob(j => ({...j, photos:[...j.photos, {id: photoId, url, storagePath: path, label, ts: new Date().toLocaleTimeString()}]}));
+      updateJob(j => ({...j, photos:[...(j.photos||[]), {id: photoId, url, storagePath: path, label, ts: new Date().toLocaleTimeString()}]}));
     } catch(err) {
       console.error("Photo upload failed:", err);
       alert("Failed to upload photo. Please try again.");
