@@ -6356,7 +6356,10 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
           const actFuel = (cogsBySubcat["Fuel"] || 0) + (cogsBySubcat["fuel"] || 0);
 
           const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
-          const actLabor    = periodExpLabor > 0 ? periodExpLabor : null;
+          // Use actual labor from labor tab (via ebitdaTotals.jobLabor) if any entries exist
+          const actLaborFromTab = ebitdaTotals.jobLabor > 0 ? ebitdaTotals.jobLabor : null;
+          const actLaborFromExp = periodExpLabor > 0 ? periodExpLabor : null;
+          const actLabor = actLaborFromTab ?? actLaborFromExp;
           const actOverhead = periodOverhead  > 0 ? periodOverhead  : null;
           const estCOGS     = periodRevenue * (reportSettings.cogsPct||35) / 100;
           const estLabor    = periodRevenue * (reportSettings.laborPct||15) / 100;
@@ -6388,7 +6391,8 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
               <Card label="Fuel" value={actFuel > 0 ? actFuel : ebitdaTotals.revenue*0.05}
                 isActual={actFuel > 0} color={C.textMuted}
                 sub={actFuel > 0 ? null : "5% est."}/>
-              <Card label="Labor" value={actLabor ?? estLabor} isActual={actLabor!==null} color="#f59e0b"/>
+              <Card label="Labor" value={actLabor ?? estLabor} isActual={actLabor!==null} color="#f59e0b"
+                sub={actLabor!==null ? null : `${reportSettings.laborPct||15}% est.`}/>
               <Card label="Gross Profit" value={ebitdaTotals.grossProfit} color="#3b82f6" sub={fmtPct(gpPct)}/>
               <Card label={`Overhead (${overheadPct.toFixed(2)}%)`} value={actOverhead ?? estOverhead} isActual={actOverhead!==null} color="#8b5cf6"/>
               <Card label="Net Profit" value={netProfit}
@@ -6400,7 +6404,10 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
         {/* EBITDA target row */}
         {(() => {
           const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
-          const actLabor    = periodExpLabor > 0 ? periodExpLabor : null;
+          // Use actual labor from labor tab (via ebitdaTotals.jobLabor) if any entries exist
+          const actLaborFromTab = ebitdaTotals.jobLabor > 0 ? ebitdaTotals.jobLabor : null;
+          const actLaborFromExp = periodExpLabor > 0 ? periodExpLabor : null;
+          const actLabor = actLaborFromTab ?? actLaborFromExp;
           const actOverhead = periodOverhead  > 0 ? periodOverhead  : null;
           const estCOGS     = periodRevenue * (reportSettings.cogsPct||35) / 100;
           const estLabor    = periodRevenue * (reportSettings.laborPct||15) / 100;
@@ -6484,7 +6491,7 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
                     <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtPct(d.grossMarginPct)}</td>
                     <td style={{padding:"8px 10px", textAlign:"right", color:"#f59e0b"}}>
                       {fmtMoney(d.jobLabor)}
-                      {d.laborIsEstimated && <span style={{fontSize:9, color:C.textMuted, marginLeft:3}}>—</span>}
+                      {d.laborIsEstimated && <span style={{fontSize:9, color:"#f59e0b", marginLeft:3}}>est.</span>}
                     </td>
                     <td style={{padding:"8px 10px", textAlign:"right", color:"#8b5cf6"}}>{fmtMoney(d.overheadAlloc)}</td>
                     <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: d.ebitda >= 0 ? "#10b981" : "#ef4444"}}>{fmtMoney(d.ebitda)}</td>
