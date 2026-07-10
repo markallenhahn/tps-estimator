@@ -9670,10 +9670,20 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 style={{...S.input, marginTop:4}} placeholder="Or type vendor name (one-time)"/>
             </label>
             <label style={S.formLabel}>Category *
-              <select value={form.category} onChange={e=>setF({category:e.target.value})} style={S.input}>
+              <select value={form.category} onChange={e=>setF({category:e.target.value, subcategory:""})} style={S.input}>
                 {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </label>
+            {(EXPENSE_CATEGORY_MAP[form.category]||[]).length > 0 && (
+              <label style={S.formLabel}>Subcategory
+                <select value={form.subcategory||""} onChange={e=>setF({subcategory:e.target.value})} style={S.input}>
+                  <option value="">— Select subcategory —</option>
+                  {[...(EXPENSE_CATEGORY_MAP[form.category]||[]),
+                    ...(customSubcategories?.[form.category]||[]).filter(s=>!(EXPENSE_CATEGORY_MAP[form.category]||[]).includes(s))
+                  ].map(s=>(<option key={s} value={s}>{s}</option>))}
+                </select>
+              </label>
+            )}
             <label style={S.formLabel}>Payment Method
               <select value={form.paymentMethod} onChange={e=>setF({paymentMethod:e.target.value})} style={S.input}>
                 {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
@@ -9880,9 +9890,9 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                     {(EXPENSE_CATEGORY_MAP[editForm.category]||[]).length > 0 && (
                       <select value={editForm.subcategory||""} onChange={ev=>setEF("subcategory",ev.target.value)} style={{...S.input, flex:1, minWidth:140}}>
                         <option value="">No subcategory</option>
-                        {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),...(customSubcategories?.[editForm.category]||[])].map(s=>(
-                          <option key={s} value={s}>{s}</option>
-                        ))}
+                        {[...(EXPENSE_CATEGORY_MAP[editForm.category]||[]),
+                          ...(customSubcategories?.[editForm.category]||[]).filter(s=>!(EXPENSE_CATEGORY_MAP[editForm.category]||[]).includes(s))
+                        ].map(s=>(<option key={s} value={s}>{s}</option>))}
                       </select>
                     )}
                     <select value={editForm.paymentMethod||""} onChange={ev=>setEF("paymentMethod",ev.target.value)} style={{...S.input, flex:1, minWidth:120}}>
