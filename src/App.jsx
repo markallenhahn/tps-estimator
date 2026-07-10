@@ -6328,101 +6328,81 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
           )}
         </div>
 
-        {/* Summary grid — old profitability style */}
-        {ebitdaTotals.revenue > 0 && (() => {
-          const cards = [
-            { label:"TOTAL REVENUE",    value: ebitdaTotals.revenue,    color:"#000", bold:true },
-            { label:"TOTAL COSTS",      value: ebitdaTotals.cogs + (periodExpLabor||0) + periodOverhead, color:"#000" },
-            { label:"MATERIALS",        value: ebitdaTotals.cogs,       color:C.textMuted },
-            { label:"FUEL (5%)",        value: ebitdaTotals.revenue*0.05, color:C.textMuted },
-            { label:"LABOR",            value: periodExpLabor > 0 ? periodExpLabor : ebitdaTotals.revenue*(reportSettings.laborPct||15)/100, color:C.textMuted },
-            { label:"GROSS PROFIT",     value: ebitdaTotals.grossProfit, color: ebitdaTotals.grossProfit>=0?"#16a34a":"#ef4444",
-              sub: ebitdaTotals.revenue>0?(ebitdaTotals.grossProfit/ebitdaTotals.revenue*100).toFixed(1)+"%":null },
-            { label:`OVERHEAD (${periodRevenue>0?((periodOverhead/periodRevenue)*100).toFixed(2):0}%)`,
-              value: periodOverhead,  color:C.textMuted },
-            { label:"NET PROFIT",       value: ebitdaTotals.ebitda,     color: ebitdaTotals.ebitda>=0?"#16a34a":"#ef4444",
-              sub: ebitdaTotals.revenue>0?(ebitdaTotals.ebitda/ebitdaTotals.revenue*100).toFixed(1)+"%":null },
-          ];
+        {/* Summary cards */}
+        {(() => {
+          // Actual fuel from COGS expenses with subcategory Fuel
+          const actFuel = expenses
+            .filter(e => e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to &&
+              (e.subcategory === "Fuel" || (e.category === "Fuel")))
+            .reduce((s,e) => s + Number(e.amount||0), 0);
+
+          const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
+          const actLabor    = periodExpLabor > 0 ? periodExpLabor : null;
+          const actOverhead = periodOverhead  > 0 ? periodOverhead  : null;
+          const estCOGS     = periodRevenue * (reportSettings.cogsPct||35) / 100;
+          const estLabor    = periodRevenue * (reportSettings.laborPct||15) / 100;
+          const estOverhead = periodRevenue * (reportSettings.overheadPct||15) / 100;
+          const totalActCosts = (actCOGS ?? estCOGS) + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
+          const netProfit   = ebitdaTotals.revenue - totalActCosts;
+          const netMarginPct = ebitdaTotals.revenue > 0 ? (netProfit / ebitdaTotals.revenue) * 100 : 0;
+          const gpPct        = ebitdaTotals.revenue > 0 ? (ebitdaTotals.grossProfit / ebitdaTotals.revenue) * 100 : 0;
+          const overheadPct  = ebitdaTotals.revenue > 0 ? ((actOverhead ?? estOverhead) / ebitdaTotals.revenue) * 100 : 0;
+          const targetPct    = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
+
+          const Card = ({label, value, sub, color, isActual, bold}) => (
+            <div style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"14px 16px"}}>
+              <div style={{fontSize:10, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6, display:"flex", alignItems:"center", gap:6}}>
+                {label}
+                {isActual===true && <span style={{fontSize:9, background:"#e0f2fe", color:"#0369a1", borderRadius:3, padding:"1px 5px"}}>actual</span>}
+                {isActual===false && <span style={{fontSize:9, background:"#fef3c7", color:"#92400e", borderRadius:3, padding:"1px 5px"}}>estimated</span>}
+              </div>
+              <div style={{fontSize:22, fontWeight:bold?800:700, color:color||C.text}}>{fmtMoney(value)}</div>
+              {sub && <div style={{fontSize:13, fontWeight:600, color:color||C.textMuted, marginTop:3}}>{sub}</div>}
+            </div>
+          );
+
           return (
-            <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:10, marginBottom:20}}>
-              {cards.map(c => (
-                <div key={c.label} style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"12px 16px"}}>
-                  <div style={{fontSize:10, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6}}>{c.label}</div>
-                  <div style={{fontSize:20, fontWeight:c.bold?800:700, color:c.color}}>{fmtMoney(c.value)}</div>
-                  {c.sub && <div style={{fontSize:13, fontWeight:600, color:c.color, marginTop:2}}>{c.sub}</div>}
-                </div>
-              ))}
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20}}>
+              <Card label="Total Revenue" value={ebitdaTotals.revenue} bold isActual={true}/>
+              <Card label="Total Costs"   value={totalActCosts}/>
+              <Card label="Materials (COGS)" value={actCOGS ?? estCOGS} isActual={actCOGS!==null} color="#ef4444"/>
+              <Card label="Fuel" value={actFuel > 0 ? actFuel : ebitdaTotals.revenue*0.05}
+                isActual={actFuel > 0} color={C.textMuted}
+                sub={actFuel > 0 ? null : "5% est."}/>
+              <Card label="Labor" value={actLabor ?? estLabor} isActual={actLabor!==null} color="#f59e0b"/>
+              <Card label="Gross Profit" value={ebitdaTotals.grossProfit} color="#3b82f6" sub={fmtPct(gpPct)}/>
+              <Card label={`Overhead (${overheadPct.toFixed(2)}%)`} value={actOverhead ?? estOverhead} isActual={actOverhead!==null} color="#8b5cf6"/>
+              <Card label="Net Profit" value={netProfit}
+                color={netProfit>=0?"#10b981":"#ef4444"} sub={fmtPct(netMarginPct)} bold/>
             </div>
           );
         })()}
 
-        {/* Summary cards — actuals vs estimates */}
+        {/* EBITDA target row */}
         {(() => {
-          const estCOGS     = periodRevenue * (reportSettings.cogsPct||35) / 100;
-          const estLabor    = periodRevenue * (reportSettings.laborPct||15) / 100;
-          const estOverhead = periodRevenue * (reportSettings.overheadPct||15) / 100;
           const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
           const actLabor    = periodExpLabor > 0 ? periodExpLabor : null;
           const actOverhead = periodOverhead  > 0 ? periodOverhead  : null;
-          const totalActCosts = ebitdaTotals.cogs + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
-          const actEbitda   = ebitdaTotals.revenue - totalActCosts;
-          const actEbitdaPct = ebitdaTotals.revenue > 0 ? (actEbitda / ebitdaTotals.revenue) * 100 : 0;
-          const targetPct   = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
-
-          const SummaryRow = ({label, actual, estimated, color, children}) => (
-            <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-              <div style={{width:110, fontSize:12, fontWeight:600, color:C.textMuted, flexShrink:0}}>{label}</div>
-              <div style={{flex:1}}>
-                {actual !== null ? (
-                  <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
-                    <span style={{fontSize:16, fontWeight:800, color}}>{fmtMoney(actual)}</span>
-                    <span style={{fontSize:11, color:C.textMuted, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>actual</span>
-                    <span style={{fontSize:11, color:C.textMuted}}>est. {fmtMoney(estimated)}</span>
-                    {Math.abs(actual-estimated) > 1 && (
-                      <span style={{fontSize:11, fontWeight:600, color: actual>estimated ? "#ef4444" : "#10b981"}}>
-                        {actual>estimated?"+":""}{fmtMoney(actual-estimated)}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{display:"flex", alignItems:"center", gap:8}}>
-                    <span style={{fontSize:16, fontWeight:800, color}}>{fmtMoney(estimated)}</span>
-                    <span style={{fontSize:11, color:C.textMuted, background:"#fef3c7", border:"1px solid #f59e0b", borderRadius:4, padding:"1px 6px"}}>estimated</span>
-                  </div>
-                )}
-                {children}
-              </div>
-            </div>
-          );
-
+          const estCOGS     = periodRevenue * (reportSettings.cogsPct||35) / 100;
+          const estLabor    = periodRevenue * (reportSettings.laborPct||15) / 100;
+          const estOverhead = periodRevenue * (reportSettings.overheadPct||15) / 100;
+          const totalActCosts = (actCOGS ?? estCOGS) + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
+          const netProfit   = ebitdaTotals.revenue - totalActCosts;
+          const netMarginPct = ebitdaTotals.revenue > 0 ? (netProfit / ebitdaTotals.revenue) * 100 : 0;
+          const targetPct    = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
           return (
-            <div style={{background:C.surface2, borderRadius:10, padding:"4px 14px 10px", marginBottom:16, border:`1px solid ${C.border}`}}>
-              <SummaryRow label="Revenue" actual={ebitdaTotals.revenue} estimated={ebitdaTotals.revenue} color={C.accent}/>
-              <SummaryRow label="COGS" actual={actCOGS} estimated={estCOGS} color="#ef4444"/>
-              <SummaryRow label="Labor" actual={actLabor} estimated={estLabor} color="#f59e0b"/>
-              <SummaryRow label="Overhead" actual={actOverhead} estimated={estOverhead} color="#8b5cf6"/>
-              <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-                <div style={{width:110, fontSize:12, fontWeight:600, color:C.textMuted, flexShrink:0}}>Gross Profit</div>
-                <div style={{flex:1}}>
-                  <span style={{fontSize:16, fontWeight:800, color:"#3b82f6"}}>{fmtMoney(ebitdaTotals.grossProfit)}</span>
-                  <span style={{fontSize:12, color:"#3b82f6", marginLeft:8}}>{fmtPct(ebitdaTotals.revenue > 0 ? (ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100 : 0)}</span>
-                </div>
-              </div>
-              <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0"}}>
-                <div style={{width:110, fontSize:13, fontWeight:800, flexShrink:0}}>EBITDA</div>
-                <div style={{flex:1, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
-                  <span style={{fontSize:20, fontWeight:800, color: actEbitda >= 0 ? "#10b981" : "#ef4444"}}>{fmtMoney(actEbitda)}</span>
-                  <span style={{fontSize:13, fontWeight:700, color: actEbitdaPct >= 0 ? "#10b981" : "#ef4444"}}>{fmtPct(actEbitdaPct)}</span>
-                  {targetPct > 0 && (
-                    <span style={{fontSize:11, color: actEbitdaPct >= targetPct ? "#10b981" : C.danger,
-                      background: actEbitdaPct >= targetPct ? "#dcfce7" : "#fee2e2",
-                      border:`1px solid ${actEbitdaPct >= targetPct ? "#16a34a" : "#ef4444"}`,
-                      borderRadius:4, padding:"1px 6px", fontWeight:600}}>
-                      {actEbitdaPct >= targetPct ? "✓" : "↓"} Target: {targetPct}%
-                    </span>
-                  )}
-                </div>
-              </div>
+            <div style={{display:"flex", alignItems:"center", gap:12, padding:"12px 16px", background:C.surface2, borderRadius:8, marginBottom:16, border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:18, fontWeight:800, color:netProfit>=0?"#10b981":"#ef4444"}}>{fmtMoney(netProfit)}</div>
+              <div style={{fontSize:14, fontWeight:700, color:netProfit>=0?"#10b981":"#ef4444"}}>{fmtPct(netMarginPct)} net margin</div>
+              {targetPct > 0 && (
+                <span style={{fontSize:12, fontWeight:600, marginLeft:"auto",
+                  color: netMarginPct >= targetPct ? "#10b981" : C.danger,
+                  background: netMarginPct >= targetPct ? "#dcfce7" : "#fee2e2",
+                  border:`1px solid ${netMarginPct >= targetPct ? "#16a34a" : "#ef4444"}`,
+                  borderRadius:4, padding:"3px 10px"}}>
+                  {netMarginPct >= targetPct ? "✓" : "↓"} Target: {targetPct}%
+                </span>
+              )}
             </div>
           );
         })()}
