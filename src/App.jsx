@@ -3920,7 +3920,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               }, 0);
           }, 0);
 
-          const wasteFactor = estUsed > 0 ? actualUsed / estUsed : null;
+          const wasteFactor = estUsed > 0 ? p.actualUsed / estUsed : null;
 
           return { ...p, periodJobs, estUsed, wasteFactor };
         });
