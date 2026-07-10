@@ -4140,14 +4140,30 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                         }, 0);
                         // Find unit cost from materials purchased in this period
                         const periodMats = (materials||[]).filter(m=>m.category===reconcilMatType && m.date > p.openDate && m.date <= p.closeDate);
-                        // Weighted average: prefer total cost, fall back to unitCost × qty
-                        const totalCost = periodMats.reduce((s,m) => {
-                          const c = Number(m.cost||0);
-                          // If total cost not set, derive from unitCost × qty
-                          return s + (c > 0 ? c : Number(m.unitCost||0) * Number(m.qty||0));
-                        }, 0);
+                        // Weighted average unit cost:
+                        // Priority: total cost / qty > unitCost field > 0
                         const totalQty  = periodMats.reduce((s,m)=>s+Number(m.qty||0),0);
-                        const avgUnitCost = totalQty > 0 ? totalCost / totalQty : 0;
+                        let avgUnitCost = 0;
+                        if (totalQty > 0) {
+                          // Try to get total cost from cost field
+                          const totalCostFromField = periodMats.reduce((s,m)=>s+Number(m.cost||0),0);
+                          if (totalCostFromField > 0) {
+                            avgUnitCost = totalCostFromField / totalQty;
+                          } else {
+                            // Fall back to weighted average of unitCost fields
+                            const weightedUC = periodMats.reduce((s,m) => {
+                              const uc = Number(m.unitCost||0);
+                              const q  = Number(m.qty||0);
+                              return s + uc * q;
+                            }, 0);
+                            if (weightedUC > 0) avgUnitCost = weightedUC / totalQty;
+                          }
+                        }
+                        // If still 0, try any non-zero unitCost from the period
+                        if (avgUnitCost === 0) {
+                          const anyUC = periodMats.find(m=>Number(m.unitCost||0)>0);
+                          if (anyUC) avgUnitCost = Number(anyUC.unitCost);
+                        }
                         const reconciledQty = estQty * p.wasteFactor;
                         const reconciledCost = reconciledQty * avgUnitCost;
                         // Write reconciled actual to job — always overwrite (reconciliation is ground truth)
