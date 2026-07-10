@@ -9066,7 +9066,7 @@ const EXPENSE_CATEGORY_MAP = {
 };
 const PAYMENT_METHODS = ["Company Card","Cash","Personal Card","Check","ACH/Transfer"];
 
-function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial }) {
+function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial, customSubcategories={} }) {
   const canEdit = userRole === "owner" || userRole === "manager";
   const [showForm,    setShowForm]    = useState(false);
   const [showVendors, setShowVendors] = useState(false);
@@ -9797,19 +9797,16 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 4px",
           borderBottom:`2px solid ${C.border}`, marginBottom:4}}>
           {canEdit && <div style={{width:20, flexShrink:0}}/>}
-          {[["date","DATE",90],["vendorName","VENDOR",2],["category","CATEGORY",2],["amount","AMOUNT",90]].map(([field,label,flex])=>{
-            const isWide = typeof flex !== "number" || flex >= 2;
-            return (
-              <div key={field} onClick={()=>{ if(sortField===field){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField(field);setSortDir("desc");} }}
-                style={{...(isWide ? {flex} : {width:flex, flexShrink:0}),
-                  minWidth:0, fontSize:11, fontWeight:700, color:sortField===field?C.accent:C.textMuted,
-                  cursor:"pointer", userSelect:"none", textAlign:field==="amount"?"right":"left",
-                  textTransform:"uppercase", letterSpacing:"0.05em"}}>
-                {label}{sortField===field?(sortDir==="asc"?" ↑":" ↓"):""}
-              </div>
-            );
-          })}
-          {canEdit && <div style={{width:56, flexShrink:0}}/>}
+          {[["date","DATE",90,90],["vendorName","VENDOR","2","140"],["category","CATEGORY","1","120"],["amount","AMOUNT",90,90]].map(([field,label,flex,minW])=>(
+            <div key={field} onClick={()=>{ if(sortField===field){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField(field);setSortDir("desc");} }}
+              style={{...(String(flex).match(/^\d+$/)&&Number(flex)<10 ? {width:Number(flex),flexShrink:0} : {flex:Number(flex),minWidth:Number(minW)}),
+                fontSize:11, fontWeight:700, color:sortField===field?C.accent:C.textMuted,
+                cursor:"pointer", userSelect:"none", textAlign:field==="amount"?"right":"left",
+                textTransform:"uppercase", letterSpacing:"0.05em", overflow:"hidden"}}>
+              {label}{sortField===field?(sortDir==="asc"?" ↑":" ↓"):""}
+            </div>
+          ))}
+          {canEdit && <div style={{width:60, flexShrink:0}}/>}
         </div>
 
         {/* Expense list */}
@@ -9833,11 +9830,11 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 {/* Date */}
                 <div style={{width:90, flexShrink:0, fontSize:12, color:C.textMuted}}>{e.date}</div>
                 {/* Vendor */}
-                <div style={{flex:2, minWidth:0, fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                <div style={{flex:2, minWidth:140, fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
                   {e.vendorName||"—"}
                 </div>
                 {/* Category + subcategory */}
-                <div style={{flex:2, minWidth:0, fontSize:12}}>
+                <div style={{flex:1, minWidth:120, fontSize:12}}>
                   <span style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
                   {e.subcategory && <span style={{fontSize:11, color:C.textMuted, marginLeft:4}}>{e.subcategory}</span>}
                 </div>
@@ -9847,7 +9844,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 </div>
                 {/* Actions */}
                 {canEdit && (
-                  <div style={{display:"flex", gap:4, flexShrink:0}}>
+                  <div style={{display:"flex", gap:4, flexShrink:0, width:60, justifyContent:"flex-end"}}>
                     <button style={{...S.btnSmall, padding:"3px 6px"}}
                       onClick={()=>{ setEditingExpId(e.id); setEditForm({...e}); }}>
                       <LucideIcons.Pencil size={11} strokeWidth={2}/>
@@ -14897,7 +14894,7 @@ function App() {
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
-        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial}/>}
+        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
         {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById}/></div>}
