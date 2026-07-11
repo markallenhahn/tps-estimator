@@ -550,6 +550,7 @@ const ICON_EMOJIS = {
   ClipboardList:  "📋",
   ClipboardEdit:  "📝",
   LayoutDashboard:"📊",
+  Building2:      "🏢",
   Beaker:         "🧴",
   Receipt:        "🧾",
   Map:            "🗺",
@@ -3993,7 +3994,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               color: matTab===key ? "#000" : C.textMuted,
               border: `1px solid ${matTab===key ? C.accent : C.border}`,
             }}>
-            {label}
+            <Icon name={icon} size={14} style={{verticalAlign:"middle",marginRight:5}}/>{label}
           </button>
         ))}
       </div>
@@ -9904,7 +9905,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
             {showForm ? "▲ Cancel" : "+ Log Expense"}
           </button>
           <button style={S.btnSecondary} onClick={() => setShowVendors(v=>!v)}>
-            🏢 Manage Vendors ({vendors.length})
+            <Icon name="Building2" size={14} style={{verticalAlign:"middle",marginRight:5}}/> Manage Vendors ({vendors.length})
           </button>
           <div style={{display:"flex", gap:6, alignItems:"center"}}>
             <button style={S.btnSecondary} onClick={() => { setShowImport(true); setImportRows([]); setImportResult(null); setImportError(""); setPayMethodMap({}); setUnmatchedPay([]); }}>
