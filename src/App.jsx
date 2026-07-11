@@ -7180,22 +7180,6 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
 
   // ── Actual costs (editable, fall back to estimated if blank) ──
   const actuals = costs.actuals || {};
-  const actVal  = (key, est) => actuals[key]!=null && actuals[key]!=="" ? Number(actuals[key]) : est;
-  const actSealcoat  = actVal("sealcoat",  estSealcoat);
-  const actCrackFill = actVal("crackfill", estCrackFill);
-  const actAsphalt   = actVal("asphalt",   estAsphalt);
-  const actFuel      = actVal("fuel",      estFuel);
-  const actLabor     = actVal("labor",     estLabor);
-  const actStone     = actVal("stone",     estStone);
-  const actOther     = actVal("other",     estOther);
-  const actTotal     = actSealcoat + actCrackFill + actAsphalt + actFuel + actLabor + actStone + actOther;
-
-  const updateActual = (key, val) => updateJob(j => ({...j, costs:{...(j.costs||{}), actuals:{...(j.costs?.actuals||{}), [key]:val}}}));
-  const updateCosts  = (patch) => updateJob(j => ({...j, costs:{...(j.costs||{}), ...patch}}));
-
-  // ── Profitability using actuals ──
-  const grossProfit  = revenue - actTotal;
-  const grossMargin  = revenue > 0 ? (grossProfit/revenue)*100 : 0;
   // Compute actual overhead and fuel from expenses, allocated by this job's revenue share
   const activeJobs = (jobs||[]).filter(j => !["estimate","draft","lost"].includes(j.status||""));
   const totalRevenue = activeJobs.reduce((s,j) => {
@@ -7211,6 +7195,24 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     .reduce((s,e) => s + Number(e.amount||0), 0);
   const overhead = actualOverhead > 0 ? actualOverhead * revenueShare_ : revenue * (reportSettings.overheadPct||16.45) / 100;
   const overheadPct_ = revenue > 0 ? (overhead / revenue) : (reportSettings.overheadPct||16.45) / 100;
+
+  const actVal  = (key, est) => actuals[key]!=null && actuals[key]!=="" ? Number(actuals[key]) : est;
+  const actSealcoat  = actVal("sealcoat",  estSealcoat);
+  const actCrackFill = actVal("crackfill", estCrackFill);
+  const actAsphalt   = actVal("asphalt",   estAsphalt);
+  // Fuel: use actual expense allocation if available, else manual actual or estimate
+  const actFuel      = actualFuelExp > 0 ? actualFuelExp * revenueShare_ : actVal("fuel", estFuel);
+  const actLabor     = actVal("labor",     estLabor);
+  const actStone     = actVal("stone",     estStone);
+  const actOther     = actVal("other",     estOther);
+  const actTotal     = actSealcoat + actCrackFill + actAsphalt + actFuel + actLabor + actStone + actOther;
+
+  const updateActual = (key, val) => updateJob(j => ({...j, costs:{...(j.costs||{}), actuals:{...(j.costs?.actuals||{}), [key]:val}}}));
+  const updateCosts  = (patch) => updateJob(j => ({...j, costs:{...(j.costs||{}), ...patch}}));
+
+  // ── Profitability using actuals ──
+  const grossProfit  = revenue - actTotal;
+  const grossMargin  = revenue > 0 ? (grossProfit/revenue)*100 : 0;
   const netProfit    = grossProfit - overhead;
   const netMargin    = revenue > 0 ? (netProfit/revenue)*100 : 0;
 
