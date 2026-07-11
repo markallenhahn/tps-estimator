@@ -5370,7 +5370,7 @@ function ZonesMapView({ jobs, zones, zoneColors, fullAddressOf }) {
 }
 
 // ─── Schedule View ────────────────────────────────────────────────────────────
-function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userId, homeBase, tenantData }) {
+function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userId, homeBase, tenantData, setJobs, tFetch }) {
   const today    = new Date();
   const roles = userRoles || [userRole];
   const canSeeAll = hasRole(roles, "owner") || hasRole(roles, "manager") || hasRole(roles, "crewlead");
@@ -5485,20 +5485,41 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
             <div style={{display:"flex", gap:6, alignItems:"center"}}>
               {planHasFeature(tenantData, "zones") && selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city)).length > 1 && (() => {
                 const routableJobs = selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city));
-                const homeAddr = homeBase?.address ? encodeURIComponent(homeBase.address) : null;
-                const jobWaypoints = routableJobs.map(j=>encodeURIComponent([j.address,j.city].filter(Boolean).join(", ")));
-                const origin = homeAddr || jobWaypoints[0];
-                const dest = homeAddr || jobWaypoints[jobWaypoints.length-1];
-                const middle = homeAddr
-                  ? jobWaypoints.join("|")
-                  : jobWaypoints.slice(1,-1).join("|");
-                let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
-                if (middle) url += `&waypoints=${middle}`;
+                const [routeLoading, setRouteLoading] = React.useState(false);
+                const handleRoute = async () => {
+                  setRouteLoading(true);
+                  let geocodedJobs = [...routableJobs];
+                  for (let i = 0; i < geocodedJobs.length; i++) {
+                    const j = geocodedJobs[i];
+                    const addrStr = fullAddressOf(j);
+                    if (!j.geoLat || !j.geoLng) {
+                      const geo = await geocodeAddress(geocodeQueryOf(j), homeBase);
+                      if (geo) {
+                        geocodedJobs[i] = {...j, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr};
+                        if (setJobs) setJobs(prev => prev.map(jj => jj.id === j.id ? {...jj, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} : jj));
+                        if (tFetch) tFetch("jobs?id=eq."+j.id, { method:"PATCH", headers:{"Prefer":"return=minimal"}, body:JSON.stringify({data:{...j, geoLat:geo.lat, geoLng:geo.lng, geoAddr:addrStr}}) }).catch(()=>{});
+                      }
+                    }
+                  }
+                  const jobPoints = geocodedJobs.filter(j=>j.geoLat&&j.geoLng).map(j=>({...j, lat:j.geoLat, lng:j.geoLng}));
+                  const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng, id:"home"} : null;
+                  const result = jobPoints.length > 0 ? optimizeRoute(jobPoints, hb) : geocodedJobs;
+                  const orderedJobs = result.filter(p=>p.id!=="home");
+                  const homeAddr = homeBase?.address ? encodeURIComponent(homeBase.address) : null;
+                  const waypoints = orderedJobs.map(j=>encodeURIComponent([j.address,j.city].filter(Boolean).join(", ")));
+                  const origin = homeAddr || waypoints[0];
+                  const dest = homeAddr || waypoints[waypoints.length-1];
+                  const middle = homeAddr ? waypoints.join("|") : waypoints.slice(1,-1).join("|");
+                  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
+                  if (middle) url += `&waypoints=${middle}`;
+                  setRouteLoading(false);
+                  window.open(url, "_blank");
+                };
                 return (
-                  <a href={url} target="_blank" rel="noopener noreferrer"
-                    style={{...S.btnSmall, background:"#dbeafe", color:"#1d4ed8", textDecoration:"none", display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap"}}>
-                    🗺 Route {routableJobs.length} Jobs
-                  </a>
+                  <button onClick={handleRoute} disabled={routeLoading}
+                    style={{...S.btnSmall, background:"#dbeafe", color:"#1d4ed8", border:"none", cursor:routeLoading?"wait":"pointer", display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", opacity:routeLoading?0.6:1}}>
+                    {routeLoading ? "⏳ Routing..." : `🗺 Route ${routableJobs.length} Jobs`}
+                  </button>
                 );
               })()}
               <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => setSelectedDay(null)}>✕</button>
@@ -15158,7 +15179,7 @@ function App() {
         {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} tFetch={tFetch} setJobs={setJobs} updateJobById={updateJobById} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
-        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} homeBase={homeBase} tenantData={currentTenant?.data}/></div>}
+        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} homeBase={homeBase} tenantData={currentTenant?.data} setJobs={setJobs} tFetch={tFetch}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"zones") && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
         {/* ── Job context bar — shared across all job-scoped views ── */}
         {["jobdetail","estimate","invoice","costs"].includes(view) && currentJob && (
