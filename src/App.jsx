@@ -3973,7 +3973,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
         // This prevents multi-day jobs from being counted in multiple periods.
         const jobLastDate = (j) => {
           const days = (j.scheduleDays||[]).filter(d=>d.date).map(d=>d.date).sort();
-          return days.length > 0 ? days[days.length-1] : (j.date||);
+          return days.length > 0 ? days[days.length-1] : (j.date||"");
         };
         const allLinkedJobs = (jobs||[]).filter(j => {
           if (linkedSvcs.length === 0) return true;
