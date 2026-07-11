@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import * as LucideIcons from "lucide-react";
 import L from "leaflet";
@@ -520,7 +520,7 @@ function TabIcon({ tabKey, iconStyle, size = 18 }) {
 
 // ─── Global icon style context ────────────────────────────────────────────────
 // Lets every component read iconStyle without explicit prop-drilling.
-const IconStyleContext = React.createContext("emoji");
+const IconStyleContext = createContext("emoji");
 
 // Maps Lucide icon names to emoji fallbacks for all non-tab icons used in the app.
 const ICON_EMOJIS = {
@@ -570,7 +570,7 @@ const ICON_EMOJIS = {
 // Drop-in replacement for <Icon name="X" size={16}/> that respects iconStyle.
 // Usage: <Icon name="Save" size={15} style={{...}}/> or <Icon name="Trash2"/>
 function Icon({ name, size = 16, style = {}, className }) {
-  const iconStyle = React.useContext(IconStyleContext);
+  const iconStyle = useContext(IconStyleContext);
   if (iconStyle === "lucide") {
     const LucideIcon = LucideIcons[name];
     if (LucideIcon) return <LucideIcon size={size} strokeWidth={2} style={style} className={className}/>;
