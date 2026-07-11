@@ -3953,8 +3953,10 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           const purchased = (materials||[])
             .filter(m=>m.category===reconcilMatType && m.date > open.date && m.date <= close.date)
             .reduce((s,m)=>s+Number(m.qty||0),0);
-          const actualUsed = open.qty + purchased - close.qty;
-          periods.push({ openDate:open.date, openQty:open.qty, closeDate:close.date, closeQty:close.qty, purchased, actualUsed });
+          const openQty  = Number(open.qty  || 0);
+          const closeQty = Number(close.qty || 0);
+          const actualUsed = openQty + purchased - closeQty;
+          periods.push({ openDate:open.date, openQty, closeDate:close.date, closeQty, purchased, actualUsed });
         }
 
         // Filter by user-selected date range
