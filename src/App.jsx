@@ -6417,11 +6417,17 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
           const estCOGS     = periodRevenue * (reportSettings.cogsPct||35) / 100;
           const estLabor    = periodRevenue * (reportSettings.laborPct||15) / 100;
           const estOverhead = periodRevenue * (reportSettings.overheadPct||15) / 100;
-          const totalActCosts = (actCOGS ?? estCOGS) + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
-          const netProfit   = ebitdaTotals.revenue - totalActCosts;
+          const fuelVal  = actFuel > 0 ? actFuel : ebitdaTotals.revenue * 0.05;
+          const cogsVal  = actCOGS ?? estCOGS;
+          const laborVal = actLabor ?? estLabor;
+          const overheadVal = actOverhead ?? estOverhead;
+          // Total costs = materials + fuel + labor + overhead (all from same sources as cards)
+          const totalActCosts = cogsVal + fuelVal + laborVal + overheadVal;
+          const grossProfit  = ebitdaTotals.revenue - cogsVal - fuelVal;
+          const netProfit    = ebitdaTotals.revenue - totalActCosts;
           const netMarginPct = ebitdaTotals.revenue > 0 ? (netProfit / ebitdaTotals.revenue) * 100 : 0;
-          const gpPct        = ebitdaTotals.revenue > 0 ? (ebitdaTotals.grossProfit / ebitdaTotals.revenue) * 100 : 0;
-          const overheadPct  = ebitdaTotals.revenue > 0 ? ((actOverhead ?? estOverhead) / ebitdaTotals.revenue) * 100 : 0;
+          const gpPct        = ebitdaTotals.revenue > 0 ? (grossProfit / ebitdaTotals.revenue) * 100 : 0;
+          const overheadPct  = ebitdaTotals.revenue > 0 ? (overheadVal / ebitdaTotals.revenue) * 100 : 0;
           const targetPct    = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
 
           const Card = ({label, value, sub, color, isActual, bold}) => (
@@ -6440,14 +6446,14 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
             <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20}}>
               <Card label="Total Revenue" value={ebitdaTotals.revenue} bold isActual={true}/>
               <Card label="Total Costs"   value={totalActCosts}/>
-              <Card label="Materials (COGS)" value={actCOGS ?? estCOGS} isActual={actCOGS!==null} color="#ef4444"/>
-              <Card label="Fuel" value={actFuel > 0 ? actFuel : ebitdaTotals.revenue*0.05}
+              <Card label="Materials (COGS)" value={cogsVal} isActual={actCOGS!==null} color="#ef4444"/>
+              <Card label="Fuel" value={fuelVal}
                 isActual={actFuel > 0} color={C.textMuted}
                 sub={actFuel > 0 ? null : "5% est."}/>
-              <Card label="Labor" value={actLabor ?? estLabor} isActual={actLabor!==null} color="#f59e0b"
+              <Card label="Labor" value={laborVal} isActual={actLabor!==null} color="#f59e0b"
                 sub={actLabor!==null ? null : `${reportSettings.laborPct||15}% est.`}/>
-              <Card label="Gross Profit" value={ebitdaTotals.grossProfit} color="#3b82f6" sub={fmtPct(gpPct)}/>
-              <Card label={`Overhead (${overheadPct.toFixed(2)}%)`} value={actOverhead ?? estOverhead} isActual={actOverhead!==null} color="#8b5cf6"/>
+              <Card label="Gross Profit" value={grossProfit} color="#3b82f6" sub={fmtPct(gpPct)}/>
+              <Card label={`Overhead (${overheadPct.toFixed(2)}%)`} value={overheadVal} isActual={actOverhead!==null} color="#8b5cf6"/>
               <Card label="Net Profit" value={netProfit}
                 color={netProfit>=0?"#10b981":"#ef4444"} sub={fmtPct(netMarginPct)} bold/>
             </div>
