@@ -8181,7 +8181,7 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, sy
 }
 
 // ─── Platform Admin — BlacktopIQ operator only, fully separate from any company's UI ───
-function PlatformAdminView({ setView, accessToken, permissions, setPermissions, syncPermissions }) {
+function PlatformAdminView({ setView, accessToken, permissions, setPermissions, syncPermissions, adminUsers=null, isSuperAdmin=false, removeAdmin=null, newAdminEmail="", setNewAdminEmail=null, addAdmin=null, addingAdmin=false, addAdminError="" }) {
   const isDesktopLayout = useIsDesktop();
   const [invites,      setInvites]      = useState([]);
   const [generating,   setGenerating]   = useState(false);
@@ -8780,6 +8780,42 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
           </section>
         );
       })()}
+
+      {/* ── Platform Admins (only when rendered from AdminApp) ── */}
+      {adminUsers !== null && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Platform Admins</h2>
+          <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>Manage who has access to this dashboard.</p>
+          {adminUsers.map(a => (
+            <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+              <div>
+                <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || a.user_id.slice(0,8)+"..."}</div>
+                <div style={{fontSize:12, color:C.textMuted}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
+              </div>
+              {isSuperAdmin && !a.is_super && removeAdmin && (
+                <button onClick={() => removeAdmin(a.user_id)} style={S.btnSmallDanger}>Remove</button>
+              )}
+              {a.is_super && <span style={{fontSize:11, color:C.accent, fontWeight:700}}>SUPER</span>}
+            </div>
+          ))}
+          {isSuperAdmin && setNewAdminEmail && (
+            <div style={{marginTop:16, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+              <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>Add Admin</div>
+              <p style={{fontSize:12, color:C.textMuted, marginBottom:10}}>The user must already have a BlacktopIQ account.</p>
+              <div style={{display:"flex", gap:8}}>
+                <input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)}
+                  placeholder="email@example.com" style={{...S.input, flex:1}}
+                  onKeyDown={e => e.key==="Enter" && addAdmin && addAdmin()}/>
+                <button onClick={() => addAdmin && addAdmin()} disabled={addingAdmin}
+                  style={{...S.btnPrimary, opacity: addingAdmin ? 0.6 : 1}}>
+                  {addingAdmin ? "Adding..." : "Add"}
+                </button>
+              </div>
+              {addAdminError && <div style={{fontSize:12, color:C.danger, marginTop:6}}>{addAdminError}</div>}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
@@ -14251,44 +14287,17 @@ function AdminApp() {
               await fetch(SUPABASE_URL_ADMIN + "/rest/v1/global_permissions?select=id&limit=1", { headers: sbH(adminSession.access_token) });
             } catch(e) {}
           }}
+          adminUsers={adminUsers}
+          isSuperAdmin={isSuperAdmin}
+          removeAdmin={removeAdmin}
+          newAdminEmail={newAdminEmail}
+          setNewAdminEmail={setNewAdminEmail}
+          addAdmin={addAdmin}
+          addingAdmin={addingAdmin}
+          addAdminError={addAdminError}
         />
 
-        {/* Admin Users Management */}
-        <section style={S.section}>
-          <h2 style={S.h2}>Platform Admins</h2>
-          <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>Manage who has access to this dashboard.</p>
 
-          {/* Admin list */}
-          {adminUsers.map(a => (
-            <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-              <div>
-                <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || a.user_id.slice(0,8)+"..."}</div>
-                <div style={{fontSize:12, color:C.textMuted}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
-              </div>
-              {isSuperAdmin && !a.is_super && (
-                <button onClick={() => removeAdmin(a.user_id)} style={S.btnSmallDanger}>Remove</button>
-              )}
-              {a.is_super && <span style={{fontSize:11, color:C.accent, fontWeight:700}}>SUPER</span>}
-            </div>
-          ))}
-
-          {/* Add admin */}
-          {isSuperAdmin && (
-            <div style={{marginTop:16, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
-              <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>Add Admin</div>
-              <p style={{fontSize:12, color:C.textMuted, marginBottom:10}}>The user must already have a BlacktopIQ account.</p>
-              <div style={{display:"flex", gap:8}}>
-                <input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)}
-                  placeholder="email@example.com" style={{...S.input, flex:1}}
-                  onKeyDown={e => e.key==="Enter" && addAdmin()}/>
-                <button onClick={addAdmin} disabled={addingAdmin} style={{...S.btnPrimary, opacity: addingAdmin ? 0.6 : 1}}>
-                  {addingAdmin ? "Adding..." : "Add"}
-                </button>
-              </div>
-              {addAdminError && <div style={{fontSize:12, color:C.danger, marginTop:6}}>{addAdminError}</div>}
-            </div>
-          )}
-        </section>
       </div>
     </div>
   );
