@@ -242,7 +242,7 @@ const S = {
   appDesktop:{ minHeight:"100vh", width:"100%", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", flexDirection:"row", textAlign:"left" },
   contentColDesktop:{ flex:1, minWidth:0, display:"flex", flexDirection:"column", minHeight:"100vh" },
   nav:{ background:C.surface, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"stretch", position:"sticky", top:0, zIndex:100, minHeight:56 },
-  navBrand:{ display:"flex", alignItems:"center", padding:"0 10px", flexShrink:0, cursor:"pointer", userSelect:"none" },
+  navBrand:{ display:"flex", alignItems:"center", padding:"0 8px", flexShrink:0, cursor:"pointer", userSelect:"none" },
   navTitle:{ fontWeight:800, fontSize:14, color:C.accent, letterSpacing:"0.06em" },
   navTabs:{ display:"flex", overflowX:"auto", flex:1, scrollbarWidth:"none", msOverflowStyle:"none" },
   navDivider:{ width:1, alignSelf:"stretch", margin:"8px 4px", background:C.border, flexShrink:0 },
@@ -251,7 +251,7 @@ const S = {
   navTabIcon:{ fontSize:15 }, navTabLabel:{whiteSpace:"nowrap"},
   // Desktop sidebar nav
   sidebar:{ width:220, flexShrink:0, background:C.surface, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", overflowY:"auto" },
-  sidebarBrand:{ padding:"24px 20px 20px" },
+  sidebarBrand:{ padding:"16px 20px 12px" },
   sidebarTabs:{ display:"flex", flexDirection:"column", gap:2, padding:"0 12px 20px" },
   sidebarTab:{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:8, background:"none", border:"none", outline:"none", color:C.textMuted, cursor:"pointer", fontSize:14, fontWeight:500, textAlign:"left", transition:"all .15s", WebkitTapHighlightColor:"transparent" },
   sidebarTabActive:{ background:C.surface2, color:C.accent, fontWeight:700 },
@@ -640,7 +640,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
     return (
       <nav style={S.sidebar}>
         <div style={S.sidebarBrand}>
-          <img src={currentLogo} alt={currentCompanyAlt} style={{width:"100%", maxWidth:140, display:"block"}}/>
+          <img src={currentLogo} alt={currentCompanyAlt} style={{width:"auto", maxWidth:140, maxHeight:60, display:"block"}}/>
         </div>
         {myTenants && myTenants.length > 1 && (
           <div style={{padding:"0 16px 12px"}}>
@@ -690,7 +690,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
   return (
     <nav style={S.nav}>
       <div style={S.navBrand}>
-        <img src={currentLogo} alt={currentCompanyAlt} style={{height:32, width:"auto", display:"block"}}/>
+        <img src={currentLogo} alt={currentCompanyAlt} style={{height:36, width:"auto", maxWidth:120, display:"block", objectFit:"contain"}}/>
         {myTenants && myTenants.length > 1 && (
           <select value={currentTenantId||""} onChange={e => switchTenant(e.target.value)}
             style={{fontSize:11, padding:"3px 6px", borderRadius:6, border:`1px solid ${C.border}`, background:C.surface, color:C.text, marginLeft:8}}>
