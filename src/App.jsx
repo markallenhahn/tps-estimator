@@ -5418,6 +5418,7 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
   const [year,        setYear]        = useState(today.getFullYear());
   const [month,       setMonth]       = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState(null);
+  const [routeLoading, setRouteLoading] = useState(false);
 
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const DAYS   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -5514,7 +5515,6 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
             <div style={{display:"flex", gap:6, alignItems:"center"}}>
               {planHasFeature(tenantData, "zones") && selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city)).length > 1 && (() => {
                 const routableJobs = selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city));
-                const [routeLoading, setRouteLoading] = React.useState(false);
                 const handleRoute = async () => {
                   setRouteLoading(true);
                   let geocodedJobs = [...routableJobs];
