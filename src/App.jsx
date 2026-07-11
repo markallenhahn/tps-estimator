@@ -8201,6 +8201,11 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   const [newNote,         setNewNote]         = useState("");
   const [savingNote,      setSavingNote]      = useState(false);
   const [noteType,        setNoteType]        = useState("internal");
+  const [dismissedTokens, setDismissedTokens] = useState(new Set());
+  const [companySearch,   setCompanySearch]   = useState("");
+  const [companySortField,setCompanySortField]= useState("createdAt");
+  const [companySortDir,  setCompanySortDir]  = useState("desc");
+  const [companyPlanFilter,setCompanyPlanFilter] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -8392,9 +8397,9 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
           {generating ? "Generating..." : "+ Generate Invite Link"}
         </button>
         {inviteError && <p style={{fontSize:12, color:C.danger, marginTop:8}}>{inviteError}</p>}
-        {invites.filter(inv => !inv.used_at).length > 0 && (
+        {invites.filter(inv => !inv.used_at && !dismissedTokens.has(inv.token)).length > 0 && (
           <div style={{marginTop:14}}>
-            {invites.filter(inv => !inv.used_at).map(inv => {
+            {invites.filter(inv => !inv.used_at && !dismissedTokens.has(inv.token)).map(inv => {
               const fullUrl = window.location.origin + "/?join=" + inv.token;
               return (
               <div key={inv.token} style={{padding:"8px 10px", background:C.surface2, borderRadius:8, marginBottom:6}}>
@@ -8404,6 +8409,8 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                   <button style={S.btnSmall} onClick={() => copyLink(inv.token)}>
                     {copiedToken===inv.token ? "Copied!" : "Copy Link"}
                   </button>
+                  <button onClick={() => setDismissedTokens(prev => new Set([...prev, inv.token]))}
+                    style={{background:"none", border:"none", cursor:"pointer", fontSize:16, color:C.textMuted, lineHeight:1, padding:"0 4px", flexShrink:0}}>✕</button>
                 </div>
                 <p style={{fontSize:11, color:C.textDim, margin:"6px 0 0"}}>
                   If "Copy Link" doesn't seem to do anything, tap the link above to select it, then copy manually.
@@ -8420,49 +8427,78 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
         <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
           Every company that's signed up, who owns it, and when.
         </p>
+        {/* Search + filter bar */}
+        <div style={{display:"flex", gap:8, marginBottom:12, flexWrap:"wrap"}}>
+          <input value={companySearch} onChange={e => setCompanySearch(e.target.value)}
+            placeholder="Search name, owner, email..."
+            style={{...S.input, flex:1, minWidth:200}}/>
+          <select value={companyPlanFilter} onChange={e => setCompanyPlanFilter(e.target.value)}
+            style={{...S.input, flex:"0 0 160px"}}>
+            <option value="">All plans</option>
+            {[...new Set(companies.map(c => c.subscriptionTier).filter(Boolean))].map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+            <option value="none">No plan</option>
+          </select>
+        </div>
         {companiesLoading && <p style={{fontSize:13, color:C.textMuted}}>Loading...</p>}
         {companiesError && <p style={{fontSize:12, color:C.danger}}>{companiesError}</p>}
-        {!companiesLoading && !companiesError && companies.length === 0 && (
-          <p style={{fontSize:13, color:C.textMuted}}>No companies yet.</p>
-        )}
-        {companies.map(c => {
-          const days = daysSinceSignup(c.createdAt);
+        {!companiesLoading && !companiesError && (() => {
+          const q = companySearch.trim().toLowerCase();
+          const filtered = companies.filter(c => {
+            if (q && !c.companyName.toLowerCase().includes(q) && !(c.ownerName||'').toLowerCase().includes(q) && !(c.ownerEmail||'').toLowerCase().includes(q)) return false;
+            if (companyPlanFilter === 'none' && c.subscriptionTier) return false;
+            if (companyPlanFilter && companyPlanFilter !== 'none' && c.subscriptionTier !== companyPlanFilter) return false;
+            return true;
+          });
+          const sorted = [...filtered].sort((a, b) => {
+            let av = a[companySortField] ?? '';
+            let bv = b[companySortField] ?? '';
+            if (companySortDir === 'asc') return String(av).localeCompare(String(bv));
+            return String(bv).localeCompare(String(av));
+          });
+          const toggleSort = (field) => {
+            if (companySortField === field) setCompanySortDir(d => d === 'asc' ? 'desc' : 'asc');
+            else { setCompanySortField(field); setCompanySortDir('desc'); }
+          };
+          if (sorted.length === 0) return <p style={{fontSize:13, color:C.textMuted}}>No companies match.</p>;
           return (
-            <div key={c.id} style={{padding:"10px 12px", background:C.surface2, borderRadius:8, marginBottom:8, border:`1px solid ${C.border}`}}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
-                <div style={{fontWeight:700, fontSize:14}}>{c.companyName}</div>
-                {c.setupComplete === false && (
-                  <span style={{fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10, background:"#fef3c7", color:"#92400e", flexShrink:0}}>
-                    SETUP INCOMPLETE
-                  </span>
-                )}
+            <>
+              {/* Column headers */}
+              <div style={{display:"flex", gap:8, padding:"6px 10px", borderBottom:`2px solid ${C.border}`,
+                fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:4}}>
+                {[["companyName","Company",2.5],["ownerName","Owner",2],["createdAt","Signed Up",1.2],["subscriptionTier","Plan",1],["subscriptionStatus","Status",1]].map(([field,label,flex]) => (
+                  <div key={field} onClick={() => toggleSort(field)}
+                    style={{flex, cursor:"pointer", userSelect:"none", color: companySortField===field ? C.accent : C.textMuted, whiteSpace:"nowrap"}}>
+                    {label}{companySortField===field ? (companySortDir==="asc" ? " ↑" : " ↓") : ""}
+                  </div>
+                ))}
               </div>
-              <div style={{fontSize:12, color:C.textMuted, marginTop:4}}>
-                {c.ownerName || c.ownerEmail ? (
-                  <>Owner: {c.ownerName || "(no name set)"} {c.ownerEmail ? `· ${c.ownerEmail}` : ""}</>
-                ) : (
-                  <>No owner found</>
-                )}
-              </div>
-              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
-                {c.createdAt ? (
-                  <>Signed up {new Date(c.createdAt).toLocaleDateString()} · {days===0 ? "today" : `${days} day${days!==1?"s":""} ago`}</>
-                ) : (
-                  <>Sign-up date unknown</>
-                )}
-              </div>
-              <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>
-                Plan: {c.subscriptionTier ? c.subscriptionTier : "No plan selected"}
-                {c.subscriptionStatus ? ` · ${c.subscriptionStatus}` : ""}
-              </div>
-              {c.inviteUsedAt && (
-                <div style={{fontSize:11, color:C.textDim, marginTop:2}}>
-                  ✓ Created via invite link · used {new Date(c.inviteUsedAt).toLocaleDateString()}
-                </div>
-              )}
-            </div>
+              {sorted.map(c => {
+                const days = daysSinceSignup(c.createdAt);
+                const planColor = c.subscriptionStatus === 'active' ? '#15803d' : c.subscriptionStatus === 'trialing' ? '#b45309' : C.textMuted;
+                return (
+                  <div key={c.id} style={{display:"flex", gap:8, padding:"9px 10px", borderBottom:`1px solid ${C.border}`, alignItems:"center"}}>
+                    <div style={{flex:2.5, minWidth:0}}>
+                      <div style={{fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.companyName}</div>
+                      {c.setupComplete === false && <span style={{fontSize:10, fontWeight:700, color:"#92400e", background:"#fef3c7", borderRadius:4, padding:"1px 5px"}}>INCOMPLETE</span>}
+                    </div>
+                    <div style={{flex:2, minWidth:0}}>
+                      <div style={{fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.ownerName || "—"}</div>
+                      <div style={{fontSize:11, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.ownerEmail || ""}</div>
+                    </div>
+                    <div style={{flex:1.2, fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>
+                      {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "—"}
+                      {days !== null && <div style={{fontSize:11}}>{days === 0 ? "today" : `${days}d ago`}</div>}
+                    </div>
+                    <div style={{flex:1, fontSize:12, whiteSpace:"nowrap", textTransform:"capitalize"}}>{c.subscriptionTier || <span style={{color:C.textMuted}}>none</span>}</div>
+                    <div style={{flex:1, fontSize:12, fontWeight:600, color:planColor, whiteSpace:"nowrap", textTransform:"capitalize"}}>{c.subscriptionStatus || <span style={{color:C.textMuted}}>—</span>}</div>
+                  </div>
+                );
+              })}
+            </>
           );
-        })}
+        })()}
       </section>
 
       <section style={S.section}>
@@ -14218,44 +14254,38 @@ function AdminApp() {
         />
 
         {/* Admin Users Management */}
-        <section style={{background:"#fff", borderRadius:12, padding:24, marginTop:20, boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
-          <h2 style={{fontSize:18, fontWeight:700, margin:"0 0 4px"}}>Platform Admins</h2>
-          <p style={{fontSize:13, color:"#888", margin:"0 0 16px"}}>Manage who has access to this dashboard.</p>
+        <section style={S.section}>
+          <h2 style={S.h2}>Platform Admins</h2>
+          <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>Manage who has access to this dashboard.</p>
 
           {/* Admin list */}
           {adminUsers.map(a => (
-            <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:"1px solid #f0f0f0"}}>
+            <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
               <div>
                 <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || a.user_id.slice(0,8)+"..."}</div>
-                <div style={{fontSize:12, color:"#888"}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
+                <div style={{fontSize:12, color:C.textMuted}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
               </div>
               {isSuperAdmin && !a.is_super && (
-                <button onClick={() => removeAdmin(a.user_id)}
-                  style={{fontSize:12, color:"#ef4444", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:6, padding:"4px 10px", cursor:"pointer"}}>
-                  Remove
-                </button>
+                <button onClick={() => removeAdmin(a.user_id)} style={S.btnSmallDanger}>Remove</button>
               )}
-              {a.is_super && <span style={{fontSize:11, color:"#f0ab2e", fontWeight:700}}>SUPER</span>}
+              {a.is_super && <span style={{fontSize:11, color:C.accent, fontWeight:700}}>SUPER</span>}
             </div>
           ))}
 
           {/* Add admin */}
           {isSuperAdmin && (
-            <div style={{marginTop:16}}>
-              <div style={{fontSize:13, fontWeight:600, marginBottom:8}}>Add Admin</div>
-              <p style={{fontSize:12, color:"#888", marginBottom:10}}>The user must already have a BlacktopIQ account.</p>
+            <div style={{marginTop:16, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+              <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>Add Admin</div>
+              <p style={{fontSize:12, color:C.textMuted, marginBottom:10}}>The user must already have a BlacktopIQ account.</p>
               <div style={{display:"flex", gap:8}}>
                 <input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)}
-                  placeholder="email@example.com"
-                  style={{flex:1, padding:"8px 12px", borderRadius:8, border:"1px solid #ddd", fontSize:13}}
+                  placeholder="email@example.com" style={{...S.input, flex:1}}
                   onKeyDown={e => e.key==="Enter" && addAdmin()}/>
-                <button onClick={addAdmin} disabled={addingAdmin}
-                  style={{padding:"8px 16px", borderRadius:8, border:"none", cursor:"pointer", fontSize:13, fontWeight:600,
-                    background:"#f0ab2e", color:"#000", opacity: addingAdmin ? 0.6 : 1}}>
+                <button onClick={addAdmin} disabled={addingAdmin} style={{...S.btnPrimary, opacity: addingAdmin ? 0.6 : 1}}>
                   {addingAdmin ? "Adding..." : "Add"}
                 </button>
               </div>
-              {addAdminError && <div style={{fontSize:12, color:"#ef4444", marginTop:6}}>{addAdminError}</div>}
+              {addAdminError && <div style={{fontSize:12, color:C.danger, marginTop:6}}>{addAdminError}</div>}
             </div>
           )}
         </section>
