@@ -14136,6 +14136,15 @@ function App() {
   const [currentUserName,   setCurrentUserName]   = useState("");
   const isDesktopLayout = useIsDesktop();
 
+  // Inject fade-in keyframe once — must be before any conditional returns
+  useEffect(() => {
+    if (document.getElementById("biq-fadein-style")) return;
+    const style = document.createElement("style");
+    style.id = "biq-fadein-style";
+    style.textContent = "@keyframes biqFadeIn{from{opacity:0}to{opacity:1}}";
+    document.head.appendChild(style);
+  }, []);
+
   // ── Auth state ──
   const [session,    setSession]    = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -15117,15 +15126,6 @@ function App() {
       />
     );
   }
-
-  // Inject fade-in keyframe once
-  useEffect(() => {
-    if (document.getElementById("biq-fadein-style")) return;
-    const style = document.createElement("style");
-    style.id = "biq-fadein-style";
-    style.textContent = "@keyframes biqFadeIn{from{opacity:0}to{opacity:1}}";
-    document.head.appendChild(style);
-  }, []);
 
   if (loading) return (
     <div style={{...S.app, height:"100svh", minHeight:"100svh", alignItems:"center", justifyContent:"center"}}>
