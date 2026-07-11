@@ -7181,16 +7181,26 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   // ── Actual costs (editable, fall back to estimated if blank) ──
   const actuals = costs.actuals || {};
   // Compute actual overhead and fuel from expenses, allocated by this job's revenue share
-  const activeJobs = (jobs||[]).filter(j => ["scheduled","completed","paid"].includes(j.status||""));
+  const ytdStart_ = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10);
+  const ytdEnd_   = new Date().toISOString().slice(0,10);
+  const activeJobs = (jobs||[]).filter(j => {
+    if (!["scheduled","completed","paid"].includes(j.status||"")) return false;
+    const d = j.date?.includes("/") ? new Date(j.date).toISOString().slice(0,10) : (j.date||"");
+    return d >= ytdStart_ && d <= ytdEnd_;
+  });
   const totalRevenue = activeJobs.reduce((s,j) => {
     const allRates_ = {...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
     return s + calcJobFinancials(j, allRates_).revenue;
   }, 1);
   const revenueShare_ = revenue / totalRevenue;
-  const actualOverhead = (expenses||[])
+  // Use YTD expenses to match default period on Profitability report
+  const ytdStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10);
+  const ytdEnd   = new Date().toISOString().slice(0,10);
+  const ytdExp   = (expenses||[]).filter(e => e.date >= ytdStart && e.date <= ytdEnd);
+  const actualOverhead = ytdExp
     .filter(e => ["Overhead","overhead"].includes(e.category))
     .reduce((s,e) => s + Number(e.amount||0), 0);
-  const actualFuelExp = (expenses||[])
+  const actualFuelExp = ytdExp
     .filter(e => ["COGS","cogs"].includes(e.category) && ["Fuel","fuel"].includes(e.subcategory||""))
     .reduce((s,e) => s + Number(e.amount||0), 0);
   const overhead = actualOverhead > 0 ? actualOverhead * revenueShare_ : revenue * (reportSettings.overheadPct||16.45) / 100;
