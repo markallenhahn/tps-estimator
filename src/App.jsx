@@ -5482,7 +5482,24 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
             <h2 style={{...S.h2, margin:0}}>
               {new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
             </h2>
-            <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => setSelectedDay(null)}>✕</button>
+            <div style={{display:"flex", gap:6, alignItems:"center"}}>
+              {selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city)).length > 1 && (() => {
+                const routableJobs = selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city));
+                const waypoints = routableJobs.map(j=>encodeURIComponent([j.address,j.city].filter(Boolean).join(", ")));
+                const origin = waypoints[0];
+                const dest = waypoints[waypoints.length-1];
+                const middle = waypoints.slice(1,-1).join("|");
+                let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
+                if (middle) url += `&waypoints=${middle}`;
+                return (
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    style={{...S.btnSmall, background:"#dbeafe", color:"#1d4ed8", textDecoration:"none", display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap"}}>
+                    🗺 Route {routableJobs.length} Jobs
+                  </a>
+                );
+              })()}
+              <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => setSelectedDay(null)}>✕</button>
+            </div>
           </div>
           {selectedJobs.length === 0 ? (
             <p style={{color:C.textMuted, fontSize:13}}>No jobs scheduled.</p>
