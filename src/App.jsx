@@ -6415,251 +6415,142 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
         </div>
       </section>
 
-      {/* ── Desktop: split pane — list left, detail right ── */}
-      {isDesktop ? (
-        <div style={{display:"flex", gap:0, alignItems:"flex-start"}}>
-          {/* Left: sortable table */}
-          <section style={{...S.section, flex:"0 0 480px", marginRight:16, minWidth:0}}>
-            {/* Column headers */}
-            <div style={{display:"flex", gap:6, padding:"6px 10px", borderBottom:`2px solid ${C.border}`,
-              fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:4}}>
-              {[["name","Name",2],["phone","Phone",1.2],["lastJobDate","Last Job",1],["totalRevenue","Revenue",1],["jobCount","Jobs","50px"]].map(([field,label,flex]) => (
-                <div key={field} onClick={() => toggleSort(field)}
-                  style={{cursor:"pointer", flex: typeof flex==="number"?flex:undefined, width:typeof flex==="string"?flex:undefined,
-                    flexShrink:0, userSelect:"none", color: sortField===field ? C.accent : C.textMuted, whiteSpace:"nowrap"}}>
-                  {label}{sortField===field ? (sortDir==="asc"?" ↑":" ↓"):""}
-                </div>
-              ))}
-            </div>
-            {sortedFiltered.length === 0 ? (
-              <p style={{fontSize:12, color:C.textMuted}}>No customers match that search.</p>
-            ) : sortedFiltered.map(c => (
-              <div key={c.id} onClick={() => setSelectedId(c.id)}
-                style={{display:"flex", gap:6, padding:"8px 10px", borderRadius:6, marginBottom:2, cursor:"pointer",
-                  background: selectedId===c.id ? C.accent+"22" : "transparent",
-                  borderLeft: selectedId===c.id ? `3px solid ${C.accent}` : "3px solid transparent",
-                }}>
-                <div style={{flex:2, fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.name||"Unnamed"}</div>
-                <div style={{flex:1.2, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.phone||c.email||"—"}</div>
-                <div style={{flex:1, fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>{c.lastJobDate ? new Date(c.lastJobDate+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"2-digit"}) : "—"}</div>
-                <div style={{flex:1, fontSize:12, fontWeight:600, color:C.accent, whiteSpace:"nowrap"}}>{formatCurrency(c.totalRevenue)}</div>
-                <div style={{width:"50px", flexShrink:0, fontSize:12, color:C.textMuted, textAlign:"right"}}>{c.jobCount}</div>
-              </div>
-            ))}
-          </section>
-
-          {/* Right: detail panel */}
-          <section style={{...S.section, flex:1, minWidth:0}}>
-            {!selected ? (
-              <p style={{fontSize:13, color:C.textMuted}}>Select a customer to view details.</p>
-            ) : (<>
-            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10}}>
-                <div style={{flex:1}}>
-                  <div style={{display:"flex", alignItems:"center", gap:8}}>
-                    <h2 style={{...S.h2, margin:0}}>{selected.name || "Unnamed"}</h2>
-                    {canEdit && !editingContact && (
-                      <button style={S.btnSmall} onClick={startEditingContact}>Edit</button>
-                    )}
-                  </div>
-                  {editingContact ? (
-                    <div style={{marginTop:8}}>
-                      <input value={contactDraft.name} onChange={e=>setContactDraft(d=>({...d,name:e.target.value}))} placeholder="Name" style={{...S.input, marginBottom:6}}/>
-                      <input value={contactDraft.phone} onChange={e=>setContactDraft(d=>({...d,phone:e.target.value}))} placeholder="Phone" style={{...S.input, marginBottom:6}}/>
-                      <input value={contactDraft.email} onChange={e=>setContactDraft(d=>({...d,email:e.target.value}))} placeholder="Email" style={{...S.input, marginBottom:6}}/>
-                      <input value={contactDraft.address} onChange={e=>setContactDraft(d=>({...d,address:e.target.value}))} placeholder="Address" style={{...S.input, marginBottom:6}}/>
-                      <div style={{display:"flex", gap:6, marginBottom:8}}>
-                        <input value={contactDraft.city} onChange={e=>setContactDraft(d=>({...d,city:e.target.value}))} placeholder="City" style={{...S.input, flex:2}}/>
-                        <input value={contactDraft.state} onChange={e=>setContactDraft(d=>({...d,state:e.target.value}))} placeholder="State" style={{...S.input, flex:1}}/>
-                        <input value={contactDraft.zip} onChange={e=>setContactDraft(d=>({...d,zip:e.target.value}))} placeholder="Zip" style={{...S.input, flex:1}}/>
-                      </div>
-                      <button style={S.btnPrimary} onClick={saveContact}>Save</button>
-                      <button style={{...S.btnSecondary, marginLeft:6}} onClick={()=>setEditingContact(false)}>Cancel</button>
-                    </div>
-                  ) : (
-                    <div style={{fontSize:12, color:C.textMuted, marginTop:4}}>
-                      {selected.phone && <div>{selected.phone}</div>}
-                      {selected.email && <div>{selected.email}</div>}
-                      {selected.address && <div>{selected.address}, {selected.city}, {selected.state} {selected.zip}</div>}
-                    </div>
-                  )}
-                </div>
-                <div style={{textAlign:"right", flexShrink:0}}>
-                  <div style={{fontSize:20, fontWeight:800, color:C.accent}}>{formatCurrency(selected.totalRevenue)}</div>
-                  <div style={{fontSize:11, color:C.textMuted}}>{selected.jobCount} job{selected.jobCount!==1?"s":""} total</div>
-                </div>
-              </div>
-
-              <div style={{marginBottom:16}}>
-                <h3 style={{fontSize:13, fontWeight:700, marginBottom:8}}>Jobs</h3>
-                {selected.jobs.map(j => (
-                  <div key={j.id} onClick={() => { setCurrentJob(j); setView("estimate"); }}
-                    style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px",
-                      borderRadius:6, background:C.surface2, marginBottom:4, cursor:"pointer", fontSize:12}}>
-                    <span>{j.date || "no date"} · {j.address || "no address"}</span>
-                    <span style={{display:"flex", alignItems:"center", gap:8}}>
-                      <span style={{textTransform:"capitalize", color:C.textMuted}}>{j.status}</span>
-                      <strong>{formatCurrency(calcJobFinancials(j, allRates).revenue)}</strong>
-                    </span>
+      {/* ── Unified CRM layout: full-screen list → full-screen detail ── */}
+      <section style={S.section}>
+        {!selected ? (
+          <>
+            {isDesktop && (
+              <div style={{display:"flex", gap:6, padding:"6px 10px", borderBottom:`2px solid ${C.border}`,
+                fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:4}}>
+                {[["name","Name",2],["phone","Phone",1.2],["lastJobDate","Last Job",1],["totalRevenue","Revenue",1],["jobCount","Jobs","50px"]].map(([field,label,flex]) => (
+                  <div key={field} onClick={() => toggleSort(field)}
+                    style={{cursor:"pointer", flex: typeof flex==="number"?flex:undefined, width:typeof flex==="string"?flex:undefined,
+                      flexShrink:0, userSelect:"none", color: sortField===field ? C.accent : C.textMuted, whiteSpace:"nowrap"}}>
+                    {label}{sortField===field ? (sortDir==="asc"?" ↑":" ↓"):""}
                   </div>
                 ))}
               </div>
-
-              {canEdit && (
-                <div style={{marginBottom:16, padding:12, background:C.surface2, borderRadius:8}}>
-                  <div style={{display:"flex", gap:8, marginBottom:8}}>
-                    <select value={logType} onChange={e => setLogType(e.target.value)} style={{...S.input, flex:"0 0 130px"}}>
-                      <option value="note">Note</option>
-                      <option value="call">Call Log</option>
-                    </select>
-                    {logType === "call" && (
-                      <input value={callOutcome} onChange={e => setCallOutcome(e.target.value)} placeholder="Outcome (e.g. left voicemail)"
-                        style={{...S.input, flex:1}}/>
-                    )}
-                  </div>
-                  <textarea value={logText} onChange={e => setLogText(e.target.value)} rows={2}
-                    placeholder={logType==="call" ? "What was discussed on the call?" : "Add a note..."}
-                    style={{...S.input, width:"100%", resize:"vertical", marginBottom:8}}/>
-                  <button style={S.btnPrimary} onClick={addLog}>+ Add {logType==="call" ? "Call Log" : "Note"}</button>
-                </div>
-              )}
-
-              <h3 style={{fontSize:13, fontWeight:700, marginBottom:8}}>History ({selectedLogs.length})</h3>
-              {selectedLogs.length === 0 ? (
-                <p style={{fontSize:12, color:C.textMuted}}>No notes or call logs yet.</p>
-              ) : selectedLogs.map(l => (
-                <div key={l.id} style={{padding:"10px 12px", borderRadius:8, background:C.surface2, marginBottom:6}}>
-                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
-                    <span style={{fontSize:11, fontWeight:700, color: l.type==="call" ? C.accent : C.textMuted}}>
-                      {l.type === "call" ? "📞 Call" : "📝 Note"}{l.callOutcome ? ` — ${l.callOutcome}` : ""}
-                    </span>
-                    <span style={{fontSize:11, color:C.textMuted, display:"flex", alignItems:"center", gap:8}}>
-                      {new Date(l.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
-                      {canEdit && (
-                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}}/></button>
-                      )}
-                    </span>
-                  </div>
-                  <div style={{fontSize:13}}>{l.text}</div>
-                </div>
-              ))}
-            </>
             )}
-          </section>
-        </div>
-      ) : (
-        /* ── Mobile: stacked cards → full-screen detail ── */
-        <section style={S.section}>
-          {/* List */}
-          <div style={{display: selected ? "none" : "block"}}>
             {sortedFiltered.length === 0 ? (
               <p style={{fontSize:12, color:C.textMuted}}>No customers match that search.</p>
             ) : sortedFiltered.map(c => (
-              <div key={c.id} onClick={() => setSelectedId(c.id)}
-                style={{padding:"12px 14px", borderRadius:8, marginBottom:8, cursor:"pointer",
-                  background:C.surface2, border:`1px solid ${C.border}`}}>
-                <div style={{fontWeight:700, fontSize:14}}>{c.name||"Unnamed"}</div>
-                <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>{c.phone||c.email||"no contact info"}</div>
-                <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>{c.jobCount} job{c.jobCount!==1?"s":""} · {formatCurrency(c.totalRevenue)}</div>
+              isDesktop ? (
+                <div key={c.id} onClick={() => setSelectedId(c.id)}
+                  style={{display:"flex", gap:6, padding:"9px 10px", borderRadius:6, marginBottom:2, cursor:"pointer",
+                    background:"transparent", borderLeft: selectedId===c.id ? `3px solid ${C.accent}` : "3px solid transparent",
+                    backgroundColor: selectedId===c.id ? C.accent+"18" : "transparent"}}>
+                  <div style={{flex:2, fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.name||"Unnamed"}</div>
+                  <div style={{flex:1.2, fontSize:12, color:C.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.phone||c.email||"—"}</div>
+                  <div style={{flex:1, fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>{c.lastJobDate ? (() => { const _d = new Date(c.lastJobDate.includes("/") ? c.lastJobDate : c.lastJobDate+"T12:00:00"); return isNaN(_d) ? c.lastJobDate : _d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"2-digit"}); })() : "—"}</div>
+                  <div style={{flex:1, fontSize:12, fontWeight:600, color:C.accent, whiteSpace:"nowrap"}}>{formatCurrency(c.totalRevenue)}</div>
+                  <div style={{width:"50px", flexShrink:0, fontSize:12, color:C.textMuted, textAlign:"right"}}>{c.jobCount}</div>
+                </div>
+              ) : (
+                <div key={c.id} onClick={() => setSelectedId(c.id)}
+                  style={{padding:"12px 14px", borderRadius:8, marginBottom:8, cursor:"pointer",
+                    background:C.surface2, border:`1px solid ${C.border}`}}>
+                  <div style={{fontWeight:700, fontSize:14}}>{c.name||"Unnamed"}</div>
+                  <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>{c.phone||c.email||"no contact info"}</div>
+                  <div style={{fontSize:12, color:C.textMuted, marginTop:2}}>{c.jobCount} job{c.jobCount!==1?"s":""} · {formatCurrency(c.totalRevenue)}</div>
+                </div>
+              )
+            ))}
+          </>
+        ) : (
+          <div>
+            <button style={{...S.btnSecondary, marginBottom:14, fontSize:13}} onClick={() => setSelectedId(null)}>← Back to Customers</button>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex", alignItems:"center", gap:8}}>
+                  <h2 style={{...S.h2, margin:0}}>{selected.name || "Unnamed"}</h2>
+                  {canEdit && !editingContact && (
+                    <button style={S.btnSmall} onClick={startEditingContact}>Edit</button>
+                  )}
+                </div>
+                {editingContact ? (
+                  <div style={{marginTop:8}}>
+                    <input value={contactDraft.name} onChange={e=>setContactDraft(d=>({...d,name:e.target.value}))} placeholder="Name" style={{...S.input, marginBottom:6}}/>
+                    <input value={contactDraft.phone} onChange={e=>setContactDraft(d=>({...d,phone:e.target.value}))} placeholder="Phone" style={{...S.input, marginBottom:6}}/>
+                    <input value={contactDraft.email} onChange={e=>setContactDraft(d=>({...d,email:e.target.value}))} placeholder="Email" style={{...S.input, marginBottom:6}}/>
+                    <input value={contactDraft.address} onChange={e=>setContactDraft(d=>({...d,address:e.target.value}))} placeholder="Address" style={{...S.input, marginBottom:6}}/>
+                    <div style={{display:"flex", gap:6, marginBottom:8}}>
+                      <input value={contactDraft.city} onChange={e=>setContactDraft(d=>({...d,city:e.target.value}))} placeholder="City" style={{...S.input, flex:2}}/>
+                      <input value={contactDraft.state} onChange={e=>setContactDraft(d=>({...d,state:e.target.value}))} placeholder="State" style={{...S.input, flex:1}}/>
+                      <input value={contactDraft.zip} onChange={e=>setContactDraft(d=>({...d,zip:e.target.value}))} placeholder="Zip" style={{...S.input, flex:1}}/>
+                    </div>
+                    <button style={S.btnPrimary} onClick={saveContact}>Save</button>
+                    <button style={{...S.btnSecondary, marginLeft:6}} onClick={()=>setEditingContact(false)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div style={{fontSize:12, color:C.textMuted, marginTop:4}}>
+                    {selected.phone && <div>{selected.phone}</div>}
+                    {selected.email && <div>{selected.email}</div>}
+                    {selected.address && <div>{selected.address}, {selected.city}, {selected.state} {selected.zip}</div>}
+                  </div>
+                )}
+              </div>
+              <div style={{textAlign:"right", flexShrink:0}}>
+                <div style={{fontSize:20, fontWeight:800, color:C.accent}}>{formatCurrency(selected.totalRevenue)}</div>
+                <div style={{fontSize:11, color:C.textMuted}}>{selected.jobCount} job{selected.jobCount!==1?"s":""} total</div>
+              </div>
+            </div>
+
+            <div style={{marginBottom:16}}>
+              <h3 style={{fontSize:13, fontWeight:700, marginBottom:8}}>Jobs</h3>
+              {selected.jobs.map(j => (
+                <div key={j.id} onClick={() => { setCurrentJob(j); setView("estimate"); }}
+                  style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px",
+                    borderRadius:6, background:C.surface2, marginBottom:4, cursor:"pointer", fontSize:12}}>
+                  <span>{j.date || "no date"} · {j.address || "no address"}</span>
+                  <span style={{display:"flex", alignItems:"center", gap:8}}>
+                    <span style={{textTransform:"capitalize", color:C.textMuted}}>{j.status}</span>
+                    <strong>{formatCurrency(calcJobFinancials(j, allRates).revenue)}</strong>
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {canEdit && (
+              <div style={{marginBottom:16, padding:12, background:C.surface2, borderRadius:8}}>
+                <div style={{display:"flex", gap:8, marginBottom:8}}>
+                  <select value={logType} onChange={e => setLogType(e.target.value)} style={{...S.input, flex:"0 0 130px"}}>
+                    <option value="note">Note</option>
+                    <option value="call">Call Log</option>
+                  </select>
+                  {logType === "call" && (
+                    <input value={callOutcome} onChange={e => setCallOutcome(e.target.value)} placeholder="Outcome (e.g. left voicemail)"
+                      style={{...S.input, flex:1}}/>
+                  )}
+                </div>
+                <textarea value={logText} onChange={e => setLogText(e.target.value)} rows={2}
+                  placeholder={logType==="call" ? "What was discussed on the call?" : "Add a note..."}
+                  style={{...S.input, width:"100%", resize:"vertical", marginBottom:8}}/>
+                <button style={S.btnPrimary} onClick={addLog}>+ Add {logType==="call" ? "Call Log" : "Note"}</button>
+              </div>
+            )}
+
+            <h3 style={{fontSize:13, fontWeight:700, marginBottom:8}}>History ({selectedLogs.length})</h3>
+            {selectedLogs.length === 0 ? (
+              <p style={{fontSize:12, color:C.textMuted}}>No notes or call logs yet.</p>
+            ) : selectedLogs.map(l => (
+              <div key={l.id} style={{padding:"10px 12px", borderRadius:8, background:C.surface2, marginBottom:6}}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
+                  <span style={{fontSize:11, fontWeight:700, color: l.type==="call" ? C.accent : C.textMuted}}>
+                    {l.type === "call" ? "📞 Call" : "📝 Note"}{l.callOutcome ? ` — ${l.callOutcome}` : ""}
+                  </span>
+                  <span style={{fontSize:11, color:C.textMuted, display:"flex", alignItems:"center", gap:8}}>
+                    {new Date(l.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+                    {canEdit && (
+                      <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}}/></button>
+                    )}
+                  </span>
+                </div>
+                <div style={{fontSize:13}}>{l.text}</div>
               </div>
             ))}
           </div>
-          {/* Mobile detail */}
-          {selected && (
-            <div>
-              <button style={{...S.btnSecondary, marginBottom:14, fontSize:13}} onClick={() => setSelectedId(null)}>← Back to Customers</button>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10}}>
-                <div style={{flex:1}}>
-                  <div style={{display:"flex", alignItems:"center", gap:8}}>
-                    <h2 style={{...S.h2, margin:0}}>{selected.name || "Unnamed"}</h2>
-                    {canEdit && !editingContact && (
-                      <button style={S.btnSmall} onClick={startEditingContact}>Edit</button>
-                    )}
-                  </div>
-                  {editingContact ? (
-                    <div style={{marginTop:8}}>
-                      <input value={contactDraft.name} onChange={e=>setContactDraft(d=>({...d,name:e.target.value}))} placeholder="Name" style={{...S.input, marginBottom:6}}/>
-                      <input value={contactDraft.phone} onChange={e=>setContactDraft(d=>({...d,phone:e.target.value}))} placeholder="Phone" style={{...S.input, marginBottom:6}}/>
-                      <input value={contactDraft.email} onChange={e=>setContactDraft(d=>({...d,email:e.target.value}))} placeholder="Email" style={{...S.input, marginBottom:6}}/>
-                      <input value={contactDraft.address} onChange={e=>setContactDraft(d=>({...d,address:e.target.value}))} placeholder="Address" style={{...S.input, marginBottom:6}}/>
-                      <div style={{display:"flex", gap:6, marginBottom:8}}>
-                        <input value={contactDraft.city} onChange={e=>setContactDraft(d=>({...d,city:e.target.value}))} placeholder="City" style={{...S.input, flex:2}}/>
-                        <input value={contactDraft.state} onChange={e=>setContactDraft(d=>({...d,state:e.target.value}))} placeholder="State" style={{...S.input, flex:1}}/>
-                        <input value={contactDraft.zip} onChange={e=>setContactDraft(d=>({...d,zip:e.target.value}))} placeholder="Zip" style={{...S.input, flex:1}}/>
-                      </div>
-                      <button style={S.btnPrimary} onClick={saveContact}>Save</button>
-                      <button style={{...S.btnSecondary, marginLeft:6}} onClick={()=>setEditingContact(false)}>Cancel</button>
-                    </div>
-                  ) : (
-                    <div style={{fontSize:12, color:C.textMuted, marginTop:4}}>
-                      {selected.phone && <div>{selected.phone}</div>}
-                      {selected.email && <div>{selected.email}</div>}
-                      {selected.address && <div>{selected.address}, {selected.city}, {selected.state} {selected.zip}</div>}
-                    </div>
-                  )}
-                </div>
-                <div style={{textAlign:"right", flexShrink:0}}>
-                  <div style={{fontSize:20, fontWeight:800, color:C.accent}}>{formatCurrency(selected.totalRevenue)}</div>
-                  <div style={{fontSize:11, color:C.textMuted}}>{selected.jobCount} job{selected.jobCount!==1?"s":""} total</div>
-                </div>
-              </div>
-
-              <div style={{marginBottom:16}}>
-                <h3 style={{fontSize:13, fontWeight:700, marginBottom:8}}>Jobs</h3>
-                {selected.jobs.map(j => (
-                  <div key={j.id} onClick={() => { setCurrentJob(j); setView("estimate"); }}
-                    style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px",
-                      borderRadius:6, background:C.surface2, marginBottom:4, cursor:"pointer", fontSize:12}}>
-                    <span>{j.date || "no date"} · {j.address || "no address"}</span>
-                    <span style={{display:"flex", alignItems:"center", gap:8}}>
-                      <span style={{textTransform:"capitalize", color:C.textMuted}}>{j.status}</span>
-                      <strong>{formatCurrency(calcJobFinancials(j, allRates).revenue)}</strong>
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {canEdit && (
-                <div style={{marginBottom:16, padding:12, background:C.surface2, borderRadius:8}}>
-                  <div style={{display:"flex", gap:8, marginBottom:8}}>
-                    <select value={logType} onChange={e => setLogType(e.target.value)} style={{...S.input, flex:"0 0 130px"}}>
-                      <option value="note">Note</option>
-                      <option value="call">Call Log</option>
-                    </select>
-                    {logType === "call" && (
-                      <input value={callOutcome} onChange={e => setCallOutcome(e.target.value)} placeholder="Outcome (e.g. left voicemail)"
-                        style={{...S.input, flex:1}}/>
-                    )}
-                  </div>
-                  <textarea value={logText} onChange={e => setLogText(e.target.value)} rows={2}
-                    placeholder={logType==="call" ? "What was discussed on the call?" : "Add a note..."}
-                    style={{...S.input, width:"100%", resize:"vertical", marginBottom:8}}/>
-                  <button style={S.btnPrimary} onClick={addLog}>+ Add {logType==="call" ? "Call Log" : "Note"}</button>
-                </div>
-              )}
-
-              <h3 style={{fontSize:13, fontWeight:700, marginBottom:8}}>History ({selectedLogs.length})</h3>
-              {selectedLogs.length === 0 ? (
-                <p style={{fontSize:12, color:C.textMuted}}>No notes or call logs yet.</p>
-              ) : selectedLogs.map(l => (
-                <div key={l.id} style={{padding:"10px 12px", borderRadius:8, background:C.surface2, marginBottom:6}}>
-                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
-                    <span style={{fontSize:11, fontWeight:700, color: l.type==="call" ? C.accent : C.textMuted}}>
-                      {l.type === "call" ? "📞 Call" : "📝 Note"}{l.callOutcome ? ` — ${l.callOutcome}` : ""}
-                    </span>
-                    <span style={{fontSize:11, color:C.textMuted, display:"flex", alignItems:"center", gap:8}}>
-                      {new Date(l.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
-                      {canEdit && (
-                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}}/></button>
-                      )}
-                    </span>
-                  </div>
-                  <div style={{fontSize:13}}>{l.text}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+        )}
+      </section>
     </div>
   );
 }
