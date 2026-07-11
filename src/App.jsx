@@ -10226,6 +10226,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
 // estimate, invoice, costs, labor). Shows client name, address, status
 // changer, and quick-jump tabs between job screens.
 function JobContextBar({ currentJob, updateJob, setView, view, permissions, userRoles, userRole, planData, iconStyle }) {
+  const isDesktop = useIsDesktop();
   if (!currentJob || !currentJob.id) return null;
 
   const roles = userRoles || [userRole];
@@ -10268,9 +10269,7 @@ function JobContextBar({ currentJob, updateJob, setView, view, permissions, user
       background: C.surface,
       borderBottom: `1px solid ${C.border}`,
       padding: "8px 16px",
-      position: "sticky",
-      top: 56,
-      zIndex: 40,
+      ...(isDesktop ? {} : { position: "sticky", top: 56, zIndex: 40 }),
     }}>
       {/* Client + back to jobs */}
       <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}}>
