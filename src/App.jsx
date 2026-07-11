@@ -7181,7 +7181,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   // ── Actual costs (editable, fall back to estimated if blank) ──
   const actuals = costs.actuals || {};
   // Compute actual overhead and fuel from expenses, allocated by this job's revenue share
-  const activeJobs = (jobs||[]).filter(j => !["estimate","draft","lost"].includes(j.status||""));
+  const activeJobs = (jobs||[]).filter(j => ["scheduled","completed","paid"].includes(j.status||""));
   const totalRevenue = activeJobs.reduce((s,j) => {
     const allRates_ = {...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
     return s + calcJobFinancials(j, allRates_).revenue;
