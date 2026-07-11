@@ -6387,7 +6387,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
           <section style={{...S.section, flex:1, minWidth:0}}>
             {!selected ? (
               <p style={{fontSize:13, color:C.textMuted}}>Select a customer to view details.</p>
-            ) : (
+            ) : (<>
             <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10}}>
                 <div style={{flex:1}}>
                   <div style={{display:"flex", alignItems:"center", gap:8}}>
@@ -6478,7 +6478,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                 </div>
               ))}
             </div>
-            )}
+            </>)}
           </section>
         </div>
       ) : (
