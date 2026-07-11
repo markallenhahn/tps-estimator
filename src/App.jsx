@@ -5021,17 +5021,27 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
 
   const toggleJobExclusion = (zoneId, jobId) => {
     setExcludedJobIds(prev => {
-      if (prev.includes(jobId)) return prev.filter(id => id !== jobId);
-      return [...prev, jobId];
+      const next = prev.includes(jobId) ? prev.filter(id => id !== jobId) : [...prev, jobId];
+      if (selectedZoneId === zoneId) {
+        // Rebuild immediately using next exclusion list (don't wait for re-render)
+        const zone = zones?.list?.find(z => z.id === zoneId);
+        if (zone) {
+          const zoneJobs = jobs.filter(j => zone.jobIds.includes(j.id) && j.geoLat && j.geoLng && !next.includes(j.id));
+          if (zoneJobs.length > 0) {
+            const points = zoneJobs.map(j => ({ lat: j.geoLat, lng: j.geoLng, job: j }));
+            const base = homeBase?.lat && homeBase?.lng
+              ? { lat: homeBase.lat, lng: homeBase.lng, job: { id:"home", clientName:"Home Base", address: homeBase.address } }
+              : null;
+            const ordered = optimizeRoute(points, base);
+            setOptimizedRoute(ordered.map(p => p.job));
+          } else {
+            setOptimizedRoute([]);
+          }
+        }
+      }
+      return next;
     });
-    // Rebuild route after state updates (useEffect watches excludedJobIds)
   };
-
-  // Rebuild route automatically when job exclusions change
-  useEffect(() => {
-    if (selectedZoneId) buildRoute(selectedZoneId);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [excludedJobIds]);
 
   const getDirectionsUrlMulti = (stops) => {
     if (!stops.length) return "#";
