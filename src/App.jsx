@@ -3467,7 +3467,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                 <option value="">Select name...</option>
                 {(teamUsers||[]).map(u => {
                   const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
-                  return <option key={u.id} value={label}><Icon name={icon} size={14} style={{verticalAlign:"middle",marginRight:5}}/>{label}</option>;
+                  return <option key={u.id} value={label}>{label}</option>;
                 })}
                 {(offAppWorkers||[]).length > 0 && <option disabled>── Off-App Workers ──</option>}
                 {(offAppWorkers||[]).map(w => (
