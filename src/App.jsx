@@ -6571,6 +6571,7 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
   const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
   const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
   const isDesktopLayout = useIsDesktop();
+  const targetPct = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
 
   return (
     <div>
@@ -6642,7 +6643,6 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
           const netMarginPct = ebitdaTotals.revenue > 0 ? (netProfit / ebitdaTotals.revenue) * 100 : 0;
           const gpPct        = ebitdaTotals.revenue > 0 ? (grossProfit / ebitdaTotals.revenue) * 100 : 0;
           const overheadPct  = ebitdaTotals.revenue > 0 ? (overheadVal / ebitdaTotals.revenue) * 100 : 0;
-          const targetPct    = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
 
           const Card = ({label, value, sub, color, isActual, bold}) => (
             <div style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"14px 16px"}}>
@@ -6689,7 +6689,6 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
           const totalActCosts = (actCOGS ?? estCOGS) + fuelVal2 + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
           const netProfit   = ebitdaTotals.revenue - totalActCosts;
           const netMarginPct = ebitdaTotals.revenue > 0 ? (netProfit / ebitdaTotals.revenue) * 100 : 0;
-          const targetPct    = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
           return (
             <div style={{display:"flex", alignItems:"center", gap:12, padding:"12px 16px", background:C.surface2, borderRadius:8, marginBottom:16, border:`1px solid ${C.border}`}}>
               <div style={{fontSize:18, fontWeight:800, color:netProfit>=0?"#10b981":"#ef4444"}}>{fmtMoney(netProfit)}</div>
