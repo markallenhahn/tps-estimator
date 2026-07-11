@@ -6660,14 +6660,14 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
             <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20}}>
               <Card label="Total Revenue" value={ebitdaTotals.revenue} bold isActual={true}/>
               <Card label="Total Costs"   value={totalActCosts}/>
-              <Card label="Materials (COGS)" value={cogsVal} isActual={actCOGS!==null} color="#ef4444"/>
+              <Card label="Materials (COGS)" value={cogsVal} isActual={actCOGS!==null} color={C.text}/>
               <Card label="Fuel" value={fuelVal}
                 isActual={actFuel !== null} color={C.textMuted}
                 sub={actFuel !== null ? null : "5% est."}/>
-              <Card label="Labor" value={laborVal} isActual={actLabor!==null} color="#f59e0b"
+              <Card label="Labor" value={laborVal} isActual={actLabor!==null} color={C.text}
                 sub={actLabor!==null ? null : `${reportSettings.laborPct||15}% est.`}/>
-              <Card label="Gross Profit" value={grossProfit} color="#3b82f6" sub={fmtPct(gpPct)}/>
-              <Card label={`Overhead (${overheadPct.toFixed(2)}%)`} value={overheadVal} isActual={actOverhead!==null} color="#8b5cf6"/>
+              <Card label="Gross Profit" value={grossProfit} color={C.text} sub={fmtPct(gpPct)}/>
+              <Card label={`Overhead (${overheadPct.toFixed(2)}%)`} value={overheadVal} isActual={actOverhead!==null} color={C.text}/>
               <Card label="Net Profit" value={netProfit}
                 color={netProfit>=0?"#10b981":"#ef4444"} sub={fmtPct(netMarginPct)} bold/>
             </div>
@@ -6757,17 +6757,17 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
                     <td style={{padding:"8px 10px", fontWeight:600}}>{d.job.clientName||"Unnamed"}</td>
                     <td style={{padding:"8px 10px", color:C.textMuted}}>{d.job.date}</td>
                     <td style={{padding:"8px 10px", textAlign:"right"}}>{fmtMoney(d.revenue)}</td>
-                    <td style={{padding:"8px 10px", textAlign:"right", color:"#ef4444"}}>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>
                       {fmtMoney(d.cogs)}
                       {d.cogsIsEstimated && <span style={{fontSize:9, color:C.textMuted, marginLeft:3}}>est.</span>}
                     </td>
-                    <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtMoney(d.grossProfit)}</td>
-                    <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtPct(d.grossMarginPct)}</td>
-                    <td style={{padding:"8px 10px", textAlign:"right", color:"#f59e0b"}}>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(d.grossProfit)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtPct(d.grossMarginPct)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>
                       {fmtMoney(d.jobLabor)}
-                      {d.laborIsEstimated && <span style={{fontSize:9, color:"#f59e0b", marginLeft:3}}>est.</span>}
+                      {d.laborIsEstimated && <span style={{fontSize:9, color:C.textMuted, marginLeft:3}}>est.</span>}
                     </td>
-                    <td style={{padding:"8px 10px", textAlign:"right", color:"#8b5cf6"}}>{fmtMoney(d.overheadAlloc)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(d.overheadAlloc)}</td>
                     <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: d.ebitda >= 0 ? "#10b981" : "#ef4444"}}>{fmtMoney(d.ebitda)}</td>
                     <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: d.ebitdaPct >= 0 ? "#10b981" : "#ef4444"}}>{fmtPct(d.ebitdaPct)}</td>
                   </tr>
@@ -6776,11 +6776,11 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
                 <tr style={{borderTop:`2px solid ${C.border}`, background:C.surface2, fontWeight:700}}>
                   <td colSpan={2} style={{padding:"8px 10px"}}>TOTALS</td>
                   <td style={{padding:"8px 10px", textAlign:"right"}}>{fmtMoney(ebitdaTotals.revenue)}</td>
-                  <td style={{padding:"8px 10px", textAlign:"right", color:"#ef4444"}}>{fmtMoney(ebitdaTotals.cogs)}</td>
-                  <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtMoney(ebitdaTotals.grossProfit)}</td>
-                  <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtPct(ebitdaTotals.revenue>0?(ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100:0)}</td>
-                  <td style={{padding:"8px 10px", textAlign:"right", color:"#f59e0b"}}>{fmtMoney(ebitdaTotals.jobLabor)}</td>
-                  <td style={{padding:"8px 10px", textAlign:"right", color:"#8b5cf6"}}>{fmtMoney(ebitdaTotals.overheadAlloc)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(ebitdaTotals.cogs)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(ebitdaTotals.grossProfit)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtPct(ebitdaTotals.revenue>0?(ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100:0)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(ebitdaTotals.jobLabor)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(ebitdaTotals.overheadAlloc)}</td>
                   <td style={{padding:"8px 10px", textAlign:"right", color:"#10b981"}}>{fmtMoney(ebitdaTotals.ebitda)}</td>
                   <td style={{padding:"8px 10px", textAlign:"right", color:"#10b981"}}>{fmtPct(ebitdaTotals.revenue>0?(ebitdaTotals.ebitda/ebitdaTotals.revenue)*100:0)}</td>
                 </tr>
@@ -6842,11 +6842,11 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
                       <tr key={svcType} style={{borderBottom:`1px solid ${C.border}`, background: i%2===0 ? C.surface : C.surface2}}>
                         <td style={{padding:"8px 10px", fontWeight:600}}>{svcLabel}</td>
                         <td style={{padding:"8px 10px", textAlign:"right"}}>{fmtMoney(totals.revenue)}</td>
-                        <td style={{padding:"8px 10px", textAlign:"right", color:"#ef4444"}}>{fmtMoney(totals.cogs)}</td>
-                        <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtMoney(gp)}</td>
-                        <td style={{padding:"8px 10px", textAlign:"right", color:"#3b82f6"}}>{fmtPct(gpPct)}</td>
-                        <td style={{padding:"8px 10px", textAlign:"right", color:"#f59e0b"}}>{fmtMoney(totals.labor)}</td>
-                        <td style={{padding:"8px 10px", textAlign:"right", color:"#8b5cf6"}}>{fmtMoney(totals.overhead)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(totals.cogs)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(gp)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtPct(gpPct)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(totals.labor)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(totals.overhead)}</td>
                         <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: ebitda>=0?"#10b981":"#ef4444"}}>{fmtMoney(ebitda)}</td>
                         <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: ebitdaPct>=0?"#10b981":"#ef4444"}}>{fmtPct(ebitdaPct)}</td>
                       </tr>
