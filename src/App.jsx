@@ -5020,27 +5020,12 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
   };
 
   const toggleJobExclusion = (zoneId, jobId) => {
-    setExcludedJobIds(prev => {
-      const next = prev.includes(jobId) ? prev.filter(id => id !== jobId) : [...prev, jobId];
-      if (selectedZoneId === zoneId) {
-        // Rebuild immediately using next exclusion list (don't wait for re-render)
-        const zone = zones?.list?.find(z => z.id === zoneId);
-        if (zone) {
-          const zoneJobs = jobs.filter(j => zone.jobIds.includes(j.id) && j.geoLat && j.geoLng && !next.includes(j.id));
-          if (zoneJobs.length > 0) {
-            const points = zoneJobs.map(j => ({ lat: j.geoLat, lng: j.geoLng, job: j }));
-            const base = homeBase?.lat && homeBase?.lng
-              ? { lat: homeBase.lat, lng: homeBase.lng, job: { id:"home", clientName:"Home Base", address: homeBase.address } }
-              : null;
-            const ordered = optimizeRoute(points, base);
-            setOptimizedRoute(ordered.map(p => p.job));
-          } else {
-            setOptimizedRoute([]);
-          }
-        }
-      }
-      return next;
-    });
+    const next = excludedJobIds.includes(jobId)
+      ? excludedJobIds.filter(id => id !== jobId)
+      : [...excludedJobIds, jobId];
+    setExcludedJobIds(next);
+    // Rebuild route immediately with the new exclusion list
+    if (selectedZoneId === zoneId) buildRoute(zoneId, next);
   };
 
   const getDirectionsUrlMulti = (stops) => {
@@ -5432,7 +5417,6 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
   const [year,        setYear]        = useState(today.getFullYear());
   const [month,       setMonth]       = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState(null);
-  const [routeLoading, setRouteLoading] = useState(false);
 
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const DAYS   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -5529,40 +5513,23 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
             <div style={{display:"flex", gap:6, alignItems:"center"}}>
               {planHasFeature(tenantData, "zones") && selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city)).length > 1 && (() => {
                 const routableJobs = selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city));
-                const handleRoute = async () => {
-                  setRouteLoading(true);
-                  let geocodedJobs = [...routableJobs];
-                  for (let i = 0; i < geocodedJobs.length; i++) {
-                    const j = geocodedJobs[i];
-                    const addrStr = fullAddressOf(j);
-                    if (!j.geoLat || !j.geoLng) {
-                      const geo = await geocodeAddress(geocodeQueryOf(j), homeBase);
-                      if (geo) {
-                        geocodedJobs[i] = {...j, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr};
-                        if (setJobs) setJobs(prev => prev.map(jj => jj.id === j.id ? {...jj, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} : jj));
-                        if (tFetch) tFetch("jobs?id=eq."+j.id, { method:"PATCH", headers:{"Prefer":"return=minimal"}, body:JSON.stringify({data:{...j, geoLat:geo.lat, geoLng:geo.lng, geoAddr:addrStr}}) }).catch(()=>{});
-                      }
-                    }
-                  }
-                  const jobPoints = geocodedJobs.filter(j=>j.geoLat&&j.geoLng).map(j=>({...j, lat:j.geoLat, lng:j.geoLng}));
-                  const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng, id:"home"} : null;
-                  const result = jobPoints.length > 0 ? optimizeRoute(jobPoints, hb) : geocodedJobs;
-                  const orderedJobs = result.filter(p=>p.id!=="home");
-                  const homeAddr = homeBase?.address ? encodeURIComponent(homeBase.address) : null;
-                  const waypoints = orderedJobs.map(j=>encodeURIComponent([j.address,j.city].filter(Boolean).join(", ")));
-                  const origin = homeAddr || waypoints[0];
-                  const dest = homeAddr || waypoints[waypoints.length-1];
-                  const middle = homeAddr ? waypoints.join("|") : waypoints.slice(1,-1).join("|");
-                  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
-                  if (middle) url += `&waypoints=${middle}`;
-                  setRouteLoading(false);
-                  window.open(url, "_blank");
-                };
+                const jobPoints = routableJobs.filter(j=>j.geoLat&&j.geoLng).map(j=>({...j, lat:j.geoLat, lng:j.geoLng}));
+                const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng, id:"home"} : null;
+                const ordered = jobPoints.length === routableJobs.length && jobPoints.length > 0
+                  ? optimizeRoute(jobPoints, hb).filter(p=>p.id!=="home")
+                  : routableJobs;
+                const homeAddr = homeBase?.address ? encodeURIComponent(homeBase.address) : null;
+                const waypoints = ordered.map(j=>encodeURIComponent([j.address,j.city].filter(Boolean).join(", ")));
+                const origin = homeAddr || waypoints[0];
+                const dest = homeAddr || waypoints[waypoints.length-1];
+                const middle = homeAddr ? waypoints.join("|") : waypoints.slice(1,-1).join("|");
+                let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
+                if (middle) url += `&waypoints=${middle}`;
                 return (
-                  <button onClick={handleRoute} disabled={routeLoading}
-                    style={{...S.btnSmall, background:"#dbeafe", color:"#1d4ed8", border:"none", cursor:routeLoading?"wait":"pointer", display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", opacity:routeLoading?0.6:1}}>
-                    {routeLoading ? "⏳ Routing..." : `🗺 Route ${routableJobs.length} Jobs`}
-                  </button>
+                  <a href={url} target="_blank" rel="noopener noreferrer"
+                    style={{...S.btnSmall, background:"#dbeafe", color:"#1d4ed8", textDecoration:"none", display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap"}}>
+                    🗺 Route {routableJobs.length} Jobs
+                  </a>
                 );
               })()}
               <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => setSelectedDay(null)}>✕</button>
