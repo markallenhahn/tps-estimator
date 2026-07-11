@@ -7130,7 +7130,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 }
 
 // ─── Costs View ───────────────────────────────────────────────────────────────
-function CostsView({ currentJob, updateJob, rates, expenses }) {
+function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={} }) {
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const SEALCOAT_PRICE_PER_GAL = 4.33;
@@ -7186,7 +7186,8 @@ function CostsView({ currentJob, updateJob, rates, expenses }) {
   // ── Profitability using actuals ──
   const grossProfit  = revenue - actTotal;
   const grossMargin  = revenue > 0 ? (grossProfit/revenue)*100 : 0;
-  const overhead     = revenue * 0.1645;
+  const overheadPct_ = (reportSettings.overheadPct || 16.45) / 100;
+  const overhead     = revenue * overheadPct_;
   const netProfit    = grossProfit - overhead;
   const netMargin    = revenue > 0 ? (netProfit/revenue)*100 : 0;
 
@@ -7371,7 +7372,7 @@ function CostsView({ currentJob, updateJob, rates, expenses }) {
           ["Total Costs", formatCurrency(actTotal), C.text],
           ["Gross Profit", formatCurrency(grossProfit), grossProfit>=0?C.green:C.danger],
           ["Gross Margin", grossMargin.toFixed(1)+"%", grossMargin>=52?C.green:C.danger],
-          ["Overhead (16.45%)", "− "+formatCurrency(overhead), C.textMuted],
+          [`Overhead (${(reportSettings.overheadPct||16.45).toFixed(2)}%)`, "− "+formatCurrency(overhead), C.textMuted],
           ["Net Profit", formatCurrency(netProfit), netProfit>=0?C.green:C.danger],
           ["Net Margin", netMargin.toFixed(1)+"%", netMargin>=0?C.green:C.danger],
         ].map(([label, val, color]) => (
@@ -15058,7 +15059,7 @@ function App() {
         }
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} reportSettings={reportSettings}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
