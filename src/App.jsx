@@ -15503,6 +15503,7 @@ function App() {
         </div>
       </div>
     </div>
+    </IconStyleContext.Provider>
   );
 }
 
