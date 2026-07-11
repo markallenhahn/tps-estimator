@@ -3969,16 +3969,22 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
         const svcMap = materialSettings?.serviceMappings || {};
         const linkedSvcs = Object.keys(svcMap).filter(svc => (svcMap[svc]||[]).includes(reconcilMatType));
 
+        // Assign each job to exactly one period based on its LAST scheduled day (completion date).
+        // This prevents multi-day jobs from being counted in multiple periods.
+        const jobLastDate = (j) => {
+          const days = (j.scheduleDays||[]).filter(d=>d.date).map(d=>d.date).sort();
+          return days.length > 0 ? days[days.length-1] : (j.date||);
+        };
+        const allLinkedJobs = (jobs||[]).filter(j => {
+          if (linkedSvcs.length === 0) return true;
+          return (j.areas||[]).some(a=>linkedSvcs.includes(a.serviceType));
+        });
+
         // For each period, find jobs with service dates in that period
         const enrichedPeriods = filteredPeriods.map(p => {
-          const periodJobs = (jobs||[]).filter(j => {
-            return (j.scheduleDays||[]).some(day => {
-              if (!day.date) return false;
-              if (day.date < p.openDate || day.date > p.closeDate) return false;
-              return linkedSvcs.length === 0 ||
-                (day.services||[]).some(s=>linkedSvcs.includes(s.type)) ||
-                (j.areas||[]).some(a=>linkedSvcs.includes(a.serviceType));
-            });
+          const periodJobs = allLinkedJobs.filter(j => {
+            const lastDate = jobLastDate(j);
+            return lastDate >= p.openDate && lastDate <= p.closeDate;
           });
 
           // Estimate used across jobs in period
@@ -4000,10 +4006,9 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           return { ...p, periodJobs, estUsed, wasteFactor };
         });
 
-        // Running totals — only count periods with positive actual usage (skip fill-up/zero periods)
-        const validPeriods = enrichedPeriods.filter(p => p.actualUsed > 0);
-        const totalActual = validPeriods.reduce((s,p)=>s+p.actualUsed,0);
-        const totalEst    = validPeriods.reduce((s,p)=>s+p.estUsed,0);
+        // Running totals
+        const totalActual = enrichedPeriods.reduce((s,p)=>s+p.actualUsed,0);
+        const totalEst    = enrichedPeriods.reduce((s,p)=>s+p.estUsed,0);
         const runningWF   = totalEst > 0 ? totalActual/totalEst : null;
 
         return (
@@ -4105,7 +4110,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
 
                 {/* Running totals */}
                 <div style={{background:C.surface2, borderRadius:10, padding:"14px 16px", border:`1px solid ${C.border}`}}>
-                  <div style={{fontWeight:700, fontSize:14, marginBottom:10}}>Running Totals ({validPeriods.length} valid period{validPeriods.length!==1?"s":""})</div>
+                  <div style={{fontWeight:700, fontSize:14, marginBottom:10}}>Running Totals ({enrichedPeriods.length} period{enrichedPeriods.length!==1?"s":""})</div>
                   <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12}}>
                     {[
                       ["Total Actual Used", `${totalActual.toFixed(1)} ${unit}`],
@@ -4131,7 +4136,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                       matLabel: matType?.label,
                       from: reconcilFrom || enrichedPeriods[0]?.openDate,
                       to: reconcilTo || enrichedPeriods[enrichedPeriods.length-1]?.closeDate,
-                      periodsCount: validPeriods.length,
+                      periodsCount: enrichedPeriods.length,
                       runningWasteFactor: runningWF,
                       jobsUpdated: [],
                     };
