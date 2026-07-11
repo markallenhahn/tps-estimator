@@ -7298,7 +7298,44 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
           estAsphalt, "asphalt",
           `${patchTons.toFixed(2)} tons × $${ASPHALT_PER_TON}/ton`
         )}
-        {costRow("Fuel (5%)", estFuel, "fuel", `${formatCurrency(revenue)} × 5%`)}
+        {/* Fuel: show expense-allocated actual if available */}
+        {(() => {
+          const fuelActRaw = actuals["fuel"];
+          const fuelHasManual = fuelActRaw !== undefined && fuelActRaw !== null && fuelActRaw !== "";
+          const fuelDisplay = fuelHasManual ? Number(fuelActRaw) : actFuel;
+          const fuelHasAct = fuelDisplay !== estFuel;
+          const fuelDiff = fuelDisplay - estFuel;
+          const fuelLabel = actualFuelExp > 0 ? "Fuel (actual, by rev share)" : "Fuel (5%)";
+          const fuelSub = actualFuelExp > 0
+            ? `${formatCurrency(actualFuelExp)} total × ${(revenueShare_*100).toFixed(1)}% share`
+            : `${formatCurrency(revenue)} × 5%`;
+          return (
+            <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
+                <div>
+                  <div style={{fontSize:13, color:C.text, fontWeight:600}}>{fuelLabel}</div>
+                  <div style={{fontSize:11, color:C.textDim, marginTop:1}}>{fuelSub}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:11, color:C.textMuted}}>Est: {formatCurrency(estFuel)}</div>
+                  {fuelHasAct && <div style={{fontSize:12, fontWeight:700, color:fuelDiff>0?C.danger:C.green}}>
+                    Act: {formatCurrency(fuelDisplay)} ({fuelDiff>0?"+":""}{formatCurrency(fuelDiff)})
+                  </div>}
+                </div>
+              </div>
+              <div style={{display:"flex", gap:6, alignItems:"center"}}>
+                <span style={{fontSize:12, color:C.textMuted, flexShrink:0}}>Actual $</span>
+                <input type="number" min="0" step="0.01"
+                  value={fuelHasManual ? fuelActRaw : (actualFuelExp>0 ? actFuel.toFixed(2) : "")}
+                  onChange={e => updateActual("fuel", e.target.value)}
+                  placeholder={formatCurrency(actFuel).replace("$","")}
+                  style={{...S.input, flex:1, fontSize:12, padding:"5px 8px"}}/>
+                {fuelHasManual && <button style={{...S.btnSmall, fontSize:11, padding:"4px 8px", background:"#ffedd5", color:C.textMuted}}
+                  onClick={() => updateActual("fuel", "")}>Reset</button>}
+              </div>
+            </div>
+          );
+        })()}
         {costRow("Labor (16%)", estLabor, "labor", `${formatCurrency(revenue)} × 16%`)}
 
         {/* Stone */}
