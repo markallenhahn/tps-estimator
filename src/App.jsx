@@ -6460,10 +6460,10 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
           );
         })()}
 
-        {/* EBITDA target row */}
+        {/* EBITDA target row — uses same vars as summary cards above */}
         {(() => {
+          const actFuel2 = (cogsBySubcat["Fuel"] || 0) + (cogsBySubcat["fuel"] || 0);
           const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
-          // Use actual labor from labor tab (via ebitdaTotals.jobLabor) if any entries exist
           const actLaborFromTab = ebitdaTotals.jobLabor > 0 ? ebitdaTotals.jobLabor : null;
           const actLaborFromExp = periodExpLabor > 0 ? periodExpLabor : null;
           const actLabor = actLaborFromTab ?? actLaborFromExp;
@@ -6471,7 +6471,8 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
           const estCOGS     = periodRevenue * (reportSettings.cogsPct||35) / 100;
           const estLabor    = periodRevenue * (reportSettings.laborPct||15) / 100;
           const estOverhead = periodRevenue * (reportSettings.overheadPct||15) / 100;
-          const totalActCosts = (actCOGS ?? estCOGS) + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
+          const fuelVal2    = actFuel2 > 0 ? actFuel2 : ebitdaTotals.revenue * 0.05;
+          const totalActCosts = (actCOGS ?? estCOGS) + fuelVal2 + (actLabor ?? estLabor) + (actOverhead ?? estOverhead);
           const netProfit   = ebitdaTotals.revenue - totalActCosts;
           const netMarginPct = ebitdaTotals.revenue > 0 ? (netProfit / ebitdaTotals.revenue) * 100 : 0;
           const targetPct    = Math.max(0, 100 - (reportSettings.cogsPct||35) - (reportSettings.laborPct||15) - (reportSettings.overheadPct||15));
