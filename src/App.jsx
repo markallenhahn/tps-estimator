@@ -517,6 +517,70 @@ function TabIcon({ tabKey, iconStyle, size = 18 }) {
   return <LucideIcon size={size} strokeWidth={2}/>;
 }
 
+
+// ─── Global icon style context ────────────────────────────────────────────────
+// Lets every component read iconStyle without explicit prop-drilling.
+const IconStyleContext = React.createContext("emoji");
+
+// Maps Lucide icon names to emoji fallbacks for all non-tab icons used in the app.
+const ICON_EMOJIS = {
+  Save:           "💾",
+  Trash2:         "🗑",
+  Camera:         "📷",
+  Mail:           "✉️",
+  MessageSquare:  "💬",
+  MessageCircle:  "💬",
+  Copy:           "📋",
+  FileText:       "📄",
+  Send:           "📤",
+  DollarSign:     "💰",
+  Clock:          "🕐",
+  CalendarCheck:  "📅",
+  Pencil:         "✏️",
+  Plus:           "➕",
+  Ruler:          "📏",
+  Upload:         "📤",
+  Table2:         "📊",
+  Globe:          "🌐",
+  Home:           "🏠",
+  Info:           "ℹ️",
+  Unlock:         "🔓",
+  ChevronDown:    "▾",
+  Phone:          "📞",
+  ClipboardList:  "📋",
+  ClipboardEdit:  "📝",
+  LayoutDashboard:"📊",
+  Beaker:         "🧴",
+  Receipt:        "🧾",
+  Map:            "🗺",
+  Check:          "✓",
+  BarChart3:      "📊",
+  Contact:        "📇",
+  HardHat:        "👷",
+  CreditCard:     "💳",
+  ShieldCheck:    "🛠",
+  User:           "👤",
+  Users:          "👥",
+  Settings:       "⚙️",
+  HelpCircle:     "❓",
+  DollarSign:     "💰",
+  AlertTriangle:  "⚠️",
+};
+
+// Drop-in replacement for <Icon name="X" size={16}/> that respects iconStyle.
+// Usage: <Icon name="Save" size={15} style={{...}}/> or <Icon name="Trash2"/>
+function Icon({ name, size = 16, style = {}, className }) {
+  const iconStyle = React.useContext(IconStyleContext);
+  if (iconStyle === "lucide") {
+    const LucideIcon = LucideIcons[name];
+    if (LucideIcon) return <LucideIcon size={size} strokeWidth={2} style={style} className={className}/>;
+  }
+  const emoji = ICON_EMOJIS[name] || "•";
+  const emojiStyle = { fontSize: size * 0.9, lineHeight: 1, verticalAlign: style.verticalAlign || "middle",
+    marginRight: style.marginRight, marginLeft: style.marginLeft, display:"inline-block" };
+  return <span style={emojiStyle} className={className}>{emoji}</span>;
+}
+
 // ─── Default permissions matrix ────────────────────────────────────────────────
 // Each tab maps to an access level per role: "hidden" | "view" | "edit"
 // Stored in Supabase (table: permissions) so admins can change it live.
@@ -672,7 +736,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
             <button onClick={() => setView("platform-admin")}
               style={{...S.sidebarTab,...(view==="platform-admin"?S.sidebarTabActive:{})}}>
               <TabIcon tabKey="owner" iconStyle={iconStyle} size={18}/>
-              <span><LucideIcons.Globe size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Platform Admin</span>
+              <span><Icon name="Globe" size={16} style={{verticalAlign:"middle",marginRight:6}/> Platform Admin</span>
             </button>
           )}
           <div style={S.sidebarDivider}/>
@@ -725,7 +789,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
               data-active={view==="platform-admin"?"true":"false"}
               style={{...S.navTab, color: view==="platform-admin" ? C.accent : C.textMuted, borderBottomColor: view==="platform-admin" ? C.accent : "transparent"}}>
               <span style={S.navTabIcon}><TabIcon tabKey="owner" iconStyle={iconStyle} size={16}/></span>
-              <span style={S.navTabLabel}>🌐 Platform</span>
+              <span style={S.navTabLabel}><Icon name="Globe" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Platform</span>
             </button>
           </>
         )}
@@ -828,7 +892,7 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
         <div style={{background:"#dcfce7", border:"1px solid #bbf7d0", borderRadius:8, padding:"8px 14px", marginBottom:12, fontSize:12, color:C.green, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap"}}>
           <span>✎ Editing rates for <strong>{currentJob.clientName||"this job"}</strong> only — does not affect other jobs or defaults.</span>
           <button style={{...S.btnSecondary, fontSize:11, padding:"4px 10px", flexShrink:0}} onClick={() => setCurrentJob && setCurrentJob(null)}>
-            🌐 Switch to Global Rates
+            <Icon name="Globe" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Switch to Global Rates
           </button>
         </div>
       ) : (
@@ -960,7 +1024,7 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
           </div>
         </div>
         <div style={{...S.btnRow, marginTop:16}}>
-          <button style={S.btnPrimary} onClick={save}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Rates</button>
+          <button style={S.btnPrimary} onClick={save}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Rates</button>
           <button style={S.btnSecondary} onClick={reset}>↩ Reset</button>
         </div>
       </section>
@@ -997,7 +1061,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
   return (
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
-        <h1 style={S.h1}><LucideIcons.Home size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Home Base</h1>
+        <h1 style={S.h1}><Icon name="Home" size={16} style={{verticalAlign:"middle",marginRight:6}/> Home Base</h1>
       </div>
       <p style={S.subhead}>Route start/end point</p>
       <section style={S.section}>
@@ -1031,7 +1095,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
         )}
         {homeMsg && <div style={{fontSize:12, color: homeMsg.startsWith("⚠️") ? C.danger : C.green, marginTop:8}}>{homeMsg}</div>}
         <button style={{...S.btnPrimary, marginTop:12, opacity:savingHome?0.6:1}} onClick={saveHomeBase} disabled={savingHome}>
-          {savingHome ? "Saving..." : <><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Home Base</>}
+          {savingHome ? "Saving..." : <><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Home Base</>}
         </button>
       </section>
     </div>
@@ -1355,7 +1419,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
         {deleteJob && (!estimatorLocked || currentJob.createdBy === userId) && (
           <button onClick={() => { if (confirm(`Delete this job for ${currentJob.clientName||"this client"}? This can't be undone.`)) { deleteJob(currentJob.id); setView("jobs"); } }}
             style={{fontSize:12, color:C.danger, background:"none", border:"none", cursor:"pointer", padding:0}}>
-            🗑 Delete Job
+            <Icon name="Trash2" size={14} style={{verticalAlign:"middle",marginRight:5}}/> Delete Job
           </button>
         )}
       </div>
@@ -1485,7 +1549,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 <button style={S.btnPrimary} onClick={() => {
                   if (!confirm("Did you actually send the estimate to the client?\n\nClick OK to confirm and move this job to Sent status, or Cancel to go back.")) return;
                   updateJob(j => ({...j, status:"sent", readyForReview:false, statusChangedAt: new Date().toISOString(), estimateSentDate: j.estimateSentDate || new Date().toISOString().slice(0,10)}));
-                }}>📤 Send Estimate</button>
+                }}><Icon name="Send" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Send Estimate</button>
                 <button style={S.btnSecondary} onClick={() => setShowKickBack(true)}>↩ Kick Back</button>
               </div>
             )}
@@ -1540,7 +1604,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             {showPayModal && (
               <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
                 <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-                  <h2 style={{...S.h2, marginTop:0}}><LucideIcons.DollarSign size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Mark as Paid</h2>
+                  <h2 style={{...S.h2, marginTop:0}}><Icon name="DollarSign" size={16} style={{verticalAlign:"middle",marginRight:6}/> Mark as Paid</h2>
                   <div style={{display:"flex", flexDirection:"column", gap:12}}>
                     <label style={S.formLabel}>Payment Date
                       <input type="date" value={payModalDate}
@@ -1665,7 +1729,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                     <div style={{width:160, flexShrink:0}}>
                       <input type="date" value={d.date||""} onChange={e => updateDay(i, "date", e.target.value)} style={{...S.input}}/>
                     </div>
-                    <button onClick={() => removeDay(i)} style={{...S.btnSmallDanger, marginLeft:"auto"}}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
+                    <button onClick={() => removeDay(i)} style={{...S.btnSmallDanger, marginLeft:"auto"}}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}/></button>
                   </div>
                   {/* Service types for this day */}
                   <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center"}}>
@@ -1820,7 +1884,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             <img src={currentJob.signature} alt="Company Signature"
               style={{display:"block", maxWidth:260, marginTop:10, borderRadius:6, border:`1px solid ${C.border}`}}/>
             <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={clearSig}>
-              🗑 Remove Signature
+              <Icon name="Trash2" size={14} style={{verticalAlign:"middle",marginRight:5}}/> Remove Signature
             </button>
           </div>
         ) : (
@@ -1838,7 +1902,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               />
             </div>
             <div style={{display:"flex", gap:10, marginTop:10}}>
-              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearSig}><LucideIcons.Trash2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Clear</button>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearSig}><Icon name="Trash2" size={15} style={{verticalAlign:"middle",marginRight:5}/> Clear</button>
               <button style={{...S.btnPrimary, flex:1}} onClick={async () => {
                 const c = sigCanvasRef.current; if (!c) return;
                 const px = c.getContext("2d").getImageData(0,0,c.width,c.height).data;
@@ -2164,7 +2228,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                       )}
                     </div>
                     <div style={{display:"flex", gap:8}}>
-                      <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
+                      <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save</button>
                       <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
                     </div>
                   </div>
@@ -2213,7 +2277,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             </button>
             {!isDesktop && (
               <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}>
-                <LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Take Photo
+                <Icon name="Camera" size={15} style={{verticalAlign:"middle",marginRight:5}/> Take Photo
               </button>
             )}
           </div>
@@ -2222,7 +2286,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             <video ref={videoRef} autoPlay muted playsInline style={S.cameraPreview}/>
             <canvas ref={canvasRef} style={{display:"none"}}/>
             <div style={S.cameraControls}>
-              <button style={S.btnShoot} onClick={takePhoto}><LucideIcons.Camera size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Capture</button>
+              <button style={S.btnShoot} onClick={takePhoto}><Icon name="Camera" size={15} style={{verticalAlign:"middle",marginRight:5}/> Capture</button>
               <button style={S.btnCancel} onClick={stopStream}>Cancel</button>
             </div>
           </div>
@@ -2251,7 +2315,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {showApptModal && createPortal(
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.CalendarCheck size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Set Estimator Appointment</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="CalendarCheck" size={16} style={{verticalAlign:"middle",marginRight:6}/> Set Estimator Appointment</h2>
             {(() => {
               const assignee = teamUsers.find(u => u.id === apptAssignId);
               const assigneeName = assignee ? [assignee.first_name, assignee.last_name].filter(Boolean).join(" ") || assignee.email : "Estimator";
@@ -2912,7 +2976,7 @@ ${email}`:""}`;
       {showSentConfirm && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Send size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Did you send the {invoiceType==="paid"?"receipt":"invoice"}?</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="Send" size={16} style={{verticalAlign:"middle",marginRight:6}/> Did you send the {invoiceType==="paid"?"receipt":"invoice"}?</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
               Confirming will record today as the sent date.
             </p>
@@ -2934,7 +2998,7 @@ ${email}`:""}`;
       {showEmailModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Mail size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>The PDF will be generated and sent directly to the client's inbox.</p>
             <label style={S.formLabel}>Client Email *
               <input type="email" value={emailTo} onChange={e => setEmailTo(e.target.value)}
@@ -2955,7 +3019,7 @@ ${email}`:""}`;
       {showTextModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.MessageSquare size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="MessageSquare" size={16} style={{verticalAlign:"middle",marginRight:6}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>The PDF will be uploaded and a link sent via your phone's SMS app.</p>
             <label style={S.formLabel}>Client Phone *
               <input type="tel" value={textTo} onChange={e => setTextTo(e.target.value)}
@@ -2988,11 +3052,11 @@ ${email}`:""}`;
                 setPdfLoading(false);
               }
             }} disabled={pdfLoading}>
-            {pdfLoading ? "⏳ Building PDF..." : <><LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF</>}
+            {pdfLoading ? "⏳ Building PDF..." : <><Icon name="FileText" size={15} style={{verticalAlign:"middle",marginRight:5}/> Download PDF</>}
           </button>
-          <button style={S.btnSecondary} onClick={emailInvoice}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email PDF</button>
-          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><LucideIcons.MessageSquare size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Text PDF</button>
-          <button style={S.btnSecondary} onClick={copyInvoice}><LucideIcons.Copy size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Copy Text</button>
+          <button style={S.btnSecondary} onClick={emailInvoice}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}/> Email PDF</button>
+          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><Icon name="MessageSquare" size={15} style={{verticalAlign:"middle",marginRight:5}/> Text PDF</button>
+          <button style={S.btnSecondary} onClick={copyInvoice}><Icon name="Copy" size={15} style={{verticalAlign:"middle",marginRight:5}/> Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
 
@@ -3006,14 +3070,14 @@ ${email}`:""}`;
                   `${currentJob.clientName || "Hi"}, Thank you for choosing ${CS_NAME || "us"}. We would love your feedback and would welcome a review on our Google profile. Regards, ${CS_NAME || "us"}. ${CS_GOOGLE_REVIEW_URL}`
                 )}`}
                   style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}>
-                  💬 Text Review Request
+                  <Icon name="MessageSquare" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Text Review Request
                 </a>
               )}
               {currentJob.clientEmail && (
                 <a href={`mailto:${currentJob.clientEmail}?subject=${encodeURIComponent("We'd love your feedback!")}&body=${encodeURIComponent(
                   `${currentJob.clientName || "Hi"},\n\nThank you for choosing ${CS_NAME || "us"}. We would love your feedback and would welcome a review on our Google profile.\n\nRegards,\n${CS_NAME || "us"}\n\n${CS_GOOGLE_REVIEW_URL}`
                 )}`}
-                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email Review Request
+                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}/> Email Review Request
                 </a>
               )}
               {!currentJob.clientPhone && !currentJob.clientEmail && (
@@ -3251,7 +3315,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
       {/* Clock In / Out with GPS — mobile/tablet only; desktop uses manual entry below */}
       {!isDesktop && (
       <section style={{...S.section, border:`2px solid ${activeClock ? C.green : C.border}`}}>
-        <h2 style={S.h2}><LucideIcons.Clock size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Clock {activeClock ? "Out" : "In"}</h2>
+        <h2 style={S.h2}><Icon name="Clock" size={16} style={{verticalAlign:"middle",marginRight:6}/> Clock {activeClock ? "Out" : "In"}</h2>
         {!activeClock ? (
           <>
             <div style={{background:C.surface2, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
@@ -3403,7 +3467,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                 <option value="">Select name...</option>
                 {(teamUsers||[]).map(u => {
                   const label = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
-                  return <option key={u.id} value={label}>{label}</option>;
+                  return <option key={u.id} value={label}><Icon name={icon} size={14} style={{verticalAlign:"middle",marginRight:5}}/>{label}</option>;
                 })}
                 {(offAppWorkers||[]).length > 0 && <option disabled>── Off-App Workers ──</option>}
                 {(offAppWorkers||[]).map(w => (
@@ -3476,7 +3540,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                       </select>
                     </div>
                     <div style={{display:"flex", gap:8}}>
-                      <button style={{...S.btnPrimary, flex:1, fontSize:12}} onClick={() => saveEdit(e)}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
+                      <button style={{...S.btnPrimary, flex:1, fontSize:12}} onClick={() => saveEdit(e)}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save</button>
                       <button style={{...S.btnSecondary, flex:1, fontSize:12}} onClick={cancelEdit}>Cancel</button>
                     </div>
                   </div>
@@ -3921,7 +3985,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
 
       {/* Sub-tab nav */}
       <div style={{display:"flex", gap:8, marginBottom:16, flexWrap:"wrap"}}>
-        {[["inventory","🧴 Inventory & Purchases"],["reconciliation","📊 Reconciliation"]].map(([key,label]) => (
+        {[["inventory","Inventory & Purchases","Beaker"],["reconciliation","Reconciliation","BarChart3"]].map(([key,label,icon]) => (
           <button key={key} onClick={() => setMatTab(key)}
             style={{
               flex:1, padding:"8px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
@@ -4243,7 +4307,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                         });
                         setReconcilLog(prev => prev.filter(l => l.id !== log.id));
                       }}>
-                        <LucideIcons.Trash2 size={13} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
+                        <Icon name="Trash2" size={13} style={{verticalAlign:"middle",marginRight:4}/>
                         Delete & Revert
                       </button>
                     </div>
@@ -4417,7 +4481,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                   );
                 })}
               </div>
-              <button style={S.btnPrimary} onClick={saveSettings}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Settings</button>
+              <button style={S.btnPrimary} onClick={saveSettings}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Settings</button>
             </>
           )}
         </section>
@@ -4555,7 +4619,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <input value={checkNotes} onChange={e => setCheckNotes(e.target.value)} style={S.input} placeholder="e.g. tank filled to 480 gal"/>
             </label>
           </div>
-          <button style={S.btnPrimary} onClick={addCheck}><LucideIcons.Ruler size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Log Stock Check</button>
+          <button style={S.btnPrimary} onClick={addCheck}><Icon name="Ruler" size={15} style={{verticalAlign:"middle",marginRight:5}/> Log Stock Check</button>
           <div style={{marginTop:14, display:"flex", flexWrap:"wrap", gap:10}}>
             {BUILTIN_MATERIAL_TYPES.filter(m => m.key !== "other" && !m.key.startsWith("paint_") && !m.key.startsWith("custom_")).map(m => {
               const lc = lastCheckFor(m.key);
@@ -4571,7 +4635,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                     <span style={{color:C.textMuted}}>
                       {lc ? `${lc.qty} ${u} on ${new Date(lc.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}` : "no check logged"}
                     </span>
-                    <LucideIcons.ChevronDown size={12} strokeWidth={2} style={{marginLeft:"auto", transform: isExpanded?"rotate(180deg)":"none", transition:"transform 0.15s"}}/>
+                    <Icon name="ChevronDown" size={12} style={{marginLeft:"auto", transform: isExpanded?"rotate(180deg)":"none", transition:"transform 0.15s"}/>
                   </div>
                   {isExpanded && (
                     <div style={{borderTop:`1px solid ${C.border}`, padding:"8px 10px", minWidth:240}}>
@@ -4586,7 +4650,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                           </div>
                           {canEdit && (
                             <button style={{...S.btnSmallDanger, marginLeft:8}} onClick={e => { e.stopPropagation(); if(confirm("Delete this stock check?")) deleteStockCheck(c.id); }}>
-                              <LucideIcons.Trash2 size={12} strokeWidth={2} style={{verticalAlign:"middle"}}/>
+                              <Icon name="Trash2" size={12} style={{verticalAlign:"middle"}/>
                             </button>
                           )}
                         </div>
@@ -4740,7 +4804,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <div style={{display:"flex", alignItems:"center", gap:10}}>
                 <span style={{fontWeight:700, color:C.accent}}>{formatCurrency(m.cost)}</span>
                 {canEdit && (
-                  <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this purchase entry?")) deleteMaterial(m.id); }}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
+                  <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this purchase entry?")) deleteMaterial(m.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}/></button>
                 )}
               </div>
             </div>
@@ -5139,7 +5203,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
               color: tab===t ? "#000" : C.textMuted,
               border: `1px solid ${tab===t ? C.accent : C.border}`,
             }}>
-            {t==="list" ? "📋 List" : t==="map" ? "🗺 Map" : "📤 Import"}
+            {t==="list" ? <><Icon name="ClipboardList" size={14} style={{verticalAlign:"middle",marginRight:4}}/> List</> : t==="map" ? <><Icon name="Map" size={14} style={{verticalAlign:"middle",marginRight:4}}/> Map</> : <><Icon name="Upload" size={14} style={{verticalAlign:"middle",marginRight:4}}/> Import</>}
           </button>
         ))}
       </div>
@@ -5212,7 +5276,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
                   {!editingNames ? (
                     <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={startEditingNames}>✎ Rename</button>
                   ) : (
-                    <button style={{...S.btnPrimary, fontSize:12, padding:"4px 10px"}} onClick={saveZoneNames}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
+                    <button style={{...S.btnPrimary, fontSize:12, padding:"4px 10px"}} onClick={saveZoneNames}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save</button>
                   )}
                 </div>
                 {zonesList.map((z, i) => (
@@ -5277,7 +5341,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
           </p>
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileSelect} style={{display:"none"}}/>
           <button style={S.btnSecondary} onClick={() => fileInputRef.current?.click()}>
-            📄 Choose CSV File
+            <Icon name="FileText" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Choose CSV File
           </button>
           {csvFile && (
             <div style={{marginTop:10, fontSize:13, color:C.textMuted}}>
@@ -6346,7 +6410,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
         <div style={{display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", marginBottom:14}}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, email, address..."
             style={{...S.input, flex:1, minWidth:200}}/>
-          <button style={S.btnSecondary} onClick={exportToExcel}><LucideIcons.Table2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Export to Excel</button>
+          <button style={S.btnSecondary} onClick={exportToExcel}><Icon name="Table2" size={15} style={{verticalAlign:"middle",marginRight:5}/> Export to Excel</button>
         </div>
       </section>
 
@@ -6470,7 +6534,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                     <span style={{fontSize:11, color:C.textMuted, display:"flex", alignItems:"center", gap:8}}>
                       {new Date(l.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                       {canEdit && (
-                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
+                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}/></button>
                       )}
                     </span>
                   </div>
@@ -6584,7 +6648,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                     <span style={{fontSize:11, color:C.textMuted, display:"flex", alignItems:"center", gap:8}}>
                       {new Date(l.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                       {canEdit && (
-                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><LucideIcons.Trash2 size={14} strokeWidth={2} style={{verticalAlign:"middle"}}/></button>
+                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}/></button>
                       )}
                     </span>
                   </div>
@@ -7355,7 +7419,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
             color: mode==="ebitda" ? "#000" : C.textMuted,
             border: `1px solid ${mode==="ebitda" ? C.accent : C.border}`,
           }}>
-          📊 Profitability
+          <Icon name="BarChart3" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Profitability
         </button>
         <button onClick={() => setMode("outstanding")}
           style={{
@@ -7364,7 +7428,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
             color: mode==="outstanding" ? "#000" : C.textMuted,
             border: `1px solid ${mode==="outstanding" ? C.accent : C.border}`,
           }}>
-          🧾 Outstanding Invoices
+          <Icon name="Receipt" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Outstanding Invoices
         </button>
       </div>
 
@@ -7974,7 +8038,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
             {profileErr && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{profileErr}</div>}
             {profileMsg && <div style={{color:C.green, fontSize:13, marginTop:10}}>{profileMsg}</div>}
             <button style={{...S.btnPrimary, marginTop:14, opacity:savingProfile?0.6:1}} onClick={saveProfile} disabled={savingProfile}>
-              {savingProfile ? "Saving..." : <><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Info</>}
+              {savingProfile ? "Saving..." : <><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Info</>}
             </button>
           </>
         )}
@@ -8189,7 +8253,7 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, sy
               color: iconStyle!=="lucide" ? "#000" : C.textMuted,
               border: `1px solid ${iconStyle!=="lucide" ? C.accent : C.border}`,
             }}>
-            📋 Emoji Icons
+            <Icon name="ClipboardList" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Emoji Icons
           </button>
           <button onClick={() => syncIconStyle("lucide")}
             style={{
@@ -8199,7 +8263,7 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, sy
               color: iconStyle==="lucide" ? "#000" : C.textMuted,
               border: `1px solid ${iconStyle==="lucide" ? C.accent : C.border}`,
             }}>
-            <LucideIcons.ClipboardList size={16}/> Line Icons
+            <Icon name="ClipboardList" size={16}/> Line Icons
           </button>
         </div>
       </section>
@@ -8423,7 +8487,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   return (
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
-        <h1 style={S.h1}><LucideIcons.Globe size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Platform Admin</h1>
+        <h1 style={S.h1}><Icon name="Globe" size={16} style={{verticalAlign:"middle",marginRight:6}/> Platform Admin</h1>
         <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Exit</button>
       </div>
       <p style={S.subhead}>BlacktopIQ operator tools — not visible to any company's owner.</p>
@@ -8539,7 +8603,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
 
         return (
           <section style={S.section}>
-            <h2 style={S.h2}><LucideIcons.MessageSquare size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Feedback Pipeline</h2>
+            <h2 style={S.h2}><Icon name="MessageSquare" size={16} style={{verticalAlign:"middle",marginRight:6}/> Feedback Pipeline</h2>
 
             {/* Summary cards */}
             <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(130px,1fr))", gap:10, marginBottom:20}}>
@@ -8637,7 +8701,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                       <div style={{display:"flex", gap:6, flexShrink:0}}>
                         <button style={{...S.btnSmall, color:C.danger, flexShrink:0}}
                           onClick={() => { if (confirm("Delete this feedback item? This cannot be undone.")) deleteFeedback(f.id); }}>
-                          🗑 Delete
+                          <Icon name="Trash2" size={13} style={{verticalAlign:"middle",marginRight:4}}/> Delete
                         </button>
                         <button style={{...S.btnSmall, flexShrink:0}} onClick={() => setSelectedFeedback(null)}>✕ Close</button>
                       </div>
@@ -8674,7 +8738,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
 
                       {/* Reply button */}
                       <button style={S.btnPrimary} onClick={() => { setReplyModal(f); setReplyBody(""); setReplyError(""); }}>
-                        <LucideIcons.Mail size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Reply to {f.submitter_name||"User"}
+                        <Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}/> Reply to {f.submitter_name||"User"}
                       </button>
 
                       {/* Internal notes */}
@@ -8736,7 +8800,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
         {replyModal && createPortal(
           <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
             <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:520, boxShadow:"0 8px 32px rgba(0,0,0,0.18)", maxHeight:"90vh", overflowY:"auto"}}>
-              <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Mail size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Reply to {replyModal.submitter_name||"User"}</h2>
+              <h2 style={{...S.h2, marginTop:0}}><Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}/> Reply to {replyModal.submitter_name||"User"}</h2>
               <div style={{background:C.surface2, borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:12, color:C.textMuted}}>
                 <div style={{fontWeight:700, color:C.text, marginBottom:4}}>{replyModal.title}</div>
                 <div style={{whiteSpace:"pre-wrap"}}>{replyModal.body}</div>
@@ -8882,7 +8946,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
         {message && <div style={{color:C.green, fontSize:13, marginTop:14}}>{message}</div>}
         {!readOnly && <div style={{display:"flex", gap:8, marginTop:14}}>
           <button style={{...S.btnPrimary, flex:1, opacity:saving?0.6:1}} onClick={save} disabled={saving}>
-            {saving ? "Saving..." : <><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Permissions</>}
+            {saving ? "Saving..." : <><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Permissions</>}
           </button>
           <button style={S.btnSecondary} onClick={resetToDefaults}>↩ Reset to Defaults</button>
         </div>}
@@ -9082,7 +9146,7 @@ function TeamView({ accessToken, userRole, tFetch, tenantId, tenantData, offAppW
         {error && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{error}</div>}
         {message && <div style={{color:C.green, fontSize:13, marginTop:10}}>{message}</div>}
         <button style={{...S.btnPrimary, marginTop:14, opacity:inviting?0.6:1}} onClick={sendInvite} disabled={inviting}>
-          {inviting ? "Sending..." : "✉️ Send Invite"}
+          {inviting ? "Sending..." : <><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Send Invite</>}
         </button>
       </section>
 
@@ -9275,7 +9339,7 @@ function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
               {editingId !== w.id && (
                 <div style={{display:"flex", gap:6}}>
                   <button style={S.btnSmall} onClick={()=>{setEditingId(w.id);setEditName(w.name);}}>
-                    <LucideIcons.Pencil size={12} strokeWidth={2}/>
+                    <Icon name="Pencil" size={12}/>
                   </button>
                   <button style={{...S.btnSmall, color:C.danger}} onClick={()=>removeWorker(w.id)}>✕</button>
                 </div>
@@ -9307,7 +9371,7 @@ function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
                 </div>
               ) : (
                 <button style={{...S.btnSmall, fontSize:11}} onClick={()=>{setRateEditId(w.id);setNewRate("");setNewRateDate(new Date().toISOString().slice(0,10));}}>
-                  <LucideIcons.Plus size={11} strokeWidth={2} style={{verticalAlign:"middle",marginRight:3}}/>
+                  <Icon name="Plus" size={11} style={{verticalAlign:"middle",marginRight:3}/>
                   {(w.rateHistory||[]).length > 0 ? "Update Rate" : "Set Rate"}
                 </button>
               )}
@@ -9320,7 +9384,7 @@ function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
           placeholder="Full name" style={{...S.input, flex:1}}
           onKeyDown={e=>e.key==="Enter"&&addWorker()}/>
         <button style={{...S.btnPrimary, flexShrink:0, opacity:saving?0.6:1}} onClick={addWorker} disabled={saving}>
-          <LucideIcons.Plus size={14} strokeWidth={2} style={{verticalAlign:"middle",marginRight:4}}/>
+          <Icon name="Plus" size={14} style={{verticalAlign:"middle",marginRight:4}/>
           Add
         </button>
       </div>
@@ -9478,7 +9542,7 @@ function CrewsSection({ users, isManager, tFetch, offAppWorkers=[] }) {
             </div>
           </div>
           <div style={{display:"flex", gap:8, marginTop:14}}>
-            <button style={{...S.btnPrimary, flex:1}} onClick={saveCrew}><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
+            <button style={{...S.btnPrimary, flex:1}} onClick={saveCrew}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save</button>
             <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
           </div>
         </div>
@@ -9844,7 +9908,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           </button>
           <div style={{display:"flex", gap:6, alignItems:"center"}}>
             <button style={S.btnSecondary} onClick={() => { setShowImport(true); setImportRows([]); setImportResult(null); setImportError(""); setPayMethodMap({}); setUnmatchedPay([]); }}>
-              <LucideIcons.Upload size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Import from Spreadsheet
+              <Icon name="Upload" size={15} style={{verticalAlign:"middle",marginRight:5}/> Import from Spreadsheet
             </button>
             <button title="Spreadsheet format info" style={{...S.btnSmall, padding:"6px 8px", fontSize:11}}
               onClick={() => alert(
@@ -9860,7 +9924,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 "• Year defaults to current year if not in date\n" +
                 "• Duplicate entries (same date + amount + category + vendor) are skipped"
               )}>
-              <LucideIcons.Info size={14} strokeWidth={2}/>
+              <Icon name="Info" size={14}/>
             </button>
           </div>
         </div>
@@ -9981,7 +10045,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto"}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:600, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
             <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
-              <h2 style={{...S.h2, margin:0}}><LucideIcons.Upload size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Import Expenses</h2>
+              <h2 style={{...S.h2, margin:0}}><Icon name="Upload" size={16} style={{verticalAlign:"middle",marginRight:6}/> Import Expenses</h2>
               <button style={S.btnSmall} onClick={() => setShowImport(false)}>✕ Close</button>
             </div>
 
@@ -10273,7 +10337,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 [...selectedIds].forEach(id=>deleteExpense(id));
                 setSelectedIds(new Set());
               }
-            }}>🗑 Delete ({selectedIds.size})</button>
+            }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle",marginRight:5}}/> Delete ({selectedIds.size})</button>
           )}
         </div>
 
@@ -10346,7 +10410,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                   <div style={{display:"flex", gap:4, flexShrink:0, width:60, justifyContent:"flex-end"}}>
                     <button style={{...S.btnSmall, padding:"3px 6px"}}
                       onClick={()=>{ setEditingExpId(e.id); setEditForm({...e}); }}>
-                      <LucideIcons.Pencil size={11} strokeWidth={2}/>
+                      <Icon name="Pencil" size={11}/>
                     </button>
                     <button style={{...S.btnSmall, color:C.danger, padding:"3px 6px"}}
                       onClick={()=>{ if(confirm("Delete this expense?")) deleteExpense(e.id); }}>✕</button>
@@ -10549,7 +10613,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
         <h2 style={S.h2}>Export CSV Files</h2>
         <div style={{display:"flex", flexDirection:"column", gap:10}}>
           <button style={S.btnPrimary} onClick={exportJobsCSV}>
-            📋 Export All Jobs ({jobs.length})
+            <Icon name="ClipboardList" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Export All Jobs ({jobs.length})
           </button>
           <button style={S.btnPrimary} onClick={exportCostsCSV}>
             🧮 Export Job Costs & Margins
@@ -10996,14 +11060,14 @@ ${pdfLink}` ;
             style={{fontSize:13, fontWeight:600, padding:"7px 16px", borderRadius:8, border:"none", cursor:"pointer",
               background: homeTab==="dashboard" ? C.accent : C.surface2,
               color: homeTab==="dashboard" ? "#000" : C.textMuted}}>
-            <LucideIcons.LayoutDashboard size={14} style={{verticalAlign:"middle", marginRight:5}}/> Dashboard
+            <Icon name="LayoutDashboard" size={14} style={{verticalAlign:"middle", marginRight:5}/> Dashboard
           </button>
           <button onClick={() => setHomeTab("requests")}
             style={{fontSize:13, fontWeight:600, padding:"7px 16px", borderRadius:8, border:"none", cursor:"pointer",
               background: homeTab==="requests" ? C.accent : C.surface2,
               color: homeTab==="requests" ? "#000" : C.textMuted,
               position:"relative"}}>
-            <LucideIcons.ClipboardList size={14} style={{verticalAlign:"middle", marginRight:5}}/> Estimate Requests
+            <Icon name="ClipboardList" size={14} style={{verticalAlign:"middle", marginRight:5}/> Estimate Requests
             {requestJobs.length > 0 && (
               <span style={{position:"absolute", top:-6, right:-6, background:C.danger, color:"#fff",
                 borderRadius:"50%", width:18, height:18, fontSize:10, fontWeight:700,
@@ -11084,11 +11148,11 @@ ${pdfLink}` ;
                 {item.type==="overdue" ? (
                   <div style={{display:"flex", gap:6, flexShrink:0}} onClick={e => e.stopPropagation()}>
                     <button style={{...S.btnSmall, fontSize:11, background:"#dbeafe", color:"#1d4ed8", border:"1px solid #bfdbfe"}}
-                      onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("email"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email
+                      onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("email"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}/> Email
                     </button>
                     <button style={{...S.btnSmall, fontSize:11, background:"#dcfce7", color:"#15803d", border:"1px solid #86efac"}}
                       onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("text"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}>
-                      💬 Text
+                      <Icon name="MessageSquare" size={13} style={{verticalAlign:"middle",marginRight:4}}/> Text
                     </button>
                     <button style={{...S.btnSmall, fontSize:11}} onClick={() => open(item.job)}>Open →</button>
                   </div>
@@ -11195,7 +11259,7 @@ ${pdfLink}` ;
       {reminderModal && createPortal(
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.FileText size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Invoice Reminder</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="FileText" size={16} style={{verticalAlign:"middle",marginRight:6}/> Invoice Reminder</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
               Sending reminder for <strong>{reminderModal.job.clientName||"Unnamed"}</strong> — {reminderModal.daysPast} days past due.
             </p>
@@ -11206,7 +11270,7 @@ ${pdfLink}` ;
                   style={{flex:1, padding:"8px", fontSize:13, fontWeight:600, border:"none", cursor:"pointer",
                     background: reminderChannel===ch ? C.accent : C.surface2,
                     color: reminderChannel===ch ? "#000" : C.textMuted}}>
-                  {ch === "email" ? "✉️ Email" : "💬 Text"}
+                  {ch === "email" ? <><Icon name="Mail" size={14} style={{verticalAlign:"middle",marginRight:4}}/> Email</> : <><Icon name="MessageSquare" size={14} style={{verticalAlign:"middle",marginRight:4}}/> Text</>}
                 </button>
               ))}
             </div>
@@ -12200,7 +12264,7 @@ ${a}`.notes : "");
             <div style={S.signedBannerSub}>{currentJob.clientSignedAt}</div>
             <img src={currentJob.clientSignature} alt="Client Signature"
               style={{display:"block", maxWidth:260, marginTop:10, borderRadius:6, border:`1px solid ${C.border}`}}/>
-            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={unsign}><LucideIcons.Unlock size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Remove Signature</button>
+            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={unsign}><Icon name="Unlock" size={15} style={{verticalAlign:"middle",marginRight:5}/> Remove Signature</button>
           </div>
         ) : (
           <>
@@ -12223,7 +12287,7 @@ ${a}`.notes : "");
               />
             </div>
             <div style={{display:"flex", gap:10, marginTop:10}}>
-              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearClientSig}><LucideIcons.Trash2 size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Clear</button>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearClientSig}><Icon name="Trash2" size={15} style={{verticalAlign:"middle",marginRight:5}/> Clear</button>
               <button style={{...S.btnPrimary, flex:1}} onClick={acceptAndSign}>
                 ✍️ Accept &amp; Sign Estimate
               </button>
@@ -12250,7 +12314,7 @@ ${a}`.notes : "");
       {showTextModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.MessageSquare size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Text Estimate PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="MessageSquare" size={16} style={{verticalAlign:"middle",marginRight:6}/> Text Estimate PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
               The estimate PDF will be uploaded and a link sent via your phone's SMS app.
             </p>
@@ -12277,7 +12341,7 @@ ${a}`.notes : "");
       {showEmailModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Mail size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Email Estimate PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}/> Email Estimate PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
               The estimate PDF will be generated and sent directly to the client's inbox.
             </p>
@@ -12306,7 +12370,7 @@ ${a}`.notes : "");
       {showSentConfirm && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><LucideIcons.Send size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Did you send the estimate?</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="Send" size={16} style={{verticalAlign:"middle",marginRight:6}/> Did you send the estimate?</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
               Confirming will move this job to <strong>Sent</strong> status and record today as the sent date.
             </p>
@@ -12342,11 +12406,11 @@ ${a}`.notes : "");
                 setPdfLoading(false);
               }
             }} disabled={pdfLoading}>
-            {pdfLoading ? "⏳ Building PDF..." : <><LucideIcons.FileText size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF</>}
+            {pdfLoading ? "⏳ Building PDF..." : <><Icon name="FileText" size={15} style={{verticalAlign:"middle",marginRight:5}/> Download PDF</>}
           </button>
-          <button style={S.btnSecondary} onClick={emailEstimate}><LucideIcons.Mail size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Email PDF</button>
-          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><LucideIcons.MessageSquare size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Text PDF</button>
-          <button style={S.btnSecondary} onClick={copyEstimate}><LucideIcons.Copy size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Copy Text</button>
+          <button style={S.btnSecondary} onClick={emailEstimate}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}/> Email PDF</button>
+          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><Icon name="MessageSquare" size={15} style={{verticalAlign:"middle",marginRight:5}/> Text PDF</button>
+          <button style={S.btnSecondary} onClick={copyEstimate}><Icon name="Copy" size={15} style={{verticalAlign:"middle",marginRight:5}/> Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
         <div style={{marginTop:8, fontSize:11, color:C.textMuted}}>
@@ -13115,7 +13179,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       {message && <div style={{fontSize:13,color:message.startsWith("⚠️")?C.danger:C.green,padding:"0 16px 12px"}}>{message}</div>}
       <div style={{padding:"0 16px 24px"}}>
         <button style={{...S.btnPrimary,width:"100%",opacity:saving?0.6:1}} onClick={save} disabled={saving}>
-          {saving?"Saving...":<><LucideIcons.Save size={15} strokeWidth={2} style={{verticalAlign:"middle",marginRight:5}}/> Save Company Settings</>}
+          {saving?"Saving...":<><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Company Settings</>}
         </button>
       </div>
     </div>
@@ -13183,7 +13247,7 @@ function EstimateRequestLinkView({ setView, currentTenantId }) {
 
   return (
     <div className="tps-page" style={S.page}>
-      <h1 style={S.h1}><LucideIcons.ClipboardList size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Estimate Request Form</h1>
+      <h1 style={S.h1}><Icon name="ClipboardList" size={16} style={{verticalAlign:"middle",marginRight:6}/> Estimate Request Form</h1>
       <p style={S.subhead}>Share this link or QR code with clients so they can submit an estimate request directly to you — no account needed.</p>
 
       <section style={S.section}>
@@ -13192,7 +13256,7 @@ function EstimateRequestLinkView({ setView, currentTenantId }) {
           <input readOnly value={requestUrl}
             style={{...S.input, flex:1, minWidth:0, fontSize:12, background:C.surface2, color:C.textMuted}}/>
           <button style={{...S.btnPrimary, flexShrink:0}} onClick={copy}>
-            {copied ? "✓ Copied!" : "📋 Copy Link"}
+            {copied ? "✓ Copied!" : <><Icon name="Copy" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Copy Link</>}
           </button>
         </div>
         <div style={{fontSize:12, color:C.textMuted, marginTop:8}}>
@@ -13335,7 +13399,7 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
 
       {/* Live Chat */}
       <section style={S.section}>
-        <h2 style={S.h2}><LucideIcons.MessageCircle size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Live Chat</h2>
+        <h2 style={S.h2}><Icon name="MessageCircle" size={16} style={{verticalAlign:"middle",marginRight:6}/> Live Chat</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>
           Chat with us directly using the chat bubble in the bottom-right corner of the screen.
           Available during business hours — we'll respond as quickly as possible.
@@ -13359,13 +13423,13 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
             }
           }
         }}>
-          💬 Open Live Chat
+          <Icon name="MessageCircle" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Open Live Chat
         </button>
       </section>
 
       {/* Phone */}
       <section style={S.section}>
-        <h2 style={S.h2}><LucideIcons.Phone size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Phone Support</h2>
+        <h2 style={S.h2}><Icon name="Phone" size={16} style={{verticalAlign:"middle",marginRight:6}/> Phone Support</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>
           Prefer to talk? Give us a call during business hours.
         </p>
@@ -13377,7 +13441,7 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
 
       {/* Bug / Feature Form */}
       <section style={S.section}>
-        <h2 style={S.h2}><LucideIcons.ClipboardEdit size={16} strokeWidth={2} style={{verticalAlign:"middle",marginRight:6}}/> Submit Feedback</h2>
+        <h2 style={S.h2}><Icon name="ClipboardEdit" size={16} style={{verticalAlign:"middle",marginRight:6}/> Submit Feedback</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
           Report a bug or suggest a feature. We review every submission.
         </p>
@@ -13454,7 +13518,7 @@ function ReferralView({ setView, userId }) {
         <label style={S.formLabel}>Referral URL
           <input type="text" readOnly value={referralUrl} style={{...S.input,fontFamily:"monospace",fontSize:12}} onFocus={e=>e.target.select()}/>
         </label>
-        <button style={{...S.btnPrimary,marginTop:12,width:"100%"}} onClick={copyLink}>{copied?<>{li("Check",14)} Copied!</>:"📋 Copy Referral Link"}</button>
+        <button style={{...S.btnPrimary,marginTop:12,width:"100%"}} onClick={copyLink}>{copied?<>{li("Check",14)} Copied!</>:<><Icon name="Copy" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Copy Referral Link</>}</button>
         <p style={{fontSize:11,color:C.textDim,marginTop:12}}>Referral bonuses are tracked and applied when referred contractors start a paid subscription.</p>
       </section>
     </div>
@@ -15365,6 +15429,7 @@ function App() {
   );
 
   return (
+    <IconStyleContext.Provider value={iconStyle}>
     <div style={{...(isDesktopLayout ? S.appDesktop : S.app), animation:"biqFadeIn 0.15s ease-in"}}>
       <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant} isPlatformAdmin={isPlatformAdmin} companySettings={companySettings}/>
       {!isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
