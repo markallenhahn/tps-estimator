@@ -6810,8 +6810,10 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 
     // COGS: actuals first, then FIFO material calc, then estimated
     const actuals = j.costs?.actuals || {};
-    const hasActuals = Object.values(actuals).some(av => av !== null && av !== "" && Number(av) > 0);
-    const actualsCOGS = Object.values(actuals).reduce((s,av) => s + Number(av||0), 0);
+    // Only material actuals count as COGS — exclude labor and fuel (tracked separately)
+    const MATERIAL_ACTUAL_KEYS = ["sealcoat","crackfill","asphalt","patch","stone","other"];
+    const hasActuals = MATERIAL_ACTUAL_KEYS.some(k => actuals[k] !== null && actuals[k] !== "" && Number(actuals[k]||0) > 0);
+    const actualsCOGS = MATERIAL_ACTUAL_KEYS.reduce((s,k) => s + Number(actuals[k]||0), 0);
 
     // FIFO material cost: for each area, look up material type via serviceMappings, get FIFO unit cost × qty ÷ coverage
     const jobDate = j.date?.includes("/") ? new Date(j.date).toISOString().slice(0,10) : (j.date||"");
