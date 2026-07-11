@@ -4767,7 +4767,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
   const [selectedZoneId, setSelectedZoneId] = useState(null);
   const [routeDate,      setRouteDate]      = useState(new Date().toISOString().slice(0,10));
   const [optimizedRoute, setOptimizedRoute] = useState(null);
-  const [excludedJobIds, setExcludedJobIds] = useState(new Set()); // job ids excluded from current route
+  const [excludedJobIds, setExcludedJobIds] = useState([]); // job ids excluded from current route
   const fileInputRef = useRef(null);
 
   // ── Which job status categories get geocoded/clustered/shown on the map ──
@@ -5008,7 +5008,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
   const buildRoute = (zoneId, excluded = excludedJobIds) => {
     const zone = zones.list.find(z => z.id === zoneId);
     if (!zone) return;
-    const zoneJobs = jobs.filter(j => zone.jobIds.includes(j.id) && j.geoLat && j.geoLng && !excluded.has(j.id));
+    const zoneJobs = jobs.filter(j => zone.jobIds.includes(j.id) && j.geoLat && j.geoLng && !excluded.includes(j.id));
     if (zoneJobs.length === 0) { alert("No geocoded jobs in this zone yet."); return; }
     const points = zoneJobs.map(j => ({ lat: j.geoLat, lng: j.geoLng, job: j }));
     const base = homeBase?.lat && homeBase?.lng
@@ -5021,13 +5021,17 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
 
   const toggleJobExclusion = (zoneId, jobId) => {
     setExcludedJobIds(prev => {
-      const next = new Set(prev);
-      if (next.has(jobId)) { next.delete(jobId); } else { next.add(jobId); }
-      // Rebuild route immediately if this zone's route is showing
-      if (selectedZoneId === zoneId) buildRoute(zoneId, next);
-      return next;
+      if (prev.includes(jobId)) return prev.filter(id => id !== jobId);
+      return [...prev, jobId];
     });
+    // Rebuild route after state updates (useEffect watches excludedJobIds)
   };
+
+  // Rebuild route automatically when job exclusions change
+  useEffect(() => {
+    if (selectedZoneId) buildRoute(selectedZoneId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excludedJobIds]);
 
   const getDirectionsUrlMulti = (stops) => {
     if (!stops.length) return "#";
@@ -5166,8 +5170,8 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
                       </div>
                       {zoneJobs.length > 0 && (
                         <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => {
-                          setExcludedJobIds(new Set());
-                          buildRoute(z.id, new Set());
+                          setExcludedJobIds([]);
+                          buildRoute(z.id, []);
                         }}>
                           🧭 Build Route
                         </button>
@@ -5176,7 +5180,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
                     {zoneJobs.length === 0 ? (
                       <p style={{fontSize:12, color:C.textMuted}}>No live jobs currently assigned here.</p>
                     ) : zoneJobs.map(j => {
-                      const isExcluded = excludedJobIds.has(j.id);
+                      const isExcluded = excludedJobIds.includes(j.id);
                       return (
                         <div key={j.id} style={{...S.schedJobCard, marginBottom:8, display:"flex", alignItems:"center", gap:8, opacity: isExcluded ? 0.45 : 1}}>
                           <input type="checkbox" checked={!isExcluded}
