@@ -8042,7 +8042,7 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
           {["COGS","Overhead"].map(cat => {
             const builtIn = EXPENSE_CATEGORY_MAP[cat]||[];
             const custom = draft.customSubcategories?.[cat]||[];
-            const all = [...builtIn,...custom];
+            const all = [...new Set([...builtIn,...custom])];
             if (!all.length) return null;
             return (
               <div key={cat} style={{marginBottom:12}}>
