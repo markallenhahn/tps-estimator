@@ -6353,7 +6353,7 @@ function getFifoUnitCost(materialType, dateStr, materials) {
 }
 
 // ─── EBITDA Report ────────────────────────────────────────────────────────────
-function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCOGS=0, periodExpLabor=0, cogsBySubcat={}, overheadBySubcat={}, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
+function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=0, periodExpMaterials=0, periodExpCOGS=0, periodExpLabor=0, cogsBySubcat={}, overheadBySubcat={}, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
   const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
   const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
   const isDesktopLayout = useIsDesktop();
@@ -6406,9 +6406,9 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
         {/* Summary cards */}
         {(() => {
           // Actual fuel from COGS subcategory breakdown (already filtered for period)
-          const actFuel = (cogsBySubcat["Fuel"] || 0) + (cogsBySubcat["fuel"] || 0);
+          const actFuel = periodFuel > 0 ? periodFuel : null;
 
-          const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
+          const actCOGS     = periodExpMaterials > 0 ? periodExpMaterials : null;
           // Use actual labor from labor tab (via ebitdaTotals.jobLabor) if any entries exist
           const actLaborFromTab = ebitdaTotals.jobLabor > 0 ? ebitdaTotals.jobLabor : null;
           const actLaborFromExp = periodExpLabor > 0 ? periodExpLabor : null;
@@ -6448,8 +6448,8 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
               <Card label="Total Costs"   value={totalActCosts}/>
               <Card label="Materials (COGS)" value={cogsVal} isActual={actCOGS!==null} color="#ef4444"/>
               <Card label="Fuel" value={fuelVal}
-                isActual={actFuel > 0} color={C.textMuted}
-                sub={actFuel > 0 ? null : "5% est."}/>
+                isActual={actFuel !== null} color={C.textMuted}
+                sub={actFuel !== null ? null : "5% est."}/>
               <Card label="Labor" value={laborVal} isActual={actLabor!==null} color="#f59e0b"
                 sub={actLabor!==null ? null : `${reportSettings.laborPct||15}% est.`}/>
               <Card label="Gross Profit" value={grossProfit} color="#3b82f6" sub={fmtPct(gpPct)}/>
@@ -6462,8 +6462,8 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodExpCO
 
         {/* EBITDA target row — uses same vars as summary cards above */}
         {(() => {
-          const actFuel2 = (cogsBySubcat["Fuel"] || 0) + (cogsBySubcat["fuel"] || 0);
-          const actCOGS     = periodExpCOGS  > 0 ? periodExpCOGS  : null;
+          const actFuel2 = periodFuel > 0 ? periodFuel : null;
+          const actCOGS     = periodExpMaterials > 0 ? periodExpMaterials : null;
           const actLaborFromTab = ebitdaTotals.jobLabor > 0 ? ebitdaTotals.jobLabor : null;
           const actLaborFromExp = periodExpLabor > 0 ? periodExpLabor : null;
           const actLabor = actLaborFromTab ?? actLaborFromExp;
@@ -6777,6 +6777,12 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const periodOverhead = periodExpByBucket("overhead");
   const periodExpCOGS  = periodExpByBucket("cogs");
   const periodExpLabor = periodExpByBucket("labor");
+  // Fuel from COGS expenses with subcategory Fuel
+  const periodFuel = expenses
+    .filter(e => catBuckets[e.category]==="cogs" && (e.subcategory==="Fuel"||e.subcategory==="fuel") && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to)
+    .reduce((s,e)=>s+Number(e.amount||0),0);
+  // Materials COGS = total COGS minus fuel
+  const periodExpMaterials = periodExpCOGS - periodFuel;
 
   // Subcategory breakdowns
   const periodSubcatBreakdown = (bucket) => {
@@ -6854,11 +6860,13 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     const jobLabor = fin.laborCost;
     const laborIsEstimated = jobLaborEntries.length === 0;
 
-    // Overhead: allocate by revenue %
+    // Overhead + fuel: allocate by revenue share
     const revenueShare = periodRevenue > 0 ? revenue / periodRevenue : 0;
     const overheadAlloc = periodOverhead * revenueShare;
+    // Fuel: use actual expenses allocated by revenue share; fall back to 5% estimate
+    const fuelAlloc = periodFuel > 0 ? periodFuel * revenueShare : fin.fuelCost;
 
-    const grossProfit = revenue - cogs;
+    const grossProfit = revenue - cogs - fuelAlloc;
     const grossMarginPct = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
     const ebitda = grossProfit - jobLabor - overheadAlloc;
     const ebitdaPct = revenue > 0 ? (ebitda / revenue) * 100 : 0;
@@ -6872,7 +6880,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
       serviceBreakdown[svcType].revenue += svcRevenue;
     });
 
-    return { job:j, revenue, cogs, cogsIsEstimated, cogsSource, grossProfit, grossMarginPct, jobLabor, laborIsEstimated, overheadAlloc, ebitda, ebitdaPct, serviceBreakdown };
+    return { job:j, revenue, cogs, fuelAlloc, cogsIsEstimated, cogsSource, grossProfit, grossMarginPct, jobLabor, laborIsEstimated, overheadAlloc, ebitda, ebitdaPct, serviceBreakdown };
   });
 
   const ebitdaTotals = ebitdaJobData.reduce((acc, d) => {
@@ -7108,6 +7116,8 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           ebitdaJobData={ebitdaJobData}
           ebitdaTotals={ebitdaTotals}
           periodOverhead={periodOverhead}
+          periodFuel={periodFuel}
+          periodExpMaterials={periodExpMaterials}
           periodExpCOGS={periodExpCOGS}
           periodExpLabor={periodExpLabor}
           cogsBySubcat={cogsBySubcat}
