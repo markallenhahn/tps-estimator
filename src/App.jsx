@@ -8201,7 +8201,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   const [newNote,         setNewNote]         = useState("");
   const [savingNote,      setSavingNote]      = useState(false);
   const [noteType,        setNoteType]        = useState("internal");
-  const [dismissedTokens, setDismissedTokens] = useState(new Set());
+  const [dismissedTokens, setDismissedTokens] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem("biq_dismissed_invites")||"[]")); } catch(e) { return new Set(); } });
   const [companySearch,   setCompanySearch]   = useState("");
   const [companySortField,setCompanySortField]= useState("createdAt");
   const [companySortDir,  setCompanySortDir]  = useState("desc");
@@ -8409,7 +8409,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
                   <button style={S.btnSmall} onClick={() => copyLink(inv.token)}>
                     {copiedToken===inv.token ? "Copied!" : "Copy Link"}
                   </button>
-                  <button onClick={() => setDismissedTokens(prev => new Set([...prev, inv.token]))}
+                  <button onClick={() => setDismissedTokens(prev => { const next = new Set([...prev, inv.token]); try { localStorage.setItem("biq_dismissed_invites", JSON.stringify([...next])); } catch(e) {} return next; })}
                     style={{background:"none", border:"none", cursor:"pointer", fontSize:16, color:C.textMuted, lineHeight:1, padding:"0 4px", flexShrink:0}}>✕</button>
                 </div>
                 <p style={{fontSize:11, color:C.textDim, margin:"6px 0 0"}}>
