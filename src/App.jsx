@@ -6768,8 +6768,8 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
                       {d.laborIsEstimated && <span style={{fontSize:9, color:C.textMuted, marginLeft:3}}>est.</span>}
                     </td>
                     <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(d.overheadAlloc)}</td>
-                    <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: d.ebitda >= 0 ? "#10b981" : "#ef4444"}}>{fmtMoney(d.ebitda)}</td>
-                    <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: d.ebitdaPct >= 0 ? "#10b981" : "#ef4444"}}>{fmtPct(d.ebitdaPct)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: d.ebitdaPct >= targetPct ? "#10b981" : "#ef4444"}}>{fmtMoney(d.ebitda)}</td>
+                    <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: d.ebitdaPct >= targetPct ? "#10b981" : "#ef4444"}}>{fmtPct(d.ebitdaPct)}</td>
                   </tr>
                 ))}
                 {/* Totals row */}
@@ -6781,8 +6781,8 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
                   <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtPct(ebitdaTotals.revenue>0?(ebitdaTotals.grossProfit/ebitdaTotals.revenue)*100:0)}</td>
                   <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(ebitdaTotals.jobLabor)}</td>
                   <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(ebitdaTotals.overheadAlloc)}</td>
-                  <td style={{padding:"8px 10px", textAlign:"right", color:"#10b981"}}>{fmtMoney(ebitdaTotals.ebitda)}</td>
-                  <td style={{padding:"8px 10px", textAlign:"right", color:"#10b981"}}>{fmtPct(ebitdaTotals.revenue>0?(ebitdaTotals.ebitda/ebitdaTotals.revenue)*100:0)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color: ebitdaTotals.revenue>0 && (ebitdaTotals.ebitda/ebitdaTotals.revenue)*100 >= targetPct ? "#10b981" : "#ef4444"}}>{fmtMoney(ebitdaTotals.ebitda)}</td>
+                  <td style={{padding:"8px 10px", textAlign:"right", color: ebitdaTotals.revenue>0 && (ebitdaTotals.ebitda/ebitdaTotals.revenue)*100 >= targetPct ? "#10b981" : "#ef4444"}}>{fmtPct(ebitdaTotals.revenue>0?(ebitdaTotals.ebitda/ebitdaTotals.revenue)*100:0)}</td>
                 </tr>
               </tbody>
             </table>
@@ -6797,7 +6797,7 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
               style={{background:C.surface2, borderRadius:8, padding:"12px 14px", marginBottom:8, cursor:"pointer", border:`1px solid ${C.border}`}}>
               <div style={{display:"flex", justifyContent:"space-between", marginBottom:6}}>
                 <div style={{fontWeight:700, fontSize:14}}>{d.job.clientName||"Unnamed"}</div>
-                <div style={{fontWeight:700, color: d.ebitda >= 0 ? "#10b981" : "#ef4444"}}>{fmtMoney(d.ebitda)}</div>
+                <div style={{fontWeight:700, color: d.ebitdaPct >= targetPct ? "#10b981" : "#ef4444"}}>{fmtMoney(d.ebitda)}</div>
               </div>
               <div style={{fontSize:11, color:C.textMuted, marginBottom:6}}>{d.job.date} · {d.job.address||"No address"}</div>
               <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4, fontSize:11}}>
@@ -6847,8 +6847,8 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
                         <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtPct(gpPct)}</td>
                         <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(totals.labor)}</td>
                         <td style={{padding:"8px 10px", textAlign:"right", color:C.text}}>{fmtMoney(totals.overhead)}</td>
-                        <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: ebitda>=0?"#10b981":"#ef4444"}}>{fmtMoney(ebitda)}</td>
-                        <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: ebitdaPct>=0?"#10b981":"#ef4444"}}>{fmtPct(ebitdaPct)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: ebitdaPct>=targetPct?"#10b981":"#ef4444"}}>{fmtMoney(ebitda)}</td>
+                        <td style={{padding:"8px 10px", textAlign:"right", fontWeight:700, color: ebitdaPct>=targetPct?"#10b981":"#ef4444"}}>{fmtPct(ebitdaPct)}</td>
                       </tr>
                     );
                   })}
