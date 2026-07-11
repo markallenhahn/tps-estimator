@@ -8181,7 +8181,7 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, sy
 }
 
 // ─── Platform Admin — BlacktopIQ operator only, fully separate from any company's UI ───
-function PlatformAdminView({ setView, accessToken, permissions, setPermissions, syncPermissions, adminUsers=null, isSuperAdmin=false, removeAdmin=null, newAdminEmail="", setNewAdminEmail=null, addAdmin=null, addingAdmin=false, addAdminError="" }) {
+function PlatformAdminView({ setView, accessToken, permissions, setPermissions, syncPermissions, adminUsers=null, isSuperAdmin=false, removeAdmin=null, newAdminEmail="", setNewAdminEmail=null, addAdmin=null, addingAdmin=false, addAdminError="", currentUserId=null, editingProfile=false, setEditingProfile=null, profileDraft={first_name:"",last_name:""}, setProfileDraft=null, saveProfile=null, savingProfile=false, profileError="" }) {
   const isDesktopLayout = useIsDesktop();
   const [invites,      setInvites]      = useState([]);
   const [generating,   setGenerating]   = useState(false);
@@ -8786,18 +8786,48 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
         <section style={S.section}>
           <h2 style={S.h2}>Platform Admins</h2>
           <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>Manage who has access to this dashboard.</p>
-          {adminUsers.map(a => (
-            <div key={a.user_id} style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
-              <div>
-                <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || a.user_id.slice(0,8)+"..."}</div>
-                <div style={{fontSize:12, color:C.textMuted}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
+          {adminUsers.map(a => {
+            const isMe = a.user_id === currentUserId;
+            const isEditingMe = isMe && editingProfile;
+            return (
+              <div key={a.user_id} style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+                {isEditingMe ? (
+                  <div>
+                    <div style={{display:"flex", gap:8, marginBottom:8}}>
+                      <input value={profileDraft.first_name} onChange={e => setProfileDraft && setProfileDraft(p => ({...p, first_name:e.target.value}))}
+                        placeholder="First name" style={{...S.input, flex:1}}/>
+                      <input value={profileDraft.last_name} onChange={e => setProfileDraft && setProfileDraft(p => ({...p, last_name:e.target.value}))}
+                        placeholder="Last name" style={{...S.input, flex:1}}/>
+                    </div>
+                    {profileError && <div style={{fontSize:12, color:C.danger, marginBottom:6}}>{profileError}</div>}
+                    <div style={{display:"flex", gap:8}}>
+                      <button onClick={() => saveProfile && saveProfile()} disabled={savingProfile}
+                        style={{...S.btnPrimary, fontSize:13, padding:"6px 14px", opacity:savingProfile?0.6:1}}>
+                        {savingProfile ? "Saving..." : "Save"}
+                      </button>
+                      <button onClick={() => setEditingProfile && setEditingProfile(false)} style={{...S.btnSecondary, fontSize:13, padding:"6px 14px"}}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+                    <div>
+                      <div style={{fontWeight:600, fontSize:14}}>{a.name || a.email || a.user_id.slice(0,8)+"..."}</div>
+                      <div style={{fontSize:12, color:C.textMuted}}>{a.email}{a.is_super ? " · Super Admin" : ""}</div>
+                    </div>
+                    <div style={{display:"flex", alignItems:"center", gap:8}}>
+                      {isMe && setEditingProfile && (
+                        <button onClick={() => setEditingProfile(true)} style={S.btnSmall}>Edit</button>
+                      )}
+                      {isSuperAdmin && !a.is_super && removeAdmin && (
+                        <button onClick={() => removeAdmin(a.user_id)} style={S.btnSmallDanger}>Remove</button>
+                      )}
+                      {a.is_super && <span style={{fontSize:11, color:C.accent, fontWeight:700}}>SUPER</span>}
+                    </div>
+                  </div>
+                )}
               </div>
-              {isSuperAdmin && !a.is_super && removeAdmin && (
-                <button onClick={() => removeAdmin(a.user_id)} style={S.btnSmallDanger}>Remove</button>
-              )}
-              {a.is_super && <span style={{fontSize:11, color:C.accent, fontWeight:700}}>SUPER</span>}
-            </div>
-          ))}
+            );
+          })}
           {isSuperAdmin && setNewAdminEmail && (
             <div style={{marginTop:16, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
               <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>Add Admin</div>
@@ -14095,6 +14125,10 @@ function AdminApp() {
   const [newAdminEmail,  setNewAdminEmail]  = useState("");
   const [addingAdmin,    setAddingAdmin]    = useState(false);
   const [addAdminError,  setAddAdminError]  = useState("");
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileDraft,   setProfileDraft]   = useState({ first_name:"", last_name:"" });
+  const [savingProfile,  setSavingProfile]  = useState(false);
+  const [profileError,   setProfileError]   = useState("");
   const [permissions,    setPermissions]    = useState(DEFAULT_PERMISSIONS);
   const sbH = (token) => ({
     "apikey": SUPABASE_KEY_ADMIN,
@@ -14224,6 +14258,26 @@ function AdminApp() {
     setAdminUsers(prev => prev.filter(a => a.user_id !== userId));
   };
 
+  const saveProfile = async () => {
+    setSavingProfile(true); setProfileError("");
+    try {
+      const userId = adminSession.user.id;
+      const res = await fetch(SUPABASE_URL_ADMIN + "/rest/v1/profiles?id=eq." + userId, {
+        method: "PATCH",
+        headers: { ...sbH(adminSession.access_token), "Prefer": "return=minimal" },
+        body: JSON.stringify({ first_name: profileDraft.first_name.trim(), last_name: profileDraft.last_name.trim() }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      // Update local adminUsers list
+      setAdminUsers(prev => prev.map(a => a.user_id === userId
+        ? { ...a, name: [profileDraft.first_name, profileDraft.last_name].filter(Boolean).join(" ") }
+        : a
+      ));
+      setEditingProfile(false);
+    } catch(e) { setProfileError(e.message); }
+    setSavingProfile(false);
+  };
+
   // ── Login screen ──
   if (!adminChecked) {
     return (
@@ -14295,6 +14349,21 @@ function AdminApp() {
           addAdmin={addAdmin}
           addingAdmin={addingAdmin}
           addAdminError={addAdminError}
+          currentUserId={adminSession?.user?.id}
+          editingProfile={editingProfile}
+          setEditingProfile={(v) => {
+            if (v) {
+              const me = adminUsers.find(a => a.user_id === adminSession?.user?.id);
+              const parts = (me?.name||"").split(" ");
+              setProfileDraft({ first_name: parts[0]||"", last_name: parts.slice(1).join(" ")||"", });
+            }
+            setEditingProfile(v);
+          }}
+          profileDraft={profileDraft}
+          setProfileDraft={setProfileDraft}
+          saveProfile={saveProfile}
+          savingProfile={savingProfile}
+          profileError={profileError}
         />
 
 
