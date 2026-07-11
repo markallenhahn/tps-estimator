@@ -4767,6 +4767,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
   const [selectedZoneId, setSelectedZoneId] = useState(null);
   const [routeDate,      setRouteDate]      = useState(new Date().toISOString().slice(0,10));
   const [optimizedRoute, setOptimizedRoute] = useState(null);
+  const [excludedJobIds, setExcludedJobIds] = useState(new Set()); // job ids excluded from current route
   const fileInputRef = useRef(null);
 
   // ── Which job status categories get geocoded/clustered/shown on the map ──
@@ -5004,10 +5005,10 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
   };
 
   // ── Build route for a zone ──
-  const buildRoute = (zoneId) => {
+  const buildRoute = (zoneId, excluded = excludedJobIds) => {
     const zone = zones.list.find(z => z.id === zoneId);
     if (!zone) return;
-    const zoneJobs = jobs.filter(j => zone.jobIds.includes(j.id) && j.geoLat && j.geoLng);
+    const zoneJobs = jobs.filter(j => zone.jobIds.includes(j.id) && j.geoLat && j.geoLng && !excluded.has(j.id));
     if (zoneJobs.length === 0) { alert("No geocoded jobs in this zone yet."); return; }
     const points = zoneJobs.map(j => ({ lat: j.geoLat, lng: j.geoLng, job: j }));
     const base = homeBase?.lat && homeBase?.lng
@@ -5016,6 +5017,16 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
     const ordered = optimizeRoute(points, base);
     setOptimizedRoute(ordered.map(p => p.job));
     setSelectedZoneId(zoneId);
+  };
+
+  const toggleJobExclusion = (zoneId, jobId) => {
+    setExcludedJobIds(prev => {
+      const next = new Set(prev);
+      if (next.has(jobId)) { next.delete(jobId); } else { next.add(jobId); }
+      // Rebuild route immediately if this zone's route is showing
+      if (selectedZoneId === zoneId) buildRoute(zoneId, next);
+      return next;
+    });
   };
 
   const getDirectionsUrlMulti = (stops) => {
@@ -5154,20 +5165,31 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
                         <h2 style={{...S.h2, margin:0}}>{z.name} ({zoneJobs.length})</h2>
                       </div>
                       {zoneJobs.length > 0 && (
-                        <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => buildRoute(z.id)}>
+                        <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => {
+                          setExcludedJobIds(new Set());
+                          buildRoute(z.id, new Set());
+                        }}>
                           🧭 Build Route
                         </button>
                       )}
                     </div>
                     {zoneJobs.length === 0 ? (
                       <p style={{fontSize:12, color:C.textMuted}}>No live jobs currently assigned here.</p>
-                    ) : zoneJobs.map(j => (
-                      <div key={j.id} style={{...S.schedJobCard, marginBottom:8, cursor:"pointer"}}
-                        onClick={() => { setCurrentJob(j); setView("jobdetail"); }}>
-                        <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
-                        <div style={S.schedJobAddr}>{fullAddressOf(j)}</div>
-                      </div>
-                    ))}
+                    ) : zoneJobs.map(j => {
+                      const isExcluded = excludedJobIds.has(j.id);
+                      return (
+                        <div key={j.id} style={{...S.schedJobCard, marginBottom:8, display:"flex", alignItems:"center", gap:8, opacity: isExcluded ? 0.45 : 1}}>
+                          <input type="checkbox" checked={!isExcluded}
+                            onChange={() => toggleJobExclusion(z.id, j.id)}
+                            onClick={e => e.stopPropagation()}
+                            style={{flexShrink:0, cursor:"pointer", width:16, height:16}}/>
+                          <div style={{flex:1, cursor:"pointer"}} onClick={() => { setCurrentJob(j); setView("jobdetail"); }}>
+                            <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+                            <div style={S.schedJobAddr}>{fullAddressOf(j)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
 
                     {selectedZoneId === z.id && optimizedRoute && (
                       <div style={{marginTop:12, paddingTop:12, borderTop:`1px solid ${C.border}`}}>
@@ -5186,6 +5208,13 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
                             <div style={{flex:1, fontSize:13, fontStyle: j.id==="home" ? "italic" : "normal", color: j.id==="home" ? C.textMuted : C.text}}>
                               {j.id === "home" ? "Home Base — " + (j.address||"") : (j.clientName||"Unnamed") + " — " + fullAddressOf(j)}
                             </div>
+                            {j.id !== "home" && (
+                              <button onClick={() => toggleJobExclusion(z.id, j.id)}
+                                title="Remove from route"
+                                style={{flexShrink:0, background:"none", border:"none", cursor:"pointer", fontSize:14, color:C.danger, padding:"0 4px", lineHeight:1}}>
+                                ✕
+                              </button>
+                            )}
                           </div>
                         ))}
                         <a href={getDirectionsUrlMulti(optimizedRoute)} target="_blank" rel="noopener noreferrer"
