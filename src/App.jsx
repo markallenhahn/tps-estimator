@@ -1428,7 +1428,10 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {/* ── ASSIGNMENT — owner/manager only ── */}
       {canSeeAllJobs && teamUsers && teamUsers.length > 0 && (
         <section style={S.section}>
-          <h2 style={S.h2}>Assigned To</h2>
+          <h2 style={S.h2}>Assignments</h2>
+
+          {/* Estimator */}
+          <label style={{...S.formLabel, marginBottom:4}}>Estimator</label>
           {!currentJob.assignedTo && estimatorRec && (
             <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:8,
               background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", marginBottom:8}}>
@@ -1447,10 +1450,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             onChange={e => {
               const newId = e.target.value || null;
               if (!newId) {
-                // Clearing assignment — just remove it
                 updateJob(j => ({...j, assignedTo: null}));
               } else if (canSeeAllJobs) {
-                // Owner/manager — open appointment modal
                 setApptAssignId(newId);
                 setApptDate(currentJob.estimatorAppointment?.date || "");
                 setApptTime(currentJob.estimatorAppointment?.time || "");
@@ -1458,7 +1459,6 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                 setApptConflicts([]);
                 setShowApptModal(true);
               } else {
-                // Other roles — assign directly without modal
                 updateJob(j => ({...j, assignedTo: newId}));
               }
             }}
@@ -1493,6 +1493,21 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               })()}
             </div>
           )}
+
+          {/* Job Owner */}
+          <div style={{marginTop:16, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+            <label style={{...S.formLabel, marginBottom:4}}>Job Owner</label>
+            <div style={{fontSize:11, color:C.textMuted, marginBottom:6}}>The point person responsible for this job — appears in their My Jobs.</div>
+            <select value={currentJob.assignedWorker || ""}
+              onChange={e => updateJob(j => ({...j, assignedWorker: e.target.value || null}))}
+              style={S.input}>
+              <option value="">— None —</option>
+              {teamUsers.map(u => {
+                const name = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                return <option key={u.id} value={u.id}>{name} ({ROLE_LABELS[u.role]||u.role})</option>;
+              })}
+            </select>
+          </div>
         </section>
       )}
 
@@ -1826,28 +1841,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             </select>
           </div>
         )}
-        {teamUsers && teamUsers.length > 0 && (
-          <div style={{marginTop:14, paddingTop:14, borderTop:`1px solid ${C.border}`}}>
-            <label style={S.formLabel}>Job Owner</label>
-            <select value={currentJob.assignedWorker || ""}
-              onChange={e => updateJob(j => ({...j, assignedWorker: e.target.value || null}))}
-              style={S.input}>
-              <option value="">— None —</option>
-              {teamUsers.map(u => {
-                const name = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
-                return <option key={u.id} value={u.id}>{name} ({ROLE_LABELS[u.role]||u.role})</option>;
-              })}
-            </select>
-            {currentJob.assignedWorker && (() => {
-              const worker = teamUsers.find(u => u.id === currentJob.assignedWorker);
-              return worker ? (
-                <div style={{fontSize:11, color:C.textMuted, marginTop:4}}>
-                  {[worker.first_name, worker.last_name].filter(Boolean).join(" ") || worker.email} is the point person — this job appears in their My Jobs.
-                </div>
-              ) : null;
-            })()}
-          </div>
-        )}
+
       </section>
       )}
 
