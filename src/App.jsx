@@ -6477,7 +6477,6 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                   <div style={{fontSize:13}}>{l.text}</div>
                 </div>
               ))}
-            </div>
             </>
             )}
           </section>
