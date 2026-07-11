@@ -4000,9 +4000,10 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           return { ...p, periodJobs, estUsed, wasteFactor };
         });
 
-        // Running totals
-        const totalActual = enrichedPeriods.reduce((s,p)=>s+p.actualUsed,0);
-        const totalEst    = enrichedPeriods.reduce((s,p)=>s+p.estUsed,0);
+        // Running totals — only count periods with positive actual usage (skip fill-up/zero periods)
+        const validPeriods = enrichedPeriods.filter(p => p.actualUsed > 0);
+        const totalActual = validPeriods.reduce((s,p)=>s+p.actualUsed,0);
+        const totalEst    = validPeriods.reduce((s,p)=>s+p.estUsed,0);
         const runningWF   = totalEst > 0 ? totalActual/totalEst : null;
 
         return (
@@ -4104,7 +4105,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
 
                 {/* Running totals */}
                 <div style={{background:C.surface2, borderRadius:10, padding:"14px 16px", border:`1px solid ${C.border}`}}>
-                  <div style={{fontWeight:700, fontSize:14, marginBottom:10}}>Running Totals ({enrichedPeriods.length} period{enrichedPeriods.length!==1?"s":""})</div>
+                  <div style={{fontWeight:700, fontSize:14, marginBottom:10}}>Running Totals ({validPeriods.length} valid period{validPeriods.length!==1?"s":""})</div>
                   <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12}}>
                     {[
                       ["Total Actual Used", `${totalActual.toFixed(1)} ${unit}`],
@@ -4130,7 +4131,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                       matLabel: matType?.label,
                       from: reconcilFrom || enrichedPeriods[0]?.openDate,
                       to: reconcilTo || enrichedPeriods[enrichedPeriods.length-1]?.closeDate,
-                      periodsCount: enrichedPeriods.length,
+                      periodsCount: validPeriods.length,
                       runningWasteFactor: runningWF,
                       jobsUpdated: [],
                     };
