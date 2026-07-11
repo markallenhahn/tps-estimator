@@ -6841,12 +6841,8 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
       });
     });
 
-    // Include fuel in COGS so EBITDA table matches Costs tab
-    const fuelCost = fin.fuelCost || 0;
-    const estimatedCOGS = fin.totalMaterials + fuelCost;
-    const actualsCOGSWithFuel = actualsCOGS + fuelCost;
-    const fifoCOGSWithFuel = fifoCOGS + fuelCost;
-    const cogs = hasActuals ? actualsCOGSWithFuel : hasFifo ? fifoCOGSWithFuel : estimatedCOGS;
+    const estimatedCOGS = fin.totalMaterials;
+    const cogs = hasActuals ? actualsCOGS : hasFifo ? fifoCOGS : estimatedCOGS;
     const cogsIsEstimated = !hasActuals && !hasFifo;
     const cogsSource = hasActuals ? "actual" : hasFifo ? "fifo" : "estimated";
 
