@@ -3920,12 +3920,15 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
       <p style={S.subhead}>Log every material purchase and compare it against what the job estimates say should have been used.</p>
 
       {/* Sub-tab nav */}
-      <div style={{display:"flex", gap:0, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden", marginBottom:16, alignSelf:"flex-start"}}>
-        {[["inventory","Inventory & Purchases"],["reconciliation","Reconciliation"]].map(([key,label]) => (
+      <div style={{display:"flex", gap:8, marginBottom:16, flexWrap:"wrap"}}>
+        {[["inventory","🧴 Inventory & Purchases"],["reconciliation","📊 Reconciliation"]].map(([key,label]) => (
           <button key={key} onClick={() => setMatTab(key)}
-            style={{padding:"8px 18px", fontSize:13, fontWeight:600, border:"none", cursor:"pointer",
+            style={{
+              flex:1, padding:"8px 0", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
               background: matTab===key ? C.accent : C.surface2,
-              color: matTab===key ? "#000" : C.textMuted}}>
+              color: matTab===key ? "#000" : C.textMuted,
+              border: `1px solid ${matTab===key ? C.accent : C.border}`,
+            }}>
             {label}
           </button>
         ))}
