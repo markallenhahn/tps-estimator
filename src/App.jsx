@@ -7171,7 +7171,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const estCrackFill     = crackFillLinFt * CRACKFILL_PER_LINFT;
   const estAsphalt       = patchTons * ASPHALT_PER_TON;
   const estFuel          = revenue * FUEL_PCT;
-  const estLabor         = revenue * 0.16;
+  const estLabor         = revenue * (reportSettings.laborPct || 16) / 100;
   const costs            = currentJob.costs || {};
   const estStoneTons     = Number(costs.stoneTons || 0);
   const estStone         = estStoneTons * STONE_PER_TON;
@@ -7336,7 +7336,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
             </div>
           );
         })()}
-        {costRow("Labor (16%)", estLabor, "labor", `${formatCurrency(revenue)} × 16%`)}
+        {costRow(`Labor (${reportSettings.laborPct||16}%)`, estLabor, "labor", `${formatCurrency(revenue)} × ${reportSettings.laborPct||16}%`)}
 
         {/* Stone */}
         <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
