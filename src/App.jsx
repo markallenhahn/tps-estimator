@@ -5370,7 +5370,7 @@ function ZonesMapView({ jobs, zones, zoneColors, fullAddressOf }) {
 }
 
 // ─── Schedule View ────────────────────────────────────────────────────────────
-function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userId, homeBase }) {
+function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userId, homeBase, tenantData }) {
   const today    = new Date();
   const roles = userRoles || [userRole];
   const canSeeAll = hasRole(roles, "owner") || hasRole(roles, "manager") || hasRole(roles, "crewlead");
@@ -5483,7 +5483,7 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
               {new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
             </h2>
             <div style={{display:"flex", gap:6, alignItems:"center"}}>
-              {selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city)).length > 1 && (() => {
+              {planHasFeature(tenantData, "zones") && selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city)).length > 1 && (() => {
                 const routableJobs = selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city));
                 const homeAddr = homeBase?.address ? encodeURIComponent(homeBase.address) : null;
                 const jobWaypoints = routableJobs.map(j=>encodeURIComponent([j.address,j.city].filter(Boolean).join(", ")));
@@ -15149,7 +15149,7 @@ function App() {
         {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} tFetch={tFetch} setJobs={setJobs} updateJobById={updateJobById} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
-        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} homeBase={homeBase}/></div>}
+        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} homeBase={homeBase} tenantData={currentTenant?.data}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"zones") && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
         {/* ── Job context bar — shared across all job-scoped views ── */}
         {["jobdetail","estimate","invoice","costs"].includes(view) && currentJob && (
