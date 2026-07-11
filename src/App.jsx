@@ -1826,6 +1826,28 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             </select>
           </div>
         )}
+        {teamUsers && teamUsers.length > 0 && (
+          <div style={{marginTop:14, paddingTop:14, borderTop:`1px solid ${C.border}`}}>
+            <label style={S.formLabel}>Job Owner</label>
+            <select value={currentJob.assignedWorker || ""}
+              onChange={e => updateJob(j => ({...j, assignedWorker: e.target.value || null}))}
+              style={S.input}>
+              <option value="">— None —</option>
+              {teamUsers.map(u => {
+                const name = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+                return <option key={u.id} value={u.id}>{name} ({ROLE_LABELS[u.role]||u.role})</option>;
+              })}
+            </select>
+            {currentJob.assignedWorker && (() => {
+              const worker = teamUsers.find(u => u.id === currentJob.assignedWorker);
+              return worker ? (
+                <div style={{fontSize:11, color:C.textMuted, marginTop:4}}>
+                  {[worker.first_name, worker.last_name].filter(Boolean).join(" ") || worker.email} is the point person — this job appears in their My Jobs.
+                </div>
+              ) : null;
+            })()}
+          </div>
+        )}
       </section>
       )}
 
@@ -5537,7 +5559,7 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
   const todayStr = new Date().toISOString().slice(0,10);
   const visibleJobs = isEstimatorOrCrew
     ? jobs.filter(j => {
-        if (j.assignedTo !== userId) return false;
+        if (j.assignedTo !== userId && j.assignedWorker !== userId) return false;
         // Only show jobs with at least one future or today scheduled date
         const dates = (j.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
         const lastDate = dates.length ? dates.sort().slice(-1)[0] : j.scheduledDate;
@@ -5578,7 +5600,7 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
     if (!j.estimatorAppointment?.date) return;
     const date = j.estimatorAppointment.date;
     // For estimator/crew: only show their own appointments
-    if (isEstimatorOrCrew && j.assignedTo !== userId) return;
+    if (isEstimatorOrCrew && j.assignedTo !== userId && j.assignedWorker !== userId) return;
     if (!jobsByDate[date]) jobsByDate[date] = [];
     // Add as a special entry with isEstimateVisit flag
     if (!jobsByDate[date].find(x => x.id === j.id && x.isEstimateVisit)) {
@@ -5707,7 +5729,7 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
         // Build upcoming: scheduled jobs + estimate visits
         const upcomingVisits = jobs
           .filter(j => j.estimatorAppointment?.date >= todayKey)
-          .filter(j => !isEstimatorOrCrew || j.assignedTo === userId)
+          .filter(j => !isEstimatorOrCrew || j.assignedTo === userId || j.assignedWorker === userId)
           .map(j => ({...j, isEstimateVisit: true}));
         const upcomingWork = visibleJobs
           .filter(j => (j.scheduleDays||[]).some(d=>d.date&&d.date>=todayKey) || (j.scheduledDate&&j.scheduledDate>=todayKey));
@@ -10678,7 +10700,7 @@ function HomeView({ jobs, crews, userRole, userRoles, userId, setCurrentJob, set
   // Same visibility scoping as the rest of the jobs workflow — nobody sees
   // more here than they'd see anywhere else in the app.
   const visibleJobs = canSeeAllJobs ? jobs : jobs.filter(j =>
-    j.assignedTo === userId || (myCrew && j.crewId === myCrew.id)
+    j.assignedTo === userId || j.assignedWorker === userId || (myCrew && j.crewId === myCrew.id)
   );
 
   const open = (job) => { setCurrentJob(job); setView("jobdetail"); };
@@ -11214,7 +11236,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
   // everything on the main Jobs tab, but get the same strict "assigned to
   // me" filter on their own My Jobs screen (scope="mine").
   const mineOnly = scope === "mine" || !canSeeAllJobs;
-  const visibleJobs = mineOnly ? jobs.filter(j => j.assignedTo === userId) : jobs;
+  const visibleJobs = mineOnly ? jobs.filter(j => j.assignedTo === userId || j.assignedWorker === userId) : jobs;
 
   const create = () => {
     const j = initialJob(rates);
@@ -11293,7 +11315,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
     );
   };
 
-  const myJobsCount = jobs.filter(j => j.assignedTo === userId).length;
+  const myJobsCount = jobs.filter(j => j.assignedTo === userId || j.assignedWorker === userId).length;
   const title = mineOnly ? "My Jobs" : "Jobs Pipeline";
   const headerRow = isDesktopLayout ? (
     <div style={S.pageHeader}>
