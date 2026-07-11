@@ -4754,6 +4754,108 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
 
 // ─── Schedule View ────────────────────────────────────────────────────────────
 // ─── Zones View (route optimization) ───────────────────────────────────────────
+// ─── ZoneSection — per-zone job selection + route building ────────────────────
+// Isolated as its own component so useState (excludedJobIds) doesn't add to
+// ZonesView's hook count, which would violate React's rules of hooks.
+function ZoneSection({ z, i, jobs, zoneColor, selectedZoneId, setSelectedZoneId,
+                       optimizedRoute, setOptimizedRoute, homeBase, setCurrentJob, setView,
+                       getDirectionsUrlMulti, fullAddressOf, ZONE_COLORS, C, S }) {
+  const zoneJobs = jobs.filter(j => z.jobIds.includes(j.id));
+  const [excludedIds, setExcludedIds] = useState([]);
+
+  const buildRoute = (excluded) => {
+    const ex = excluded ?? excludedIds;
+    const eligible = jobs.filter(j => z.jobIds.includes(j.id) && j.geoLat && j.geoLng && !ex.includes(j.id));
+    if (eligible.length === 0) { alert("No geocoded jobs selected."); return; }
+    const points = eligible.map(j => ({ lat: j.geoLat, lng: j.geoLng, job: j }));
+    const base = homeBase?.lat && homeBase?.lng
+      ? { lat: homeBase.lat, lng: homeBase.lng, job: { id:"home", clientName:"Home Base", address: homeBase.address } }
+      : null;
+    const ordered = optimizeRoute(points, base);
+    setOptimizedRoute(ordered.map(p => p.job));
+    setSelectedZoneId(z.id);
+  };
+
+  const toggle = (jobId) => {
+    const next = excludedIds.includes(jobId) ? excludedIds.filter(id => id !== jobId) : [...excludedIds, jobId];
+    setExcludedIds(next);
+    if (selectedZoneId === z.id) buildRoute(next);
+  };
+
+  const handleBuildRoute = () => {
+    setExcludedIds([]);
+    buildRoute([]);
+  };
+
+  const isSelected = selectedZoneId === z.id;
+
+  return (
+    <section style={S.section}>
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
+        <div style={{display:"flex", alignItems:"center", gap:8}}>
+          <div style={{width:12, height:12, borderRadius:"50%", background:zoneColor}}/>
+          <h2 style={{...S.h2, margin:0}}>{z.name} ({zoneJobs.length})</h2>
+        </div>
+        {zoneJobs.length > 0 && (
+          <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={handleBuildRoute}>
+            🧭 Build Route
+          </button>
+        )}
+      </div>
+      {zoneJobs.length === 0 ? (
+        <p style={{fontSize:12, color:C.textMuted}}>No live jobs currently assigned here.</p>
+      ) : zoneJobs.map(j => {
+        const isExcluded = excludedIds.includes(j.id);
+        return (
+          <div key={j.id} style={{...S.schedJobCard, marginBottom:8, display:"flex", alignItems:"center", gap:8, opacity: isExcluded ? 0.45 : 1}}>
+            <input type="checkbox" checked={!isExcluded}
+              onChange={() => toggle(j.id)}
+              onClick={e => e.stopPropagation()}
+              style={{flexShrink:0, cursor:"pointer", width:16, height:16}}/>
+            <div style={{flex:1, cursor:"pointer"}} onClick={() => { setCurrentJob(j); setView("jobdetail"); }}>
+              <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
+              <div style={S.schedJobAddr}>{fullAddressOf(j)}</div>
+            </div>
+          </div>
+        );
+      })}
+
+      {isSelected && optimizedRoute && (
+        <div style={{marginTop:12, paddingTop:12, borderTop:`1px solid ${C.border}`}}>
+          <div style={{fontSize:13, fontWeight:700, marginBottom:8}}>Optimized Route Order</div>
+          {optimizedRoute.map((j, idx) => (
+            <div key={j.id+"-"+idx} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
+              {j.id === "home" ? (
+                <div style={{width:22, height:22, borderRadius:"50%", background:C.surface2,
+                  border:`1px solid ${C.border}`, display:"flex", alignItems:"center",
+                  justifyContent:"center", flexShrink:0, fontSize:12}}>🏠</div>
+              ) : (
+                <div style={{width:22, height:22, borderRadius:"50%", background:zoneColor,
+                  color:"#000", fontSize:11, fontWeight:800, display:"flex", alignItems:"center",
+                  justifyContent:"center", flexShrink:0}}>{idx}</div>
+              )}
+              <div style={{flex:1, fontSize:13, fontStyle: j.id==="home" ? "italic" : "normal", color: j.id==="home" ? C.textMuted : C.text}}>
+                {j.id === "home" ? "Home Base — " + (j.address||"") : (j.clientName||"Unnamed") + " — " + fullAddressOf(j)}
+              </div>
+              {j.id !== "home" && (
+                <button onClick={() => toggle(j.id)}
+                  title="Remove from route"
+                  style={{flexShrink:0, background:"none", border:"none", cursor:"pointer", fontSize:14, color:C.danger, padding:"0 4px", lineHeight:1}}>
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          <a href={getDirectionsUrlMulti(optimizedRoute)} target="_blank" rel="noopener noreferrer"
+            style={{...S.btnPrimary, display:"block", textAlign:"center", textDecoration:"none", marginTop:10}}>
+            🧭 Open Full Route in Maps
+          </a>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, setView, homeBase, tFetch }) {
   const [tab,           setTab]           = useState("list"); // "list" | "map" | "import"
   const [calculating,   setCalculating]   = useState(false);
@@ -5003,20 +5105,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
     setEditingNames(true);
   };
 
-  // ── Build route for a zone ──
-  const buildRoute = (zoneId) => {
-    const zone = zones.list.find(z => z.id === zoneId);
-    if (!zone) return;
-    const zoneJobs = jobs.filter(j => zone.jobIds.includes(j.id) && j.geoLat && j.geoLng);
-    if (zoneJobs.length === 0) { alert("No geocoded jobs in this zone yet."); return; }
-    const points = zoneJobs.map(j => ({ lat: j.geoLat, lng: j.geoLng, job: j }));
-    const base = homeBase?.lat && homeBase?.lng
-      ? { lat: homeBase.lat, lng: homeBase.lng, job: { id:"home", clientName:"Home Base", address: homeBase.address } }
-      : null;
-    const ordered = optimizeRoute(points, base);
-    setOptimizedRoute(ordered.map(p => p.job));
-    setSelectedZoneId(zoneId);
-  };
+
 
 
   const getDirectionsUrlMulti = (stops) => {
@@ -5145,59 +5234,16 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
                 </div>
               </section>
 
-              {zonesList.map((z, i) => {
-                const zoneJobs = jobs.filter(j => z.jobIds.includes(j.id));
-                return (
-                  <section key={z.id} style={S.section}>
-                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10}}>
-                      <div style={{display:"flex", alignItems:"center", gap:8}}>
-                        <div style={{width:12, height:12, borderRadius:"50%", background:ZONE_COLORS[i]}}/>
-                        <h2 style={{...S.h2, margin:0}}>{z.name} ({zoneJobs.length})</h2>
-                      </div>
-                      {zoneJobs.length > 0 && (
-                        <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => buildRoute(z.id)}>
-                          🧭 Build Route
-                        </button>
-                      )}
-                    </div>
-                    {zoneJobs.length === 0 ? (
-                      <p style={{fontSize:12, color:C.textMuted}}>No live jobs currently assigned here.</p>
-                    ) : zoneJobs.map(j => (
-                      <div key={j.id} style={{...S.schedJobCard, marginBottom:8, cursor:"pointer"}}
-                        onClick={() => { setCurrentJob(j); setView("jobdetail"); }}>
-                        <div style={S.schedJobName}>{j.clientName||"Unnamed"}</div>
-                        <div style={S.schedJobAddr}>{fullAddressOf(j)}</div>
-                      </div>
-                    ))}
-
-                    {selectedZoneId === z.id && optimizedRoute && (
-                      <div style={{marginTop:12, paddingTop:12, borderTop:`1px solid ${C.border}`}}>
-                        <div style={{fontSize:13, fontWeight:700, marginBottom:8}}>Optimized Route Order</div>
-                        {optimizedRoute.map((j, idx) => (
-                          <div key={j.id+"-"+idx} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
-                            {j.id === "home" ? (
-                              <div style={{width:22, height:22, borderRadius:"50%", background:C.surface2,
-                                border:`1px solid ${C.border}`, display:"flex", alignItems:"center",
-                                justifyContent:"center", flexShrink:0, fontSize:12}}>🏠</div>
-                            ) : (
-                              <div style={{width:22, height:22, borderRadius:"50%", background:ZONE_COLORS[i],
-                                color:"#000", fontSize:11, fontWeight:800, display:"flex", alignItems:"center",
-                                justifyContent:"center", flexShrink:0}}>{idx}</div>
-                            )}
-                            <div style={{flex:1, fontSize:13, fontStyle: j.id==="home" ? "italic" : "normal", color: j.id==="home" ? C.textMuted : C.text}}>
-                              {j.id === "home" ? "Home Base — " + (j.address||"") : (j.clientName||"Unnamed") + " — " + fullAddressOf(j)}
-                            </div>
-                          </div>
-                        ))}
-                        <a href={getDirectionsUrlMulti(optimizedRoute)} target="_blank" rel="noopener noreferrer"
-                          style={{...S.btnPrimary, display:"block", textAlign:"center", textDecoration:"none", marginTop:10}}>
-                          🧭 Open Full Route in Maps
-                        </a>
-                      </div>
-                    )}
-                  </section>
-                );
-              })}
+              {zonesList.map((z, i) => (
+                <ZoneSection key={z.id} z={z} i={i} jobs={jobs}
+                  zoneColor={ZONE_COLORS[i]} ZONE_COLORS={ZONE_COLORS}
+                  selectedZoneId={selectedZoneId} setSelectedZoneId={setSelectedZoneId}
+                  optimizedRoute={selectedZoneId === z.id ? optimizedRoute : null}
+                  setOptimizedRoute={setOptimizedRoute}
+                  homeBase={homeBase} setCurrentJob={setCurrentJob} setView={setView}
+                  getDirectionsUrlMulti={getDirectionsUrlMulti}
+                  fullAddressOf={fullAddressOf} C={C} S={S}/>
+              ))}
 
               {zones?.overflow?.count > 0 && (
                 <section style={S.section}>
@@ -5371,6 +5417,52 @@ function ZonesMapView({ jobs, zones, zoneColors, fullAddressOf }) {
 }
 
 // ─── Schedule View ────────────────────────────────────────────────────────────
+// ─── ScheduleRouteButton — async geocode + optimize + open Maps ───────────────
+// Separate component so it can have its own useState (loading) without
+// affecting ScheduleView's hook count.
+function ScheduleRouteButton({ jobs: routableJobs, homeBase, setJobs, tFetch, S }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleRoute = async () => {
+    setLoading(true);
+    let geocodedJobs = [...routableJobs];
+    for (let i = 0; i < geocodedJobs.length; i++) {
+      const j = geocodedJobs[i];
+      if (!j.geoLat || !j.geoLng) {
+        const addrStr = fullAddressOf(j);
+        const geo = await geocodeAddress(geocodeQueryOf(j), homeBase);
+        if (geo) {
+          geocodedJobs[i] = {...j, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr};
+          if (setJobs) setJobs(prev => prev.map(jj => jj.id === j.id ? {...jj, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr} : jj));
+          if (tFetch) tFetch("jobs?id=eq."+j.id, { method:"PATCH", headers:{"Prefer":"return=minimal"}, body:JSON.stringify({data:{...j, geoLat:geo.lat, geoLng:geo.lng, geoAddr:addrStr}}) }).catch(()=>{});
+        }
+      }
+    }
+    const jobPoints = geocodedJobs.filter(j=>j.geoLat&&j.geoLng).map(j=>({...j, lat:j.geoLat, lng:j.geoLng}));
+    const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng, id:"home"} : null;
+    const result = jobPoints.length > 0 ? optimizeRoute(jobPoints, hb) : geocodedJobs;
+    const orderedJobs = result.filter(p=>p.id!=="home");
+    const homeAddr = homeBase?.address ? encodeURIComponent(homeBase.address) : null;
+    const waypoints = orderedJobs.map(j=>encodeURIComponent([j.address,j.city].filter(Boolean).join(", ")));
+    const origin = homeAddr || waypoints[0];
+    const dest = homeAddr || waypoints[waypoints.length-1];
+    const middle = homeAddr ? waypoints.join("|") : waypoints.slice(1,-1).join("|");
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
+    if (middle) url += `&waypoints=${middle}`;
+    setLoading(false);
+    window.open(url, "_blank");
+  };
+
+  return (
+    <button onClick={handleRoute} disabled={loading}
+      style={{...S.btnSmall, background:"#dbeafe", color:"#1d4ed8", border:"none",
+        cursor:loading?"wait":"pointer", display:"flex", alignItems:"center", gap:4,
+        whiteSpace:"nowrap", opacity:loading?0.6:1}}>
+      {loading ? "⏳ Routing..." : `🗺 Route ${routableJobs.length} Jobs`}
+    </button>
+  );
+}
+
 function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userId, homeBase, tenantData, setJobs, tFetch }) {
   const today    = new Date();
   const roles = userRoles || [userRole];
@@ -5484,27 +5576,11 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
               {new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
             </h2>
             <div style={{display:"flex", gap:6, alignItems:"center"}}>
-              {planHasFeature(tenantData, "zones") && selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city)).length > 1 && (() => {
-                const routableJobs = selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city));
-                const jobPoints = routableJobs.filter(j=>j.geoLat&&j.geoLng).map(j=>({...j, lat:j.geoLat, lng:j.geoLng}));
-                const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng, id:"home"} : null;
-                const ordered = jobPoints.length === routableJobs.length && jobPoints.length > 0
-                  ? optimizeRoute(jobPoints, hb).filter(p=>p.id!=="home")
-                  : routableJobs;
-                const homeAddr = homeBase?.address ? encodeURIComponent(homeBase.address) : null;
-                const waypoints = ordered.map(j=>encodeURIComponent([j.address,j.city].filter(Boolean).join(", ")));
-                const origin = homeAddr || waypoints[0];
-                const dest = homeAddr || waypoints[waypoints.length-1];
-                const middle = homeAddr ? waypoints.join("|") : waypoints.slice(1,-1).join("|");
-                let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
-                if (middle) url += `&waypoints=${middle}`;
-                return (
-                  <a href={url} target="_blank" rel="noopener noreferrer"
-                    style={{...S.btnSmall, background:"#dbeafe", color:"#1d4ed8", textDecoration:"none", display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap"}}>
-                    🗺 Route {routableJobs.length} Jobs
-                  </a>
-                );
-              })()}
+              {planHasFeature(tenantData, "zones") && selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city)).length > 1 && (
+                <ScheduleRouteButton
+                  jobs={selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city))}
+                  homeBase={homeBase} setJobs={setJobs} tFetch={tFetch} S={S}/>
+              )}
               <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => setSelectedDay(null)}>✕</button>
             </div>
           </div>
