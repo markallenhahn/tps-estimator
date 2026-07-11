@@ -736,7 +736,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
             <button onClick={() => setView("platform-admin")}
               style={{...S.sidebarTab,...(view==="platform-admin"?S.sidebarTabActive:{})}}>
               <TabIcon tabKey="owner" iconStyle={iconStyle} size={18}/>
-              <span><Icon name="Globe" size={16} style={{verticalAlign:"middle",marginRight:6}/> Platform Admin</span>
+              <span><Icon name="Globe" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Platform Admin</span>
             </button>
           )}
           <div style={S.sidebarDivider}/>
@@ -1024,7 +1024,7 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
           </div>
         </div>
         <div style={{...S.btnRow, marginTop:16}}>
-          <button style={S.btnPrimary} onClick={save}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Rates</button>
+          <button style={S.btnPrimary} onClick={save}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save Rates</button>
           <button style={S.btnSecondary} onClick={reset}>↩ Reset</button>
         </div>
       </section>
@@ -1061,7 +1061,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
   return (
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
-        <h1 style={S.h1}><Icon name="Home" size={16} style={{verticalAlign:"middle",marginRight:6}/> Home Base</h1>
+        <h1 style={S.h1}><Icon name="Home" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Home Base</h1>
       </div>
       <p style={S.subhead}>Route start/end point</p>
       <section style={S.section}>
@@ -1095,7 +1095,7 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
         )}
         {homeMsg && <div style={{fontSize:12, color: homeMsg.startsWith("⚠️") ? C.danger : C.green, marginTop:8}}>{homeMsg}</div>}
         <button style={{...S.btnPrimary, marginTop:12, opacity:savingHome?0.6:1}} onClick={saveHomeBase} disabled={savingHome}>
-          {savingHome ? "Saving..." : <><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Home Base</>}
+          {savingHome ? "Saving..." : <><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save Home Base</>}
         </button>
       </section>
     </div>
@@ -1604,7 +1604,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             {showPayModal && (
               <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
                 <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-                  <h2 style={{...S.h2, marginTop:0}}><Icon name="DollarSign" size={16} style={{verticalAlign:"middle",marginRight:6}/> Mark as Paid</h2>
+                  <h2 style={{...S.h2, marginTop:0}}><Icon name="DollarSign" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Mark as Paid</h2>
                   <div style={{display:"flex", flexDirection:"column", gap:12}}>
                     <label style={S.formLabel}>Payment Date
                       <input type="date" value={payModalDate}
@@ -1729,7 +1729,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                     <div style={{width:160, flexShrink:0}}>
                       <input type="date" value={d.date||""} onChange={e => updateDay(i, "date", e.target.value)} style={{...S.input}}/>
                     </div>
-                    <button onClick={() => removeDay(i)} style={{...S.btnSmallDanger, marginLeft:"auto"}}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}/></button>
+                    <button onClick={() => removeDay(i)} style={{...S.btnSmallDanger, marginLeft:"auto"}}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}}/></button>
                   </div>
                   {/* Service types for this day */}
                   <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center"}}>
@@ -1902,7 +1902,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               />
             </div>
             <div style={{display:"flex", gap:10, marginTop:10}}>
-              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearSig}><Icon name="Trash2" size={15} style={{verticalAlign:"middle",marginRight:5}/> Clear</button>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearSig}><Icon name="Trash2" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Clear</button>
               <button style={{...S.btnPrimary, flex:1}} onClick={async () => {
                 const c = sigCanvasRef.current; if (!c) return;
                 const px = c.getContext("2d").getImageData(0,0,c.width,c.height).data;
@@ -2228,7 +2228,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                       )}
                     </div>
                     <div style={{display:"flex", gap:8}}>
-                      <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save</button>
+                      <button style={{...S.btnPrimary, flex:1}} onClick={saveEdit}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
                       <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
                     </div>
                   </div>
@@ -2277,7 +2277,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             </button>
             {!isDesktop && (
               <button style={{...S.btnCapture, maxWidth:220}} onClick={startCamera}>
-                <Icon name="Camera" size={15} style={{verticalAlign:"middle",marginRight:5}/> Take Photo
+                <Icon name="Camera" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Take Photo
               </button>
             )}
           </div>
@@ -2286,7 +2286,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
             <video ref={videoRef} autoPlay muted playsInline style={S.cameraPreview}/>
             <canvas ref={canvasRef} style={{display:"none"}}/>
             <div style={S.cameraControls}>
-              <button style={S.btnShoot} onClick={takePhoto}><Icon name="Camera" size={15} style={{verticalAlign:"middle",marginRight:5}/> Capture</button>
+              <button style={S.btnShoot} onClick={takePhoto}><Icon name="Camera" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Capture</button>
               <button style={S.btnCancel} onClick={stopStream}>Cancel</button>
             </div>
           </div>
@@ -2315,7 +2315,7 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
       {showApptModal && createPortal(
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><Icon name="CalendarCheck" size={16} style={{verticalAlign:"middle",marginRight:6}/> Set Estimator Appointment</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="CalendarCheck" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Set Estimator Appointment</h2>
             {(() => {
               const assignee = teamUsers.find(u => u.id === apptAssignId);
               const assigneeName = assignee ? [assignee.first_name, assignee.last_name].filter(Boolean).join(" ") || assignee.email : "Estimator";
@@ -2976,7 +2976,7 @@ ${email}`:""}`;
       {showSentConfirm && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><Icon name="Send" size={16} style={{verticalAlign:"middle",marginRight:6}/> Did you send the {invoiceType==="paid"?"receipt":"invoice"}?</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="Send" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Did you send the {invoiceType==="paid"?"receipt":"invoice"}?</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
               Confirming will record today as the sent date.
             </p>
@@ -2998,7 +2998,7 @@ ${email}`:""}`;
       {showEmailModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>The PDF will be generated and sent directly to the client's inbox.</p>
             <label style={S.formLabel}>Client Email *
               <input type="email" value={emailTo} onChange={e => setEmailTo(e.target.value)}
@@ -3019,7 +3019,7 @@ ${email}`:""}`;
       {showTextModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><Icon name="MessageSquare" size={16} style={{verticalAlign:"middle",marginRight:6}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="MessageSquare" size={16} style={{verticalAlign:"middle",marginRight:6}}/> {invoiceType==="paid"?"Receipt":"Invoice"} PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>The PDF will be uploaded and a link sent via your phone's SMS app.</p>
             <label style={S.formLabel}>Client Phone *
               <input type="tel" value={textTo} onChange={e => setTextTo(e.target.value)}
@@ -3052,11 +3052,11 @@ ${email}`:""}`;
                 setPdfLoading(false);
               }
             }} disabled={pdfLoading}>
-            {pdfLoading ? "⏳ Building PDF..." : <><Icon name="FileText" size={15} style={{verticalAlign:"middle",marginRight:5}/> Download PDF</>}
+            {pdfLoading ? "⏳ Building PDF..." : <><Icon name="FileText" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF</>}
           </button>
-          <button style={S.btnSecondary} onClick={emailInvoice}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}/> Email PDF</button>
-          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><Icon name="MessageSquare" size={15} style={{verticalAlign:"middle",marginRight:5}/> Text PDF</button>
-          <button style={S.btnSecondary} onClick={copyInvoice}><Icon name="Copy" size={15} style={{verticalAlign:"middle",marginRight:5}/> Copy Text</button>
+          <button style={S.btnSecondary} onClick={emailInvoice}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Email PDF</button>
+          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><Icon name="MessageSquare" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Text PDF</button>
+          <button style={S.btnSecondary} onClick={copyInvoice}><Icon name="Copy" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
 
@@ -3077,7 +3077,7 @@ ${email}`:""}`;
                 <a href={`mailto:${currentJob.clientEmail}?subject=${encodeURIComponent("We'd love your feedback!")}&body=${encodeURIComponent(
                   `${currentJob.clientName || "Hi"},\n\nThank you for choosing ${CS_NAME || "us"}. We would love your feedback and would welcome a review on our Google profile.\n\nRegards,\n${CS_NAME || "us"}\n\n${CS_GOOGLE_REVIEW_URL}`
                 )}`}
-                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}/> Email Review Request
+                  style={{...S.btnSecondary, flex:1, textAlign:"center", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#e0f2fe", color:"#1d4ed8", border:`1px solid #bae6fd`}}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Email Review Request
                 </a>
               )}
               {!currentJob.clientPhone && !currentJob.clientEmail && (
@@ -3315,7 +3315,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
       {/* Clock In / Out with GPS — mobile/tablet only; desktop uses manual entry below */}
       {!isDesktop && (
       <section style={{...S.section, border:`2px solid ${activeClock ? C.green : C.border}`}}>
-        <h2 style={S.h2}><Icon name="Clock" size={16} style={{verticalAlign:"middle",marginRight:6}/> Clock {activeClock ? "Out" : "In"}</h2>
+        <h2 style={S.h2}><Icon name="Clock" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Clock {activeClock ? "Out" : "In"}</h2>
         {!activeClock ? (
           <>
             <div style={{background:C.surface2, borderRadius:8, padding:"10px 12px", marginBottom:10}}>
@@ -3540,7 +3540,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                       </select>
                     </div>
                     <div style={{display:"flex", gap:8}}>
-                      <button style={{...S.btnPrimary, flex:1, fontSize:12}} onClick={() => saveEdit(e)}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save</button>
+                      <button style={{...S.btnPrimary, flex:1, fontSize:12}} onClick={() => saveEdit(e)}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
                       <button style={{...S.btnSecondary, flex:1, fontSize:12}} onClick={cancelEdit}>Cancel</button>
                     </div>
                   </div>
@@ -4307,7 +4307,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                         });
                         setReconcilLog(prev => prev.filter(l => l.id !== log.id));
                       }}>
-                        <Icon name="Trash2" size={13} style={{verticalAlign:"middle",marginRight:4}/>
+                        <Icon name="Trash2" size={13} style={{verticalAlign:"middle",marginRight:4}}/>
                         Delete & Revert
                       </button>
                     </div>
@@ -4481,7 +4481,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                   );
                 })}
               </div>
-              <button style={S.btnPrimary} onClick={saveSettings}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Settings</button>
+              <button style={S.btnPrimary} onClick={saveSettings}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save Settings</button>
             </>
           )}
         </section>
@@ -4619,7 +4619,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <input value={checkNotes} onChange={e => setCheckNotes(e.target.value)} style={S.input} placeholder="e.g. tank filled to 480 gal"/>
             </label>
           </div>
-          <button style={S.btnPrimary} onClick={addCheck}><Icon name="Ruler" size={15} style={{verticalAlign:"middle",marginRight:5}/> Log Stock Check</button>
+          <button style={S.btnPrimary} onClick={addCheck}><Icon name="Ruler" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Log Stock Check</button>
           <div style={{marginTop:14, display:"flex", flexWrap:"wrap", gap:10}}>
             {BUILTIN_MATERIAL_TYPES.filter(m => m.key !== "other" && !m.key.startsWith("paint_") && !m.key.startsWith("custom_")).map(m => {
               const lc = lastCheckFor(m.key);
@@ -4635,7 +4635,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                     <span style={{color:C.textMuted}}>
                       {lc ? `${lc.qty} ${u} on ${new Date(lc.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}` : "no check logged"}
                     </span>
-                    <Icon name="ChevronDown" size={12} style={{marginLeft:"auto", transform: isExpanded?"rotate(180deg)":"none", transition:"transform 0.15s"}/>
+                    <Icon name="ChevronDown" size={12} style={{marginLeft:"auto", transform: isExpanded?"rotate(180deg)":"none", transition:"transform 0.15s"}}/>
                   </div>
                   {isExpanded && (
                     <div style={{borderTop:`1px solid ${C.border}`, padding:"8px 10px", minWidth:240}}>
@@ -4650,7 +4650,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                           </div>
                           {canEdit && (
                             <button style={{...S.btnSmallDanger, marginLeft:8}} onClick={e => { e.stopPropagation(); if(confirm("Delete this stock check?")) deleteStockCheck(c.id); }}>
-                              <Icon name="Trash2" size={12} style={{verticalAlign:"middle"}/>
+                              <Icon name="Trash2" size={12} style={{verticalAlign:"middle"}}/>
                             </button>
                           )}
                         </div>
@@ -4804,7 +4804,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <div style={{display:"flex", alignItems:"center", gap:10}}>
                 <span style={{fontWeight:700, color:C.accent}}>{formatCurrency(m.cost)}</span>
                 {canEdit && (
-                  <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this purchase entry?")) deleteMaterial(m.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}/></button>
+                  <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this purchase entry?")) deleteMaterial(m.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}}/></button>
                 )}
               </div>
             </div>
@@ -5276,7 +5276,7 @@ function ZonesView({ jobs, setJobs, zones, setZones, syncZones, setCurrentJob, s
                   {!editingNames ? (
                     <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={startEditingNames}>✎ Rename</button>
                   ) : (
-                    <button style={{...S.btnPrimary, fontSize:12, padding:"4px 10px"}} onClick={saveZoneNames}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save</button>
+                    <button style={{...S.btnPrimary, fontSize:12, padding:"4px 10px"}} onClick={saveZoneNames}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
                   )}
                 </div>
                 {zonesList.map((z, i) => (
@@ -6410,7 +6410,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
         <div style={{display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", marginBottom:14}}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, email, address..."
             style={{...S.input, flex:1, minWidth:200}}/>
-          <button style={S.btnSecondary} onClick={exportToExcel}><Icon name="Table2" size={15} style={{verticalAlign:"middle",marginRight:5}/> Export to Excel</button>
+          <button style={S.btnSecondary} onClick={exportToExcel}><Icon name="Table2" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Export to Excel</button>
         </div>
       </section>
 
@@ -6534,7 +6534,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                     <span style={{fontSize:11, color:C.textMuted, display:"flex", alignItems:"center", gap:8}}>
                       {new Date(l.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                       {canEdit && (
-                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}/></button>
+                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}}/></button>
                       )}
                     </span>
                   </div>
@@ -6648,7 +6648,7 @@ function CRMView({ jobs, rates, customers, addCustomer, updateCustomer, updateJo
                     <span style={{fontSize:11, color:C.textMuted, display:"flex", alignItems:"center", gap:8}}>
                       {new Date(l.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
                       {canEdit && (
-                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}/></button>
+                        <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this entry?")) deleteCrmLog(l.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}}/></button>
                       )}
                     </span>
                   </div>
@@ -8038,7 +8038,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
             {profileErr && <div style={{color:C.danger, fontSize:13, marginTop:10}}>{profileErr}</div>}
             {profileMsg && <div style={{color:C.green, fontSize:13, marginTop:10}}>{profileMsg}</div>}
             <button style={{...S.btnPrimary, marginTop:14, opacity:savingProfile?0.6:1}} onClick={saveProfile} disabled={savingProfile}>
-              {savingProfile ? "Saving..." : <><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Info</>}
+              {savingProfile ? "Saving..." : <><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save Info</>}
             </button>
           </>
         )}
@@ -8487,7 +8487,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
   return (
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
-        <h1 style={S.h1}><Icon name="Globe" size={16} style={{verticalAlign:"middle",marginRight:6}/> Platform Admin</h1>
+        <h1 style={S.h1}><Icon name="Globe" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Platform Admin</h1>
         <button style={S.btnSecondary} onClick={() => setView("jobs")}>← Exit</button>
       </div>
       <p style={S.subhead}>BlacktopIQ operator tools — not visible to any company's owner.</p>
@@ -8603,7 +8603,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
 
         return (
           <section style={S.section}>
-            <h2 style={S.h2}><Icon name="MessageSquare" size={16} style={{verticalAlign:"middle",marginRight:6}/> Feedback Pipeline</h2>
+            <h2 style={S.h2}><Icon name="MessageSquare" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Feedback Pipeline</h2>
 
             {/* Summary cards */}
             <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(130px,1fr))", gap:10, marginBottom:20}}>
@@ -8738,7 +8738,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
 
                       {/* Reply button */}
                       <button style={S.btnPrimary} onClick={() => { setReplyModal(f); setReplyBody(""); setReplyError(""); }}>
-                        <Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}/> Reply to {f.submitter_name||"User"}
+                        <Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Reply to {f.submitter_name||"User"}
                       </button>
 
                       {/* Internal notes */}
@@ -8800,7 +8800,7 @@ function PlatformAdminView({ setView, accessToken, permissions, setPermissions, 
         {replyModal && createPortal(
           <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
             <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:520, boxShadow:"0 8px 32px rgba(0,0,0,0.18)", maxHeight:"90vh", overflowY:"auto"}}>
-              <h2 style={{...S.h2, marginTop:0}}><Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}/> Reply to {replyModal.submitter_name||"User"}</h2>
+              <h2 style={{...S.h2, marginTop:0}}><Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Reply to {replyModal.submitter_name||"User"}</h2>
               <div style={{background:C.surface2, borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:12, color:C.textMuted}}>
                 <div style={{fontWeight:700, color:C.text, marginBottom:4}}>{replyModal.title}</div>
                 <div style={{whiteSpace:"pre-wrap"}}>{replyModal.body}</div>
@@ -8946,7 +8946,7 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
         {message && <div style={{color:C.green, fontSize:13, marginTop:14}}>{message}</div>}
         {!readOnly && <div style={{display:"flex", gap:8, marginTop:14}}>
           <button style={{...S.btnPrimary, flex:1, opacity:saving?0.6:1}} onClick={save} disabled={saving}>
-            {saving ? "Saving..." : <><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Permissions</>}
+            {saving ? "Saving..." : <><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save Permissions</>}
           </button>
           <button style={S.btnSecondary} onClick={resetToDefaults}>↩ Reset to Defaults</button>
         </div>}
@@ -9371,7 +9371,7 @@ function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
                 </div>
               ) : (
                 <button style={{...S.btnSmall, fontSize:11}} onClick={()=>{setRateEditId(w.id);setNewRate("");setNewRateDate(new Date().toISOString().slice(0,10));}}>
-                  <Icon name="Plus" size={11} style={{verticalAlign:"middle",marginRight:3}/>
+                  <Icon name="Plus" size={11} style={{verticalAlign:"middle",marginRight:3}}/>
                   {(w.rateHistory||[]).length > 0 ? "Update Rate" : "Set Rate"}
                 </button>
               )}
@@ -9384,7 +9384,7 @@ function OffAppWorkersSection({ offAppWorkers=[], syncOffAppWorkers }) {
           placeholder="Full name" style={{...S.input, flex:1}}
           onKeyDown={e=>e.key==="Enter"&&addWorker()}/>
         <button style={{...S.btnPrimary, flexShrink:0, opacity:saving?0.6:1}} onClick={addWorker} disabled={saving}>
-          <Icon name="Plus" size={14} style={{verticalAlign:"middle",marginRight:4}/>
+          <Icon name="Plus" size={14} style={{verticalAlign:"middle",marginRight:4}}/>
           Add
         </button>
       </div>
@@ -9542,7 +9542,7 @@ function CrewsSection({ users, isManager, tFetch, offAppWorkers=[] }) {
             </div>
           </div>
           <div style={{display:"flex", gap:8, marginTop:14}}>
-            <button style={{...S.btnPrimary, flex:1}} onClick={saveCrew}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save</button>
+            <button style={{...S.btnPrimary, flex:1}} onClick={saveCrew}><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save</button>
             <button style={{...S.btnSecondary, flex:1}} onClick={cancelEdit}>Cancel</button>
           </div>
         </div>
@@ -9908,7 +9908,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           </button>
           <div style={{display:"flex", gap:6, alignItems:"center"}}>
             <button style={S.btnSecondary} onClick={() => { setShowImport(true); setImportRows([]); setImportResult(null); setImportError(""); setPayMethodMap({}); setUnmatchedPay([]); }}>
-              <Icon name="Upload" size={15} style={{verticalAlign:"middle",marginRight:5}/> Import from Spreadsheet
+              <Icon name="Upload" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Import from Spreadsheet
             </button>
             <button title="Spreadsheet format info" style={{...S.btnSmall, padding:"6px 8px", fontSize:11}}
               onClick={() => alert(
@@ -10045,7 +10045,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto"}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:600, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
             <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
-              <h2 style={{...S.h2, margin:0}}><Icon name="Upload" size={16} style={{verticalAlign:"middle",marginRight:6}/> Import Expenses</h2>
+              <h2 style={{...S.h2, margin:0}}><Icon name="Upload" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Import Expenses</h2>
               <button style={S.btnSmall} onClick={() => setShowImport(false)}>✕ Close</button>
             </div>
 
@@ -11060,14 +11060,14 @@ ${pdfLink}` ;
             style={{fontSize:13, fontWeight:600, padding:"7px 16px", borderRadius:8, border:"none", cursor:"pointer",
               background: homeTab==="dashboard" ? C.accent : C.surface2,
               color: homeTab==="dashboard" ? "#000" : C.textMuted}}>
-            <Icon name="LayoutDashboard" size={14} style={{verticalAlign:"middle", marginRight:5}/> Dashboard
+            <Icon name="LayoutDashboard" size={14} style={{verticalAlign:"middle", marginRight:5}}/> Dashboard
           </button>
           <button onClick={() => setHomeTab("requests")}
             style={{fontSize:13, fontWeight:600, padding:"7px 16px", borderRadius:8, border:"none", cursor:"pointer",
               background: homeTab==="requests" ? C.accent : C.surface2,
               color: homeTab==="requests" ? "#000" : C.textMuted,
               position:"relative"}}>
-            <Icon name="ClipboardList" size={14} style={{verticalAlign:"middle", marginRight:5}/> Estimate Requests
+            <Icon name="ClipboardList" size={14} style={{verticalAlign:"middle", marginRight:5}}/> Estimate Requests
             {requestJobs.length > 0 && (
               <span style={{position:"absolute", top:-6, right:-6, background:C.danger, color:"#fff",
                 borderRadius:"50%", width:18, height:18, fontSize:10, fontWeight:700,
@@ -11148,7 +11148,7 @@ ${pdfLink}` ;
                 {item.type==="overdue" ? (
                   <div style={{display:"flex", gap:6, flexShrink:0}} onClick={e => e.stopPropagation()}>
                     <button style={{...S.btnSmall, fontSize:11, background:"#dbeafe", color:"#1d4ed8", border:"1px solid #bfdbfe"}}
-                      onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("email"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}/> Email
+                      onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("email"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Email
                     </button>
                     <button style={{...S.btnSmall, fontSize:11, background:"#dcfce7", color:"#15803d", border:"1px solid #86efac"}}
                       onClick={() => { setReminderModal({job:item.job, daysPast:item.daysPast}); setReminderChannel("text"); setReminderEmail(item.job.clientEmail||""); setReminderPhone(item.job.clientPhone||""); setReminderError(""); }}>
@@ -11259,7 +11259,7 @@ ${pdfLink}` ;
       {reminderModal && createPortal(
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><Icon name="FileText" size={16} style={{verticalAlign:"middle",marginRight:6}/> Invoice Reminder</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="FileText" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Invoice Reminder</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
               Sending reminder for <strong>{reminderModal.job.clientName||"Unnamed"}</strong> — {reminderModal.daysPast} days past due.
             </p>
@@ -12264,7 +12264,7 @@ ${a}`.notes : "");
             <div style={S.signedBannerSub}>{currentJob.clientSignedAt}</div>
             <img src={currentJob.clientSignature} alt="Client Signature"
               style={{display:"block", maxWidth:260, marginTop:10, borderRadius:6, border:`1px solid ${C.border}`}}/>
-            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={unsign}><Icon name="Unlock" size={15} style={{verticalAlign:"middle",marginRight:5}/> Remove Signature</button>
+            <button style={{...S.btnSecondary, marginTop:12, fontSize:12}} onClick={unsign}><Icon name="Unlock" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Remove Signature</button>
           </div>
         ) : (
           <>
@@ -12287,7 +12287,7 @@ ${a}`.notes : "");
               />
             </div>
             <div style={{display:"flex", gap:10, marginTop:10}}>
-              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearClientSig}><Icon name="Trash2" size={15} style={{verticalAlign:"middle",marginRight:5}/> Clear</button>
+              <button style={{...S.btnSecondary, fontSize:12}} onClick={clearClientSig}><Icon name="Trash2" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Clear</button>
               <button style={{...S.btnPrimary, flex:1}} onClick={acceptAndSign}>
                 ✍️ Accept &amp; Sign Estimate
               </button>
@@ -12314,7 +12314,7 @@ ${a}`.notes : "");
       {showTextModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><Icon name="MessageSquare" size={16} style={{verticalAlign:"middle",marginRight:6}/> Text Estimate PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="MessageSquare" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Text Estimate PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
               The estimate PDF will be uploaded and a link sent via your phone's SMS app.
             </p>
@@ -12341,7 +12341,7 @@ ${a}`.notes : "");
       {showEmailModal && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}/> Email Estimate PDF</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="Mail" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Email Estimate PDF</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
               The estimate PDF will be generated and sent directly to the client's inbox.
             </p>
@@ -12370,7 +12370,7 @@ ${a}`.notes : "");
       {showSentConfirm && (
         <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
           <div style={{background:C.surface, borderRadius:12, padding:24, width:"100%", maxWidth:400, boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
-            <h2 style={{...S.h2, marginTop:0}}><Icon name="Send" size={16} style={{verticalAlign:"middle",marginRight:6}/> Did you send the estimate?</h2>
+            <h2 style={{...S.h2, marginTop:0}}><Icon name="Send" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Did you send the estimate?</h2>
             <p style={{fontSize:13, color:C.textMuted, marginBottom:16}}>
               Confirming will move this job to <strong>Sent</strong> status and record today as the sent date.
             </p>
@@ -12406,11 +12406,11 @@ ${a}`.notes : "");
                 setPdfLoading(false);
               }
             }} disabled={pdfLoading}>
-            {pdfLoading ? "⏳ Building PDF..." : <><Icon name="FileText" size={15} style={{verticalAlign:"middle",marginRight:5}/> Download PDF</>}
+            {pdfLoading ? "⏳ Building PDF..." : <><Icon name="FileText" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Download PDF</>}
           </button>
-          <button style={S.btnSecondary} onClick={emailEstimate}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}/> Email PDF</button>
-          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><Icon name="MessageSquare" size={15} style={{verticalAlign:"middle",marginRight:5}/> Text PDF</button>
-          <button style={S.btnSecondary} onClick={copyEstimate}><Icon name="Copy" size={15} style={{verticalAlign:"middle",marginRight:5}/> Copy Text</button>
+          <button style={S.btnSecondary} onClick={emailEstimate}><Icon name="Mail" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Email PDF</button>
+          <button style={S.btnSecondary} onClick={() => { setTextTo(currentJob.clientPhone||""); setTextError(""); setShowTextModal(true); }}><Icon name="MessageSquare" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Text PDF</button>
+          <button style={S.btnSecondary} onClick={copyEstimate}><Icon name="Copy" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Copy Text</button>
         </div>
         {sent && <div style={S.sentMsg}>✅ Done!</div>}
         <div style={{marginTop:8, fontSize:11, color:C.textMuted}}>
@@ -13179,7 +13179,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       {message && <div style={{fontSize:13,color:message.startsWith("⚠️")?C.danger:C.green,padding:"0 16px 12px"}}>{message}</div>}
       <div style={{padding:"0 16px 24px"}}>
         <button style={{...S.btnPrimary,width:"100%",opacity:saving?0.6:1}} onClick={save} disabled={saving}>
-          {saving?"Saving...":<><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}/> Save Company Settings</>}
+          {saving?"Saving...":<><Icon name="Save" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Save Company Settings</>}
         </button>
       </div>
     </div>
@@ -13247,7 +13247,7 @@ function EstimateRequestLinkView({ setView, currentTenantId }) {
 
   return (
     <div className="tps-page" style={S.page}>
-      <h1 style={S.h1}><Icon name="ClipboardList" size={16} style={{verticalAlign:"middle",marginRight:6}/> Estimate Request Form</h1>
+      <h1 style={S.h1}><Icon name="ClipboardList" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Estimate Request Form</h1>
       <p style={S.subhead}>Share this link or QR code with clients so they can submit an estimate request directly to you — no account needed.</p>
 
       <section style={S.section}>
@@ -13399,7 +13399,7 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
 
       {/* Live Chat */}
       <section style={S.section}>
-        <h2 style={S.h2}><Icon name="MessageCircle" size={16} style={{verticalAlign:"middle",marginRight:6}/> Live Chat</h2>
+        <h2 style={S.h2}><Icon name="MessageCircle" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Live Chat</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>
           Chat with us directly using the chat bubble in the bottom-right corner of the screen.
           Available during business hours — we'll respond as quickly as possible.
@@ -13429,7 +13429,7 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
 
       {/* Phone */}
       <section style={S.section}>
-        <h2 style={S.h2}><Icon name="Phone" size={16} style={{verticalAlign:"middle",marginRight:6}/> Phone Support</h2>
+        <h2 style={S.h2}><Icon name="Phone" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Phone Support</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>
           Prefer to talk? Give us a call during business hours.
         </p>
@@ -13441,7 +13441,7 @@ function HelpView({ tFetch, currentTenantId, session, userRole, accessToken, cur
 
       {/* Bug / Feature Form */}
       <section style={S.section}>
-        <h2 style={S.h2}><Icon name="ClipboardEdit" size={16} style={{verticalAlign:"middle",marginRight:6}/> Submit Feedback</h2>
+        <h2 style={S.h2}><Icon name="ClipboardEdit" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Submit Feedback</h2>
         <p style={{fontSize:13, color:C.textMuted, marginBottom:14}}>
           Report a bug or suggest a feature. We review every submission.
         </p>
