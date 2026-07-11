@@ -9246,6 +9246,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const setEF = (k,v) => setEditForm(p=>({...p,[k]:v}));
   const [selectedIds,   setSelectedIds]   = useState(new Set());
   const [sortField,     setSortField]     = useState("date");
+  const [filterSubcat,  setFilterSubcat]  = useState("All");
   const [sortDir,       setSortDir]       = useState("desc");
   const [searchText,    setSearchText]    = useState("");
   const [filterDateFrom,setFilterDateFrom]= useState("");
@@ -9537,6 +9538,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
       (filterCat    === "All" || e.category      === filterCat) &&
       (filterMethod === "All" || e.paymentMethod === filterMethod) &&
       (filterJob    === "All" || String(e.jobId) === String(filterJob)) &&
+      (filterSubcat === "All" || e.subcategory === filterSubcat) &&
       (!filterDateFrom || e.date >= filterDateFrom) &&
       (!filterDateTo   || e.date <= filterDateTo) &&
       (!searchText || (e.vendorName||"").toLowerCase().includes(searchText.toLowerCase()) || (e.notes||"").toLowerCase().includes(searchText.toLowerCase()))
@@ -9967,9 +9969,13 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
       {/* Filters */}
       <section style={S.section}>
         <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:12}}>
-          <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+          <select value={filterCat} onChange={e=>{setFilterCat(e.target.value);}} style={{...S.input, flex:1, minWidth:120}}>
             <option value="All">All Categories</option>
             {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={filterSubcat} onChange={e=>setFilterSubcat(e.target.value)} style={{...S.input, flex:1, minWidth:140}}>
+            <option value="All">All Subcategories</option>
+            {[...new Set(expenses.map(e=>e.subcategory).filter(Boolean))].sort().map(s=><option key={s} value={s}>{s}</option>)}
           </select>
           <select value={filterMethod} onChange={e=>setFilterMethod(e.target.value)} style={{...S.input, flex:1, minWidth:120}}>
             <option value="All">All Payment Methods</option>
@@ -10007,19 +10013,23 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           borderBottom:`2px solid ${C.border}`, marginBottom:4}}>
           {canEdit && <div style={{width:20, flexShrink:0}}/>}
           {isDesktop && <div style={{width:90, flexShrink:0, fontSize:11, fontWeight:700, color:sortField==="date"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
-            onClick={()=>{ sortField==="date"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("date"); setSortDir("desc"); }}>
+            onClick={()=>{ if(sortField==="date"){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField("date");setSortDir("desc");} }}>
             DATE{sortField==="date"?(sortDir==="asc"?" ↑":" ↓"):""}
           </div>}
           <div style={{flex:2, minWidth:0, fontSize:11, fontWeight:700, color:sortField==="vendorName"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
-            onClick={()=>{ sortField==="vendorName"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("vendorName"); setSortDir("desc"); }}>
+            onClick={()=>{ if(sortField==="vendorName"){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField("vendorName");setSortDir("asc");} }}>
             VENDOR{sortField==="vendorName"?(sortDir==="asc"?" ↑":" ↓"):""}
           </div>
           {isDesktop && <div style={{flex:1, minWidth:0, fontSize:11, fontWeight:700, color:sortField==="category"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
-            onClick={()=>{ sortField==="category"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("category"); setSortDir("desc"); }}>
+            onClick={()=>{ if(sortField==="category"){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField("category");setSortDir("asc");} }}>
             CATEGORY{sortField==="category"?(sortDir==="asc"?" ↑":" ↓"):""}
           </div>}
+          {isDesktop && <div style={{flex:1, minWidth:0, fontSize:11, fontWeight:700, color:sortField==="subcategory"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em"}}
+            onClick={()=>{ if(sortField==="subcategory"){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField("subcategory");setSortDir("asc");} }}>
+            SUBCATEGORY{sortField==="subcategory"?(sortDir==="asc"?" ↑":" ↓"):""}
+          </div>}
           <div style={{width:80, flexShrink:0, fontSize:11, fontWeight:700, color:sortField==="amount"?C.accent:C.textMuted, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.05em", textAlign:"right"}}
-            onClick={()=>{ sortField==="amount"?setSortDir(d=>d==="asc"?"desc":"asc"):setSortField("amount"); setSortDir("desc"); }}>
+            onClick={()=>{ if(sortField==="amount"){setSortDir(d=>d==="asc"?"desc":"asc");}else{setSortField("amount");setSortDir("desc");} }}>
             AMOUNT{sortField==="amount"?(sortDir==="asc"?" ↑":" ↓"):""}
           </div>
           {canEdit && <div style={{width:60, flexShrink:0}}/>}
@@ -10050,10 +10060,13 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                   {e.vendorName||"—"}
                   {!isDesktop && e.subcategory && <span style={{fontSize:11, color:C.textMuted, fontWeight:400, marginLeft:6}}>{e.subcategory}</span>}
                 </div>
-                {/* Category + subcategory - hide on mobile */}
+                {/* Category - hide on mobile */}
                 <div style={{flex:1, minWidth:0, fontSize:12, display: isDesktop?"block":"none"}}>
                   <span style={{background:C.surface2, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 6px"}}>{e.category}</span>
-                  {e.subcategory && <span style={{fontSize:11, color:C.textMuted, marginLeft:4}}>{e.subcategory}</span>}
+                </div>
+                {/* Subcategory - hide on mobile */}
+                <div style={{flex:1, minWidth:0, fontSize:12, color:C.textMuted, display: isDesktop?"block":"none"}}>
+                  {e.subcategory||"—"}
                 </div>
                 {/* Amount */}
                 <div style={{width:80, flexShrink:0, textAlign:"right", fontWeight:700, fontSize:14}}>
