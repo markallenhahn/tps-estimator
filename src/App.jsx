@@ -10294,13 +10294,22 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
       {/* Filters */}
       <section style={S.section}>
         <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:12}}>
-          <select value={filterCat} onChange={e=>{setFilterCat(e.target.value);}} style={{...S.input, flex:1, minWidth:120}}>
+          <select value={filterCat} onChange={e=>{setFilterCat(e.target.value); setFilterSubcat("All");}} style={{...S.input, flex:1, minWidth:120}}>
             <option value="All">All Categories</option>
             {EXPENSE_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
           </select>
           <select value={filterSubcat} onChange={e=>setFilterSubcat(e.target.value)} style={{...S.input, flex:1, minWidth:140}}>
             <option value="All">All Subcategories</option>
-            {[...new Set(expenses.map(e=>e.subcategory).filter(Boolean))].sort().map(s=><option key={s} value={s}>{s}</option>)}
+            {(() => {
+              const catSubcats = filterCat === "All"
+                ? [...new Set(expenses.map(e=>e.subcategory).filter(Boolean))].sort()
+                : [...new Set([
+                    ...(EXPENSE_CATEGORY_MAP[filterCat]||[]),
+                    ...(customSubcategories?.[filterCat]||[]),
+                    ...expenses.filter(e=>e.category===filterCat).map(e=>e.subcategory).filter(Boolean)
+                  ])].sort();
+              return catSubcats.map(s=><option key={s} value={s}>{s}</option>);
+            })()}
           </select>
           <select value={filterMethod} onChange={e=>setFilterMethod(e.target.value)} style={{...S.input, flex:1, minWidth:120}}>
             <option value="All">All Payment Methods</option>
