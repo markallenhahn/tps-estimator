@@ -15114,6 +15114,15 @@ function App() {
     );
   }
 
+  // Inject fade-in keyframe once
+  useEffect(() => {
+    if (document.getElementById("biq-fadein-style")) return;
+    const style = document.createElement("style");
+    style.id = "biq-fadein-style";
+    style.textContent = "@keyframes biqFadeIn{from{opacity:0}to{opacity:1}}";
+    document.head.appendChild(style);
+  }, []);
+
   if (loading) return (
     <div style={{...S.app, height:"100svh", minHeight:"100svh", alignItems:"center", justifyContent:"center"}}>
       <div style={{textAlign:"center", padding:"0 40px"}}>
@@ -15128,7 +15137,7 @@ function App() {
   );
 
   return (
-    <div style={isDesktopLayout ? S.appDesktop : S.app}>
+    <div style={{...(isDesktopLayout ? S.appDesktop : S.app), animation:"biqFadeIn 0.15s ease-in"}}>
       <TopNav view={view} setView={navigateTo} userRole={userRole} userRoles={userRoles} permissions={permissions} onLogout={handleLogout} iconStyle={iconStyle} myTenants={myTenants} currentTenantId={currentTenantId} switchTenant={switchTenant} isPlatformAdmin={isPlatformAdmin} companySettings={companySettings}/>
       {!isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
