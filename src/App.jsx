@@ -777,8 +777,6 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
             </button>
           </>
         )}
-
-        )}
         <div style={S.navDivider}/>
         <button onClick={() => setView("account")}
           data-active={view==="account"?"true":"false"}
