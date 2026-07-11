@@ -5678,7 +5678,7 @@ function calcJobFinancials(job, rates, laborEntries=[], offAppWorkers=[], teamUs
   const sealcoatCost  = actVal("sealcoat",  estSealcoat);
   const crackFillCost = actVal("crackfill", estCrackFill);
   const asphaltCost   = actVal("asphalt",   estAsphalt);
-  const fuelCost      = actualFuelExp > 0 ? actualFuelExp * revenueShare_ : actVal("fuel", estFuel);
+  const fuelCost      = actVal("fuel", estFuel);
   const stoneCost     = actVal("stone",     estStone);
   const otherCost     = actVal("other",     estOther);
   const laborCost     = actVal("labor",     estLabor);
