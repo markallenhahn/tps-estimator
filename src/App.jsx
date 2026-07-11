@@ -733,13 +733,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
               </button>
             </>
           )}
-          {isPlatformAdmin && (
-            <button onClick={() => setView("platform-admin")}
-              style={{...S.sidebarTab,...(view==="platform-admin"?S.sidebarTabActive:{})}}>
-              <TabIcon tabKey="owner" iconStyle={iconStyle} size={18}/>
-              <span><Icon name="Globe" size={16} style={{verticalAlign:"middle",marginRight:6}}/> Platform Admin</span>
-            </button>
-          )}
+
           <div style={S.sidebarDivider}/>
           <button onClick={() => setView("account")}
             style={{...S.sidebarTab,...(view==="account"?S.sidebarTabActive:{})}}>
@@ -783,16 +777,7 @@ function TopNav({ view, setView, userRole, userRoles, permissions, onLogout, ico
             </button>
           </>
         )}
-        {isPlatformAdmin && (
-          <>
-            <div style={S.navDivider}/>
-            <button onClick={() => setView("platform-admin")}
-              data-active={view==="platform-admin"?"true":"false"}
-              style={{...S.navTab, color: view==="platform-admin" ? C.accent : C.textMuted, borderBottomColor: view==="platform-admin" ? C.accent : "transparent"}}>
-              <span style={S.navTabIcon}><TabIcon tabKey="owner" iconStyle={iconStyle} size={16}/></span>
-              <span style={S.navTabLabel}><Icon name="Globe" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Platform</span>
-            </button>
-          </>
+
         )}
         <div style={S.navDivider}/>
         <button onClick={() => setView("account")}
@@ -8800,8 +8785,8 @@ function PermissionsView({ permissions, setPermissions, syncPermissions, setView
     <div className="tps-page" style={S.page}>
       <div style={S.pageHeader}>
         <h1 style={S.h1}>{readOnly ? "Permissions" : "Global Permissions"}</h1>
-        <button style={S.btnSecondary} onClick={() => setView(readOnly ? "owner-hub" : "platform-admin")}>
-          ← {readOnly ? "Owner Hub" : "Platform Admin"}
+        <button style={S.btnSecondary} onClick={() => setView("owner-hub")}>
+          ← Owner Hub
         </button>
       </div>
       <p style={S.subhead}>{readOnly ? "Read-only — permissions are managed by the platform admin." : "Tap a cell to cycle Hidden → View → Edit, for each role and tab"}</p>
@@ -15403,7 +15388,6 @@ function App() {
         {view==="request-form"  && userRole==="owner" && <EstimateRequestLinkView setView={navigateTo} currentTenantId={currentTenantId}/>}
         {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data} offAppWorkers={offAppWorkers} syncOffAppWorkers={syncOffAppWorkers}/>}
         {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle} reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>}
-        {view==="platform-admin" && isPlatformAdmin && <PlatformAdminView setView={navigateTo} accessToken={session?.access_token} permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions}/>}
         {view==="global-permissions" && isPlatformAdmin && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={false}/>}
         {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout} tenantData={currentTenant?.data} userRole={userRole} teamUsers={teamUsers}/>}
