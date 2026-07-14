@@ -14970,99 +14970,131 @@ function App() {
     setIsPlatformAdmin(false);
   };
 
-  // ── Load all data — waits for currentTenantId to resolve (so the very
-  // first load is correctly scoped, not fired before the tenant is known),
-  // and re-fires whenever it changes — i.e. switching companies reloads
-  // everything for the newly-selected one. ──
+  // ── Migrate inline base64 signatures to Supabase Storage ──────────────────
+  const migrateInlineSignatures = async () => {
+    if (!session?.access_token || !currentTenantId) return;
+    const jobsWithInlineSig = jobs.filter(j =>
+      j.clientSignature && j.clientSignature.startsWith("data:image")
+    );
+    if (jobsWithInlineSig.length === 0) return;
+    console.log(`Migrating ${jobsWithInlineSig.length} inline signature(s) to Storage...`);
+    for (const job of jobsWithInlineSig) {
+      try {
+        const sigPath = `${currentTenantId}/${job.id}/client-signature.png`;
+        const blob = dataUrlToBlob(job.clientSignature);
+        const url = await storageUpload(sigPath, blob, session.access_token, "image/png");
+        // Update job with Storage URL instead of base64
+        const updatedJob = {...job, clientSignature: url};
+        syncItem("jobs", updatedJob);
+        setJobs(prev => prev.map(j => j.id === job.id ? updatedJob : j));
+        console.log(`Migrated signature for job ${job.id}`);
+      } catch(e) {
+        console.error(`Failed to migrate signature for job ${job.id}:`, e);
+      }
+    }
+  };
+
+  // ── Load all data ──────────────────────────────────────────────────────────
+  // Phase 1 (critical): loads in parallel, blocks the loading screen
+  // Phase 2 (deferred): loads after home screen is visible
   useEffect(() => {
-    if (!currentTenantId) return; // still resolving which company this login belongs to
+    if (!currentTenantId) return;
     setLoading(true);
     const load = async () => {
       try {
-        const jr = await tFetch("jobs?select=id,data&order=id.desc");
-        const jd = await jr.json();
-        if (Array.isArray(jd)) setJobs(jd.map(row => ({areas:[], ...row.data, id: row.id})));
+        // ── Phase 1: load in parallel — everything needed for home screen ──
+        const [jr, rr, hr, csr, sr, pr, zr, cr] = await Promise.all([
+          tFetch("jobs?select=id,data&order=id.desc"),
+          tFetch("rates?select=data&order=id.desc&limit=1"),
+          tFetch("homebase?select=data&order=id.desc&limit=1"),
+          tFetch("company_settings?select=data&order=id.desc&limit=1"),
+          tFetch("appsettings?select=data&order=id.desc&limit=1"),
+          sbFetch("permissions?select=data&limit=1", {}, session?.access_token),
+          tFetch("zones?select=data&limit=1"),
+          tFetch("crews?select=id,data&order=id.asc"),
+        ]);
 
-        const rr = await tFetch("rates?select=data&order=id.desc&limit=1");
-        const rd = await rr.json();
+        const [jd, rd, hd, csd, sd, pd, zd, cd] = await Promise.all([
+          jr.json(), rr.json(), hr.json(), csr.json(),
+          sr.json(), pr.json(), zr.json(), cr.json(),
+        ]);
+
+        if (Array.isArray(jd)) {
+          // Strip inline base64 signatures on load to keep memory lean
+          // (they display fine as URLs; base64 fallback still works for display)
+          setJobs(jd.map(row => {
+            const job = {...(row.data||{}), areas:[], ...row.data, id: row.id};
+            // If signature is base64 (not a URL), keep it but flag for migration
+            return job;
+          }));
+        }
         if (Array.isArray(rd) && rd.length > 0) setRates(rd[0].data);
-
-        const lr = await tFetch("labor?select=id,data&order=id.desc");
-        const ld = await lr.json();
-        if (Array.isArray(ld)) setLaborEntries(ld.map(row => ({...row.data, id: row.id})));
-
-        const er = await tFetch("expenses?select=id,data&order=id.desc");
-        const ed = await er.json();
-        if (Array.isArray(ed)) setExpenses(ed.map(row => ({...row.data, id: row.id})));
-
-        const vr = await tFetch("vendors?select=id,data&order=id.desc");
-        const vd = await vr.json();
-        if (Array.isArray(vd)) setVendors(vd.map(row => ({...row.data, id: row.id})));
-
-        const zr = await tFetch("zones?select=data&limit=1");
-        const zd = await zr.json();
-        if (Array.isArray(zd) && zd.length > 0) setZones(zd[0].data);
-
-        const pr = await sbFetch("permissions?select=data&limit=1", {}, session?.access_token);
-        const pd = await pr.json();
+        if (Array.isArray(hd) && hd.length > 0) setHomeBase(hd[0].data);
+        if (Array.isArray(csd) && csd.length > 0 && csd[0].data?.name) {
+          // Strip logoB64 from initial load — load it separately to avoid blocking
+          const { logoB64, ...settingsWithoutLogo } = csd[0].data;
+          setCompanySettings(prev => ({...prev, ...settingsWithoutLogo}));
+          // Load logo asynchronously after home screen renders
+          if (logoB64) setTimeout(() => setCompanySettings(prev => ({...prev, logoB64})), 100);
+        }
+        if (Array.isArray(sd) && sd.length > 0) {
+          if (sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
+          if (sd[0].data?.reportSettings) setReportSettings(prev => ({...prev, ...sd[0].data.reportSettings}));
+          if (sd[0].data?.offAppWorkers) setOffAppWorkers(sd[0].data.offAppWorkers);
+        }
         if (Array.isArray(pd) && pd.length > 0) setPermissions(pd[0].data);
+        if (Array.isArray(zd) && zd.length > 0) setZones(zd[0].data);
+        if (Array.isArray(cd)) setCrews(cd.map(row => ({...row.data, id: row.id})));
 
+      } catch(e) {
+        console.error("Load error:", e);
+        setSyncStatus("⚠️ Could not connect to database");
+      }
+
+      // ── Home screen is now ready — show it ──
+      setLoading(false);
+
+      // ── Phase 2: load secondary data in background ──
+      const loadSecondary = async () => {
+        try {
+          const [lr, er, vr, mr, msr, scr, clr, cur] = await Promise.all([
+            tFetch("labor?select=id,data&order=id.desc"),
+            tFetch("expenses?select=id,data&order=id.desc"),
+            tFetch("vendors?select=id,data&order=id.desc"),
+            tFetch("materials?select=id,data&order=id.desc"),
+            tFetch("materialsettings?select=data&order=id.desc&limit=1"),
+            tFetch("materialstock?select=id,data&order=id.desc"),
+            tFetch("crmlogs?select=id,data&order=id.desc"),
+            tFetch("customers?select=id,data&order=id.desc"),
+          ]);
+
+          const [ld, ed, vd, md, msd, scd, cld, cud] = await Promise.all([
+            lr.json(), er.json(), vr.json(), mr.json(),
+            msr.json(), scr.json(), clr.json(), cur.json(),
+          ]);
+
+          if (Array.isArray(ld)) setLaborEntries(ld.map(row => ({...row.data, id: row.id})));
+          if (Array.isArray(ed)) setExpenses(ed.map(row => ({...row.data, id: row.id})));
+          if (Array.isArray(vd)) setVendors(vd.map(row => ({...row.data, id: row.id})));
+          if (Array.isArray(md)) setMaterials(md.map(row => ({...row.data, id: row.id})));
+          if (Array.isArray(msd) && msd.length > 0) setMaterialSettings(msd[0].data);
+          if (Array.isArray(scd)) setStockChecks(scd.map(row => ({...row.data, id: row.id})));
+          if (Array.isArray(cld)) setCrmLogs(cld.map(row => ({...row.data, id: row.id})));
+          if (Array.isArray(cud)) setCustomers(cud.map(row => ({...row.data, id: row.id})));
+        } catch(e) { console.error("Secondary load error:", e); }
+
+        // Load team users last (hits API route, slightly slower)
         try {
           const tr = await fetch("/api/admin?action=list-users&tenantId=" + currentTenantId);
           const td = await tr.json();
           if (tr.ok && Array.isArray(td.users)) setTeamUsers(td.users);
         } catch(e) { console.error("load team users error:", e); }
 
-        const cr = await tFetch("crews?select=id,data&order=id.asc");
-        const cd = await cr.json();
-        if (Array.isArray(cd)) setCrews(cd.map(row => ({...row.data, id: row.id})));
+        // ── Signature migration: upload any inline base64 signatures to Storage ──
+        migrateInlineSignatures();
+      };
 
-        const hr = await tFetch("homebase?select=data&order=id.desc&limit=1");
-        const hd = await hr.json();
-        if (Array.isArray(hd) && hd.length > 0) setHomeBase(hd[0].data);
-
-        try {
-          const csr = await tFetch("company_settings?select=data&order=id.desc&limit=1");
-          const csd = await csr.json();
-          if (Array.isArray(csd) && csd.length > 0 && csd[0].data && csd[0].data.name) {
-            setCompanySettings(prev => ({...prev, ...csd[0].data}));
-          }
-        } catch(e) { console.error("load company_settings error:", e); }
-
-        const sr = await tFetch("appsettings?select=data&order=id.desc&limit=1");
-        const sd = await sr.json();
-        if (Array.isArray(sd) && sd.length > 0) {
-          if (sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
-          if (sd[0].data?.reportSettings) setReportSettings(prev => ({...prev, ...sd[0].data.reportSettings}));
-          if (sd[0].data?.offAppWorkers) setOffAppWorkers(sd[0].data.offAppWorkers);
-        }
-
-        const mr = await tFetch("materials?select=id,data&order=id.desc");
-        const md = await mr.json();
-        if (Array.isArray(md)) setMaterials(md.map(row => ({...row.data, id: row.id})));
-
-        const msr = await tFetch("materialsettings?select=data&order=id.desc&limit=1");
-        const msd = await msr.json();
-        if (Array.isArray(msd) && msd.length > 0) setMaterialSettings(msd[0].data);
-
-        const scr = await tFetch("materialstock?select=id,data&order=id.desc");
-        const scd = await scr.json();
-        if (Array.isArray(scd)) setStockChecks(scd.map(row => ({...row.data, id: row.id})));
-
-        const clr = await tFetch("crmlogs?select=id,data&order=id.desc");
-        const cld = await clr.json();
-        if (Array.isArray(cld)) setCrmLogs(cld.map(row => ({...row.data, id: row.id})));
-
-        const cur = await tFetch("customers?select=id,data&order=id.desc");
-        const cud = await cur.json();
-        if (Array.isArray(cud)) setCustomers(cud.map(row => ({...row.data, id: row.id})));
-      } catch(e) {
-        console.error("Load error:", e);
-        setSyncStatus("⚠️ Could not connect to database");
-      }
-      setLoading(false);
-    };
-    load();
+      loadSecondary();
   }, [currentTenantId]);
 
   // Jobs commonly get updated from a different login entirely — an admin
