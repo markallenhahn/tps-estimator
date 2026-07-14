@@ -3142,18 +3142,25 @@ function LaborOverview({ laborEntries, teamUsers, offAppWorkers, jobs }) {
 
   // Helper: get rate for a worker on a date
   const getRateForDate = (name, dateStr) => {
+    const nameLower = name.trim().toLowerCase();
     const user = (teamUsers||[]).find(u => {
       const n = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
-      return n.toLowerCase() === name.toLowerCase();
+      return n.trim().toLowerCase() === nameLower;
     });
     if (user?.rateHistory?.length) {
       const hist = [...user.rateHistory].filter(r => r.startDate <= dateStr).sort((a,b)=>b.startDate.localeCompare(a.startDate));
       if (hist.length) return hist[0].rate;
+      // Entry predates rate history — use earliest rate
+      const earliest = [...user.rateHistory].sort((a,b)=>a.startDate.localeCompare(b.startDate));
+      if (earliest.length) return earliest[0].rate;
     }
-    const oaw = (offAppWorkers||[]).find(w => w.name.toLowerCase() === name.toLowerCase());
+    const oaw = (offAppWorkers||[]).find(w => w.name.trim().toLowerCase() === nameLower);
     if (oaw?.rateHistory?.length) {
       const hist = [...oaw.rateHistory].filter(r => r.startDate <= dateStr).sort((a,b)=>b.startDate.localeCompare(a.startDate));
       if (hist.length) return hist[0].rate;
+      // Entry predates rate history — use earliest rate
+      const earliest = [...oaw.rateHistory].sort((a,b)=>a.startDate.localeCompare(b.startDate));
+      if (earliest.length) return earliest[0].rate;
     }
     return null;
   };
@@ -3164,13 +3171,15 @@ function LaborOverview({ laborEntries, teamUsers, offAppWorkers, jobs }) {
     const name = e.name || "Unknown";
     if (!byWorker[name]) byWorker[name] = { entries: [], totalHours: 0, totalPay: 0, hasRate: false, missingRate: false };
     const rate = getRateForDate(name, e.date);
+    const hasAnyRate = (offAppWorkers||[]).find(w=>w.name.trim().toLowerCase()===name.trim().toLowerCase())?.rateHistory?.length > 0 ||
+      (teamUsers||[]).find(u=>{const n=[u.first_name,u.last_name].filter(Boolean).join(" ")||u.email; return n.trim().toLowerCase()===name.trim().toLowerCase();})?.rateHistory?.length > 0;
     const hrs = Number(e.hours||0);
     const pay = rate ? hrs * rate : 0;
     byWorker[name].entries.push({...e, rate, pay});
     byWorker[name].totalHours += hrs;
     byWorker[name].totalPay += pay;
     if (rate) byWorker[name].hasRate = true;
-    else byWorker[name].missingRate = true;
+    if (!hasAnyRate) byWorker[name].missingRate = true;
   });
 
   const workers = Object.entries(byWorker).sort((a,b) => b[1].totalHours - a[1].totalHours);
