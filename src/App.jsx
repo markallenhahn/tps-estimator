@@ -7583,17 +7583,52 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
             ? `Labor (linked: ${totalLinkedHrs} hrs)`
             : `Labor (${reportSettings.laborPct||16}%)`;
           const sub = hasLinked
-            ? `${totalLinkedHrs} hrs from Labor tab`
+            ? `${totalLinkedHrs} hrs × hourly rates from Team tab`
             : `${formatCurrency(revenue)} × ${reportSettings.laborPct||16}%`;
+          const manualActRaw = actuals["labor"];
+          const hasManual = manualActRaw !== undefined && manualActRaw !== null && manualActRaw !== "";
+          // Effective actual: labor tab computed value takes priority over manual entry
+          const effectiveAct = hasLinked ? laborTabCost : (hasManual ? Number(manualActRaw) : estLabor);
+          const diff = effectiveAct - estLabor;
           return (
-            <>
+            <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
               {noRates && (
                 <div style={{fontSize:11, color:"#b45309", background:"#fef3c7", borderRadius:6, padding:"6px 10px", marginBottom:6}}>
                   ⚠️ {linkedEntries.length} labor {linkedEntries.length===1?"entry":"entries"} linked but no hourly rates set for {[...new Set(linkedEntries.map(e=>e.name))].join(", ")}. Set rates in the Team tab.
                 </div>
               )}
-              {costRow(label, estLabor, "labor", sub)}
-            </>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
+                <div>
+                  <div style={{fontSize:13, color:C.text, fontWeight:600}}>{label}</div>
+                  <div style={{fontSize:11, color:C.textDim, marginTop:1}}>{sub}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:11, color:C.textMuted}}>Est: {formatCurrency(estLabor)}</div>
+                  {(hasLinked || hasManual) && effectiveAct !== estLabor && (
+                    <div style={{fontSize:12, fontWeight:700, color: diff>0?C.danger:C.green}}>
+                      Act: {formatCurrency(effectiveAct)} ({diff>0?"+":""}{formatCurrency(diff)})
+                    </div>
+                  )}
+                </div>
+              </div>
+              {!hasLinked && (
+                <div style={{display:"flex", gap:6, alignItems:"center"}}>
+                  <span style={{fontSize:12, color:C.textMuted, flexShrink:0}}>Actual $</span>
+                  <input type="number" min="0" step="0.01"
+                    value={hasManual ? manualActRaw : ""}
+                    onChange={e => updateActual("labor", e.target.value)}
+                    placeholder={formatCurrency(estLabor).replace("$","")}
+                    style={{...S.input, flex:1, fontSize:12, padding:"5px 8px"}}/>
+                  {hasManual && <button style={{...S.btnSmall, fontSize:11, padding:"4px 8px", background:"#ffedd5", color:C.textMuted}}
+                    onClick={() => updateActual("labor", "")}>Reset</button>}
+                </div>
+              )}
+              {hasLinked && (
+                <div style={{fontSize:11, color:"#15803d", background:"#dcfce7", borderRadius:6, padding:"5px 10px"}}>
+                  ✓ Calculated from linked labor entries — no manual entry needed
+                </div>
+              )}
+            </div>
           );
         })()}
 
