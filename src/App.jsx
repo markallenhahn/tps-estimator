@@ -7552,19 +7552,47 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
         )}
         {(patchTons > 0 || linkedMaterialsAmt > 0) && (() => {
           const hasManualOverride = actuals["asphalt"]!=null && actuals["asphalt"]!=="";
+          const effectiveAct = hasManualOverride ? Number(actuals["asphalt"]) : linkedMaterialsAmt > 0 ? linkedMaterialsAmt : estAsphalt;
+          const diff = effectiveAct - estAsphalt;
           const label = linkedMaterialsAmt > 0 ? "Asphalt / Materials" : "Asphalt (Patching)";
           const sub = linkedMaterialsAmt > 0 && !hasManualOverride
             ? `Auto-populated from ${linkedExpenses.filter(e=>e.category==="COGS"&&e.subcategory==="Materials").length} linked expense(s)`
             : `${patchTons.toFixed(2)} tons × $${ASPHALT_PER_TON}/ton`;
           return (
-            <>
+            <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
+                <div>
+                  <div style={{fontSize:13, color:C.text, fontWeight:600}}>{label}</div>
+                  <div style={{fontSize:11, color:C.textDim, marginTop:1}}>{sub}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:11, color:C.textMuted}}>Est: {formatCurrency(estAsphalt)}</div>
+                  {(linkedMaterialsAmt > 0 || hasManualOverride) && effectiveAct !== estAsphalt && (
+                    <div style={{fontSize:12, fontWeight:700, color: diff>0?C.danger:C.green}}>
+                      Act: {formatCurrency(effectiveAct)} ({diff>0?"+":""}{formatCurrency(diff)})
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{display:"flex", gap:6, alignItems:"center"}}>
+                <span style={{fontSize:12, color:C.textMuted, flexShrink:0}}>Actual $</span>
+                <input type="number" min="0" step="0.01"
+                  value={hasManualOverride ? actuals["asphalt"] : linkedMaterialsAmt > 0 ? linkedMaterialsAmt.toFixed(2) : ""}
+                  onChange={e => updateActual("asphalt", e.target.value)}
+                  placeholder={formatCurrency(effectiveAct).replace("$","")}
+                  style={{...S.input, flex:1, fontSize:12, padding:"5px 8px",
+                    background: linkedMaterialsAmt > 0 && !hasManualOverride ? "#e0f2fe" : undefined}}/>
+                {hasManualOverride && (
+                  <button style={{...S.btnSmall, fontSize:11, padding:"4px 8px", background:"#ffedd5", color:C.textMuted}}
+                    onClick={() => updateActual("asphalt", "")}>Reset</button>
+                )}
+              </div>
               {linkedMaterialsAmt > 0 && !hasManualOverride && (
-                <div style={{fontSize:11, color:"#0e7490", background:"#e0f2fe", borderRadius:6, padding:"5px 10px", marginBottom:4}}>
-                  ✓ Auto-populated from linked material expenses
+                <div style={{fontSize:11, color:"#0e7490", marginTop:4}}>
+                  ✓ From linked expenses — edit above to override
                 </div>
               )}
-              {costRow(label, estAsphalt, "asphalt", sub)}
-            </>
+            </div>
           );
         })()}
         {/* Fuel: show expense-allocated actual if available */}
