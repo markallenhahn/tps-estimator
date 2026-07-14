@@ -97,7 +97,7 @@ const DEFAULT_RATES = {
   infrared:     { label:"Infrared Patching",  unit:"sqft",  rate:8.00, rateLabel:"$/sq ft"  },
   milling:      { label:"Milling",            unit:"sqft",  rate:1.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton", tonsFormula:"simple" },
   overlay:      { label:"Overlay",            unit:"sqft",  rate:2.50, rateLabel:"$/ton",    depthIn:3,   density:145, pricingMode:"ton", tonsFormula:"simple" },
-  stonedrive:   { label:"Stone Driveway",     unit:"sqft",  rate:20,   rateLabel:"$/ton",    depthIn:4, density:110, pricingMode:"ton", tonsFormula:"simple" },
+  stonedrive:   { label:"Stone",     unit:"sqft",  rate:20,   rateLabel:"$/ton",    depthIn:4, density:110, pricingMode:"ton", tonsFormula:"simple" },
   mobilization: { label:"Mobilization",       unit:"flat",  rate:500,  rateLabel:"flat $"   },
   sitework:     { label:"Site Work",          unit:"flat",  rate:0,    rateLabel:"flat $"   },
   other:        { label:"Other",              unit:"flat",  rate:0,    rateLabel:"flat $"   },
@@ -3612,13 +3612,28 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                   {dtotal>0 ? dtotal+" hrs" : "—"}
                 </span>
               </div>
-              {entries.map(e => (
-                <div key={e.id} style={{display:"flex", justifyContent:"space-between",
-                  padding:"5px 16px", fontSize:13}}>
-                  <span style={{color:C.textMuted}}>{e.name}{e.clockInTime ? " 📍" : ""}</span>
-                  <span style={{color:C.accent, fontWeight:600}}>{e.hours} hr{e.hours!==1?"s":""}</span>
-                </div>
-              ))}
+              {(() => {
+                const byPerson = {};
+                entries.forEach(e => {
+                  if (!byPerson[e.name]) byPerson[e.name] = { total:0, entries:[] };
+                  byPerson[e.name].total += e.hours;
+                  byPerson[e.name].entries.push(e);
+                });
+                return Object.entries(byPerson).map(([name, data]) => (
+                  <div key={name} style={{padding:"5px 16px", fontSize:13}}>
+                    <div style={{display:"flex", justifyContent:"space-between"}}>
+                      <span style={{color:C.textMuted}}>{name}</span>
+                      <span style={{color:C.accent, fontWeight:600}}>{data.total} hr{data.total!==1?"s":""}</span>
+                    </div>
+                    {data.entries.length > 1 && data.entries.map(e => (
+                      <div key={e.id} style={{display:"flex", justifyContent:"space-between", padding:"2px 12px", fontSize:12, color:C.textMuted}}>
+                        <span>{e.jobId ? (jobs.find(j=>String(j.id)===String(e.jobId))?.clientName || "Linked job") : "Unlinked"}</span>
+                        <span>{e.hours} hr{e.hours!==1?"s":""}</span>
+                      </div>
+                    ))}
+                  </div>
+                ));
+              })()}
             </div>
           );
         })}
@@ -5640,9 +5655,9 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
               {new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
             </h2>
             <div style={{display:"flex", gap:6, alignItems:"center"}}>
-              {planHasFeature(tenantData, "zones") && selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city)).length > 1 && (
+              {planHasFeature(tenantData, "zones") && selectedJobs.filter(j=>j.address||j.city).length > 1 && (
                 <ScheduleRouteButton
-                  jobs={selectedJobs.filter(j=>!j.isEstimateVisit&&(j.address||j.city))}
+                  jobs={selectedJobs.filter(j=>j.address||j.city)}
                   homeBase={homeBase} setJobs={setJobs} tFetch={tFetch} S={S}/>
               )}
               <button style={{...S.btnSecondary, fontSize:12, padding:"4px 10px"}} onClick={() => setSelectedDay(null)}>✕</button>
@@ -6592,7 +6607,7 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
           {/* Status filter pills */}
           <div style={{display:"flex", gap:6, flexWrap:"wrap", marginTop:8, alignItems:"center"}}>
             <span style={{fontSize:12, color:C.textMuted, fontWeight:600, marginRight:4}}>Statuses:</span>
-            {["estimate","draft","sent","scheduled","completed","paid","lost"].map(s => {
+            {["estimate","draft","sent","signed","scheduled","completed","paid","lost"].map(s => {
               const active = ebitdaStatuses.includes(s);
               return (
                 <button key={s} onClick={() => setEbitdaStatuses(prev =>
@@ -6948,7 +6963,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const [ebitdaRange,   setEbitdaRange]   = useState("ytd"); // "ytd" | "custom"
   const [ebitdaFrom,    setEbitdaFrom]    = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10));
   const [ebitdaTo,      setEbitdaTo]      = useState(new Date().toISOString().slice(0,10));
-  const [ebitdaStatuses, setEbitdaStatuses] = useState(["paid","completed","sent","scheduled"]);
+  const [ebitdaStatuses, setEbitdaStatuses] = useState(["paid","completed","sent","signed","scheduled"]);
 
   // ── Helper: get hourly rate for a user on a given date ──────────────────────
   const getRateForUser = (userId, dateStr) => {
@@ -7353,7 +7368,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 }
 
 // ─── Costs View ───────────────────────────────────────────────────────────────
-function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, jobs=[] }) {
+function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, jobs=[], laborEntries=[], teamUsers=[], offAppWorkers=[] }) {
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const SEALCOAT_PRICE_PER_GAL = 4.33;
@@ -7425,7 +7440,16 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const actAsphalt   = actVal("asphalt",   estAsphalt);
   // Fuel: use actual expense allocation if available, else manual actual or estimate
   const actFuel      = actualFuelExp > 0 ? actualFuelExp * revenueShare_ : actVal("fuel", estFuel);
-  const actLabor     = actVal("labor",     estLabor);
+  // Labor: use linked labor tab entries if available, else manual actual or estimate
+  const linkedLabor  = (laborEntries||[]).filter(e => String(e.jobId) === String(currentJob.id));
+  const laborTabCost = linkedLabor.length > 0
+    ? linkedLabor.reduce((s,e) => {
+        const user = (teamUsers||[]).find(u => u.id === e.userId);
+        const rate = e.hourlyRate ?? user?.hourlyRate ?? (offAppWorkers||[]).find(w=>w.name===e.name)?.hourlyRate ?? 0;
+        return s + (e.hours * rate);
+      }, 0)
+    : null;
+  const actLabor     = laborTabCost !== null ? laborTabCost : actVal("labor", estLabor);
   const actStone     = actVal("stone",     estStone);
   const actOther     = actVal("other",     estOther);
   const actTotal     = actSealcoat + actCrackFill + actAsphalt + actFuel + actLabor + actStone + actOther;
@@ -15484,7 +15508,7 @@ function App() {
         }
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} reportSettings={reportSettings} jobs={jobs}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} reportSettings={reportSettings} jobs={jobs} laborEntries={laborEntries} teamUsers={teamUsers} offAppWorkers={offAppWorkers}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
