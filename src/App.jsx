@@ -1274,9 +1274,12 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
   // ── Lazy migration: move legacy base64 photos/signatures to Supabase Storage ──
   useEffect(() => {
     if (!currentJob?.id || !accessToken || !tenantId) return;
-    const legacyPhotos = (currentJob.photos || []).filter(p => p.dataUrl && !p.url);
+    const legacyPhotos = (currentJob.photos || []).filter(p =>
+      (p.dataUrl && !p.url) || (p.url && p.url.startsWith("data:image"))
+    );
     const legacySig = currentJob.signature && currentJob.signature.startsWith("data:");
-    if (legacyPhotos.length === 0 && !legacySig) return;
+    const legacyClientSig = currentJob.clientSignature && currentJob.clientSignature.startsWith("data:");
+    if (legacyPhotos.length === 0 && !legacySig && !legacyClientSig) return;
     const migrate = async () => {
       let updates = {};
       // Migrate photos
@@ -1286,7 +1289,8 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           try {
             const photoId = photo.id || (Date.now() + "-" + Math.random().toString(36).slice(2));
             const path = `${tenantId}/${currentJob.id}/${photoId}.jpg`;
-            const blob = dataUrlToBlob(photo.dataUrl);
+            const sourceData = photo.dataUrl || photo.url; // handle both legacy formats
+            const blob = dataUrlToBlob(sourceData);
             const url = await storageUpload(path, blob, accessToken);
             updatedPhotos = updatedPhotos.map(p =>
               p.id === photo.id
@@ -1298,6 +1302,17 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           }
         }
         updates.photos = updatedPhotos;
+      }
+      // Migrate clientSignature (base64 → Storage)
+      if (legacyClientSig) {
+        try {
+          const sigPath = `${tenantId}/${currentJob.id}/client-signature.png`;
+          const blob = dataUrlToBlob(currentJob.clientSignature);
+          const url = await storageUpload(sigPath, blob, accessToken, "image/png");
+          updates.clientSignature = url;
+        } catch(err) {
+          console.warn("Failed to migrate clientSignature", err);
+        }
       }
       // Migrate company signature
       if (legacySig) {
