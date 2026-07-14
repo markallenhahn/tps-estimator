@@ -3549,10 +3549,7 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
                     <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
                       <div>
                         <span style={{fontWeight:600, fontSize:14}}>{e.name}</span>
-                        {e.userId && !e.linked && (
-                          <span style={{fontSize:10, color:"#b45309", background:"#fef3c7", borderRadius:4, padding:"1px 5px", marginLeft:6}}>unlinked</span>
-                        )}
-                        {!e.userId && !e.clockInTime && (
+                        {!e.jobId && (
                           <span style={{fontSize:10, color:"#6b7280", background:C.surface, border:`1px solid ${C.border}`, borderRadius:4, padding:"1px 5px", marginLeft:6}}>unlinked</span>
                         )}
                         {e.jobId && (() => { const j = (jobs||[]).find(x=>String(x.id)===String(e.jobId)); return j ? <div style={{fontSize:10, color:C.textMuted, marginTop:2}}>📋 {j.clientName||"Unnamed"} · {j.address||""}</div> : null; })()}
@@ -5883,7 +5880,7 @@ function calcJobFinancials(job, rates, laborEntries=[], offAppWorkers=[], teamUs
   const netProfit      = grossProfit - overhead;
   const netMargin      = revenue>0 ? (netProfit/revenue)*100 : 0;
 
-  return { revenue, totalMaterials, fuelCost, laborCost, totalCosts, grossProfit, actualMargin, targetGP, overhead, netProfit, netMargin, estTotal, variance: totalCosts-estTotal };
+  return { revenue, totalMaterials, fuelCost, laborCost, totalCosts, grossProfit, actualMargin, targetGP, overhead, netProfit, netMargin, estTotal, variance: totalCosts-estTotal, laborFromLinkedEntries, hasLinkedLaborEntries };
 }
 
 // ─── Geocoding (forward: address → lat/lng) ────────────────────────────────────
@@ -7440,16 +7437,10 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const actAsphalt   = actVal("asphalt",   estAsphalt);
   // Fuel: use actual expense allocation if available, else manual actual or estimate
   const actFuel      = actualFuelExp > 0 ? actualFuelExp * revenueShare_ : actVal("fuel", estFuel);
-  // Labor: use linked labor tab entries if available, else manual actual or estimate
-  const linkedLabor  = (laborEntries||[]).filter(e => String(e.jobId) === String(currentJob.id));
-  const laborTabCost = linkedLabor.length > 0
-    ? linkedLabor.reduce((s,e) => {
-        const user = (teamUsers||[]).find(u => u.id === e.userId);
-        const rate = e.hourlyRate ?? user?.hourlyRate ?? (offAppWorkers||[]).find(w=>w.name===e.name)?.hourlyRate ?? 0;
-        return s + (e.hours * rate);
-      }, 0)
-    : null;
-  const actLabor     = laborTabCost !== null ? laborTabCost : actVal("labor", estLabor);
+  // Labor: use calcJobFinancials which correctly handles rateHistory for team + off-app workers
+  const jobFinancials = calcJobFinancials(currentJob, rates, laborEntries, offAppWorkers, teamUsers);
+  const laborTabCost  = jobFinancials.laborFromLinkedEntries > 0 ? jobFinancials.laborFromLinkedEntries : null;
+  const actLabor      = laborTabCost !== null ? laborTabCost : actVal("labor", estLabor);
   const actStone     = actVal("stone",     estStone);
   const actOther     = actVal("other",     estOther);
   const actTotal     = actSealcoat + actCrackFill + actAsphalt + actFuel + actLabor + actStone + actOther;
@@ -7583,7 +7574,28 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
             </div>
           );
         })()}
-        {costRow(`Labor (${reportSettings.laborPct||16}%)`, estLabor, "labor", `${formatCurrency(revenue)} × ${reportSettings.laborPct||16}%`)}
+        {(() => {
+          const linkedEntries = (laborEntries||[]).filter(e => String(e.jobId) === String(currentJob.id));
+          const noRates = linkedEntries.length > 0 && jobFinancials.laborFromLinkedEntries === 0;
+          const hasLinked = linkedEntries.length > 0 && !noRates;
+          const totalLinkedHrs = linkedEntries.reduce((s,e)=>s+Number(e.hours||0),0);
+          const label = hasLinked
+            ? `Labor (linked: ${totalLinkedHrs} hrs)`
+            : `Labor (${reportSettings.laborPct||16}%)`;
+          const sub = hasLinked
+            ? `${totalLinkedHrs} hrs from Labor tab`
+            : `${formatCurrency(revenue)} × ${reportSettings.laborPct||16}%`;
+          return (
+            <>
+              {noRates && (
+                <div style={{fontSize:11, color:"#b45309", background:"#fef3c7", borderRadius:6, padding:"6px 10px", marginBottom:6}}>
+                  ⚠️ {linkedEntries.length} labor {linkedEntries.length===1?"entry":"entries"} linked but no hourly rates set for {[...new Set(linkedEntries.map(e=>e.name))].join(", ")}. Set rates in the Team tab.
+                </div>
+              )}
+              {costRow(label, estLabor, "labor", sub)}
+            </>
+          );
+        })()}
 
         {/* Stone */}
         <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
