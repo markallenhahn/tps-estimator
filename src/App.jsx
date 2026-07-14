@@ -14416,6 +14416,40 @@ function AdminApp() {
   );
 }
 
+// ─── Unified Sync Queue ───────────────────────────────────────────────────────
+// Single system for all data types. Handles optimistic updates, auto-retry
+// with backoff, localStorage persistence for offline resilience, and a
+// unified status indicator.
+const SYNC_STORAGE_KEY = "biq_pending_sync";
+
+function loadPendingFromStorage() {
+  try {
+    const raw = localStorage.getItem(SYNC_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+
+function savePendingToStorage(queue) {
+  try {
+    localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify(queue));
+  } catch(e) {}
+}
+
+function clearStoredItem(id) {
+  try {
+    const queue = loadPendingFromStorage().filter(i => i.id !== id);
+    savePendingToStorage(queue);
+  } catch(e) {}
+}
+
+function addToStorage(item) {
+  try {
+    const queue = loadPendingFromStorage().filter(i => i.id !== item.id);
+    savePendingToStorage([...queue, item]);
+  } catch(e) {}
+}
+
+
 function App() {
   const [view,          setViewRaw]      = useState("home");
   const [viewHistory,   setViewHistory]  = useState([]); // stack of previous views, for global Back button
@@ -14439,6 +14473,9 @@ function App() {
   const [currentJobId,  setCurrentJobId] = useState(null);
   const [loading,       setLoading]      = useState(true);
   const [syncStatus,    setSyncStatus]   = useState("");
+  const [pendingCount,  setPendingCount]  = useState(0);
+  const [retrying,      setRetrying]      = useState(false);
+  const syncQueueRef = useRef({}); // { [id]: { item, table, retries, timer } }
   const [laborEntries,  setLaborEntries] = useState([]);
   const [zones,         setZones]        = useState(null);
   const [permissions,   setPermissions]  = useState(null);
@@ -15064,15 +15101,7 @@ function App() {
     syncZones(updatedZones);
   };
 
-  const syncLaborEntry = async (entry) => {
-    try {
-      await tFetch("labor", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: entry.id, data: entry }),
-      });
-    } catch(e) { console.error("syncLaborEntry error:", e); }
-  };
+  const syncLaborEntry = (entry) => syncItem("labor", entry);
 
   const deleteLaborEntry = async (id) => {
     setLaborEntries(prev => prev.filter(e => e.id !== id));
@@ -15085,15 +15114,7 @@ function App() {
   };
 
   // ── Expenses ──
-  const syncExpense = async (entry) => {
-    try {
-      await tFetch("expenses", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: entry.id, data: entry }),
-      });
-    } catch(e) { console.error("syncExpense error:", e); }
-  };
+  const syncExpense = (entry) => syncItem("expenses", entry);
   const addExpense = (entry) => {
     setExpenses(prev => [entry, ...prev]);
     syncExpense(entry);
@@ -15128,15 +15149,7 @@ function App() {
   };
 
   // ── Material purchases (Materials tab) ──
-  const syncMaterial = async (entry) => {
-    try {
-      await tFetch("materials", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: entry.id, data: entry }),
-      });
-    } catch(e) { console.error("syncMaterial error:", e); }
-  };
+  const syncMaterial = (entry) => syncItem("materials", entry);
 
   const addMaterial = (entry) => {
     setMaterials(prev => [entry, ...prev]);
@@ -15159,15 +15172,7 @@ function App() {
   };
 
   // ── Material stock checks (physical on-hand readings) ──
-  const syncStockCheck = async (entry) => {
-    try {
-      await tFetch("materialstock", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: entry.id, data: entry }),
-      });
-    } catch(e) { console.error("syncStockCheck error:", e); }
-  };
+  const syncStockCheck = (entry) => syncItem("materialstock", entry);
 
   const addStockCheck = (entry) => {
     setStockChecks(prev => [entry, ...prev]);
@@ -15201,15 +15206,7 @@ function App() {
   };
 
   // ── Customers (CRM) ──
-  const syncCustomer = async (entry) => {
-    try {
-      await tFetch("customers", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: entry.id, data: entry }),
-      });
-    } catch(e) { console.error("syncCustomer error:", e); }
-  };
+  const syncCustomer = (entry) => syncItem("customers", entry);
 
   const addCustomer = (entry) => {
     setCustomers(prev => [entry, ...prev]);
@@ -15228,41 +15225,90 @@ function App() {
   // ── Upsert a single job ──
   const lastZonedAddressRef = useRef({});
 
-  const syncJob = async (job, isRetry=false) => {
-    // Don't attempt a sync until we actually know which tenant this is —
-    // firing early would either silently write with no tenant_id (if
-    // tFetch falls through to unscoped sbFetch) or just fail outright.
-    if (!currentTenantId) {
-      setTimeout(() => syncJob(job, isRetry), 300);
-      return;
-    }
-    setSyncStatus("Saving...");
-    try {
-      const res = await tFetch("jobs", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: job.id, data: job }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      setSyncStatus("✓ Saved");
-      setTimeout(() => setSyncStatus(""), 2000);
+  // ── Unified sync function ─────────────────────────────────────────────────
+  const syncItem = (table, item, method="POST", endpoint=null) => {
+    const id = `${table}:${item.id}`;
+    // Cancel any pending retry timer for this item
+    if (syncQueueRef.current[id]?.timer) clearTimeout(syncQueueRef.current[id].timer);
 
-      // Live zone re-assignment — only re-geocode/re-assign if the address actually changed
-      const addrStr = fullAddressOf(job);
-      if (addrStr && zones?.list?.length && lastZonedAddressRef.current[job.id] !== addrStr) {
-        lastZonedAddressRef.current[job.id] = addrStr;
-        assignJobToNearestZone(job);
+    const attempt = async (retries=0) => {
+      setSyncStatus("Saving...");
+      try {
+        const url = endpoint || table;
+        const body = ["labor","expenses","materials","stock_checks","crm_logs","customers"].includes(table)
+          ? JSON.stringify({ id: item.id, data: item })
+          : table === "jobs"
+          ? JSON.stringify({ id: item.id, data: item })
+          : JSON.stringify(item);
+        const res = await tFetch(url, {
+          method,
+          headers: { "Prefer": "resolution=merge-duplicates" },
+          body,
+        });
+        if (!res.ok) throw new Error(await res.text());
+        // Success
+        delete syncQueueRef.current[id];
+        clearStoredItem(id);
+        setPendingCount(Object.keys(syncQueueRef.current).length);
+        setSyncStatus("✓ Saved");
+        setTimeout(() => setSyncStatus(prev => prev === "✓ Saved" ? "" : prev), 2000);
+      } catch(e) {
+        console.error(`sync error [${table}:${item.id}]:`, e);
+        const delays = [2000, 10000, 30000];
+        if (retries < delays.length) {
+          // Auto-retry with backoff
+          const timer = setTimeout(() => attempt(retries + 1), delays[retries]);
+          syncQueueRef.current[id] = { item, table, method, endpoint, retries: retries + 1, timer };
+          addToStorage({ id, table, item, method, endpoint });
+          setPendingCount(Object.keys(syncQueueRef.current).length);
+          setSyncStatus(`⚠️ Save failed — retrying...`);
+        } else {
+          // All retries exhausted — persist to localStorage
+          syncQueueRef.current[id] = { item, table, method, endpoint, retries, timer: null };
+          addToStorage({ id, table, item, method, endpoint });
+          setPendingCount(Object.keys(syncQueueRef.current).length);
+          setSyncStatus(`⚠️ ${Object.keys(syncQueueRef.current).length} item${Object.keys(syncQueueRef.current).length!==1?"s":""} failed to save`);
+        }
       }
-    } catch(e) {
-      console.error("syncJob error:", e);
-      if (!isRetry) {
-        // One automatic retry after a short delay — covers transient
-        // network blips and the tenant-not-yet-resolved race above.
-        setTimeout(() => syncJob(job, true), 1000);
-      } else {
-        setSyncStatus("⚠️ Save failed");
+    };
+    attempt(0);
+  };
+
+  // Replay any items that failed in a previous session
+  const replayPendingSync = () => {
+    const pending = loadPendingFromStorage();
+    if (pending.length === 0) return;
+    setRetrying(true);
+    pending.forEach(({ id, table, item, method, endpoint }) => {
+      if (!syncQueueRef.current[id]) {
+        syncQueueRef.current[id] = { item, table, method, endpoint, retries: 0, timer: null };
       }
+    });
+    setPendingCount(pending.length);
+    setSyncStatus(`⚠️ ${pending.length} unsaved item${pending.length!==1?"s":""} from last session`);
+    setRetrying(false);
+  };
+
+  const retryAllPending = () => {
+    const entries = Object.entries(syncQueueRef.current);
+    if (entries.length === 0) return;
+    setRetrying(true);
+    entries.forEach(([id, { item, table, method, endpoint }]) => {
+      delete syncQueueRef.current[id];
+      syncItem(table, item, method, endpoint);
+    });
+    setRetrying(false);
+  };
+
+  const syncJob = async (job, isRetry=false) => {
+    if (!currentTenantId) { setTimeout(() => syncJob(job, isRetry), 300); return; }
+    // Live zone re-assignment
+    const addrStr = fullAddressOf(job);
+    if (addrStr && zones?.list?.length && lastZonedAddressRef.current[job.id] !== addrStr) {
+      lastZonedAddressRef.current[job.id] = addrStr;
+      assignJobToNearestZone(job);
     }
+    syncItem("jobs", job);
   };
 
   // ── Upsert rates ──
@@ -15276,10 +15322,10 @@ function App() {
       });
       if (!res.ok) throw new Error(await res.text());
       setSyncStatus("✓ Saved");
-      setTimeout(() => setSyncStatus(""), 2000);
+      setTimeout(() => setSyncStatus(prev => prev === "✓ Saved" ? "" : prev), 2000);
     } catch(e) {
       console.error("syncRates error:", e);
-      setSyncStatus("⚠️ Save failed");
+      setSyncStatus("⚠️ Save failed — check connection and try again");
     }
   };
 
@@ -15478,12 +15524,44 @@ function App() {
       {!isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
       <div style={isDesktopLayout ? S.contentColDesktop : undefined}>
         {isDesktopLayout && <TrialBanner tenantData={currentTenant?.data} userRole={userRole} onGoToAccount={() => navigateTo("account")}/>}
-        {syncStatus && (
+        {/* ── Sync Status Bar — top on desktop, bottom on mobile ── */}
+        {syncStatus && !isDesktopLayout && (
+          <div style={{
+            position:"fixed", bottom:56, left:0, right:0, zIndex:200,
+            background: syncStatus.startsWith("⚠️") ? "#fee2e2" : "#dcfce7",
+            color: syncStatus.startsWith("⚠️") ? C.danger : "#15803d",
+            fontSize:12, padding:"8px 16px",
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            boxShadow:"0 -2px 8px rgba(0,0,0,0.1)",
+          }}>
+            <span>{syncStatus}</span>
+            {pendingCount > 0 && (
+              <button onClick={retryAllPending} disabled={retrying}
+                style={{fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:6,
+                  background:"#fff", border:`1px solid ${C.border}`, cursor:"pointer",
+                  opacity: retrying ? 0.6 : 1}}>
+                {retrying ? "Retrying..." : "Retry"}
+              </button>
+            )}
+          </div>
+        )}
+        {syncStatus && isDesktopLayout && (
           <div style={{
             background: syncStatus.startsWith("⚠️") ? "#fee2e2" : "#dcfce7",
-            color: syncStatus.startsWith("⚠️") ? C.danger : C.green,
-            fontSize:11, textAlign:"center", padding:"3px 0",
-          }}>{syncStatus}</div>
+            color: syncStatus.startsWith("⚠️") ? C.danger : "#15803d",
+            fontSize:11, padding:"3px 16px",
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+          }}>
+            <span>{syncStatus}</span>
+            {pendingCount > 0 && (
+              <button onClick={retryAllPending} disabled={retrying}
+                style={{fontSize:11, fontWeight:700, padding:"2px 10px", borderRadius:6,
+                  background:"#fff", border:`1px solid ${C.border}`, cursor:"pointer",
+                  opacity: retrying ? 0.6 : 1}}>
+                {retrying ? "Retrying..." : "Retry now"}
+              </button>
+            )}
+          </div>
         )}
         <div style={S.content}>
         {viewHistory.length > 0 && !["jobdetail","estimate","invoice","costs"].includes(view) && (
