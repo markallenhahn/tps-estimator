@@ -11597,7 +11597,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
         <div style={{fontSize:11, color:C.textMuted, textTransform:"capitalize", marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
           {(job.areas||[]).map(ar=>ar.serviceType).filter((v,i,arr)=>arr.indexOf(v)===i).join(", ") || "—"}
         </div>
-        {canSeeAllJobs && <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, allRates).revenue)}</div>}
+        {canSeeAllJobs && <div style={{fontWeight:700, fontSize:14}}>{formatCurrency(calcJobFinancials(job, {...DEFAULT_RATES,...(job.rates||rates),other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue)}</div>}
       </div>
       <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark ${job.clientName||"this job"} as Lost? It'll drop off the pipeline.`)) setStatus(job, "lost"); }}
         style={{fontSize:10, fontWeight:600, color:"#b91c1c", background:"#fef2f2", border:"1px solid #fecaca",
@@ -11664,7 +11664,7 @@ function JobsPipelineView({ jobs, setJobs, setCurrentJob, setView, rates, update
                 <div style={{fontWeight:700, fontSize:14, marginBottom:2}}>{j.clientName||"Unnamed Client"}</div>
                 <div style={{fontSize:12, color:C.textMuted}}>{j.address||"No address"}</div>
               </div>
-              {canSeeAllJobs && <span style={{fontWeight:700, fontSize:15}}>{formatCurrency(calcJobFinancials(j, allRates).revenue)}</span>}
+              {canSeeAllJobs && <span style={{fontWeight:700, fontSize:15}}>{formatCurrency(calcJobFinancials(j, {...DEFAULT_RATES,...(j.rates||rates),other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}).revenue)}</span>}
             </div>
             <div style={{display:"flex", gap:8}}>
               <button style={{...S.btnSmall, flex:1}} onClick={() => open(j)}>Open</button>
