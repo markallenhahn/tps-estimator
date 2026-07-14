@@ -15095,6 +15095,8 @@ function App() {
       };
 
       loadSecondary();
+    };
+    load();
   }, [currentTenantId]);
 
   // Jobs commonly get updated from a different login entirely — an admin
