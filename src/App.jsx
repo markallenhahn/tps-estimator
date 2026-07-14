@@ -15659,7 +15659,7 @@ function App() {
             background: syncStatus.startsWith("⚠️") ? "#fee2e2" : "#dcfce7",
             color: syncStatus.startsWith("⚠️") ? C.danger : "#15803d",
             fontSize:12, padding:"8px 16px",
-            display:"flex", alignItems:"center", justifyContent:"space-between",
+            display:"flex", alignItems:"center", justifyContent: pendingCount > 0 ? "space-between" : "center",
             boxShadow:"0 -2px 8px rgba(0,0,0,0.1)",
           }}>
             <span>{syncStatus}</span>
@@ -15678,7 +15678,7 @@ function App() {
             background: syncStatus.startsWith("⚠️") ? "#fee2e2" : "#dcfce7",
             color: syncStatus.startsWith("⚠️") ? C.danger : "#15803d",
             fontSize:11, padding:"3px 16px",
-            display:"flex", alignItems:"center", justifyContent:"space-between",
+            display:"flex", alignItems:"center", justifyContent: pendingCount > 0 ? "space-between" : "center",
           }}>
             <span>{syncStatus}</span>
             {pendingCount > 0 && (
