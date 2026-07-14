@@ -3108,6 +3108,188 @@ ${email}`:""}`;
 }
 
 // ─── Labor View ───────────────────────────────────────────────────────────────
+// ─── LaborOverview — worker hours + pay summary ──────────────────────────────
+function LaborOverview({ laborEntries, teamUsers, offAppWorkers, jobs }) {
+  const [from, setFrom] = useState(() => {
+    const d = new Date(); d.setDate(1); return d.toISOString().slice(0,10);
+  });
+  const [to, setTo] = useState(new Date().toISOString().slice(0,10));
+  const [period, setPeriod] = useState("mtd"); // "mtd" | "ytd" | "custom"
+
+  // Set date range from period selector
+  const applyPeriod = (p) => {
+    const now = new Date();
+    if (p === "ytd") {
+      setFrom(new Date(now.getFullYear(), 0, 1).toISOString().slice(0,10));
+      setTo(now.toISOString().slice(0,10));
+    } else if (p === "mtd") {
+      setFrom(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10));
+      setTo(now.toISOString().slice(0,10));
+    } else if (p === "last30") {
+      const d30 = new Date(now); d30.setDate(d30.getDate()-30);
+      setFrom(d30.toISOString().slice(0,10));
+      setTo(now.toISOString().slice(0,10));
+    } else if (p === "last7") {
+      const d7 = new Date(now); d7.setDate(d7.getDate()-7);
+      setFrom(d7.toISOString().slice(0,10));
+      setTo(now.toISOString().slice(0,10));
+    }
+    setPeriod(p);
+  };
+
+  // Filter entries by date range
+  const filtered = (laborEntries||[]).filter(e => e.date >= from && e.date <= to);
+
+  // Helper: get rate for a worker on a date
+  const getRateForDate = (name, dateStr) => {
+    const user = (teamUsers||[]).find(u => {
+      const n = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email;
+      return n.toLowerCase() === name.toLowerCase();
+    });
+    if (user?.rateHistory?.length) {
+      const hist = [...user.rateHistory].filter(r => r.startDate <= dateStr).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+      if (hist.length) return hist[0].rate;
+    }
+    const oaw = (offAppWorkers||[]).find(w => w.name.toLowerCase() === name.toLowerCase());
+    if (oaw?.rateHistory?.length) {
+      const hist = [...oaw.rateHistory].filter(r => r.startDate <= dateStr).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+      if (hist.length) return hist[0].rate;
+    }
+    return null;
+  };
+
+  // Group by worker name
+  const byWorker = {};
+  filtered.forEach(e => {
+    const name = e.name || "Unknown";
+    if (!byWorker[name]) byWorker[name] = { entries: [], totalHours: 0, totalPay: 0, hasRate: false, missingRate: false };
+    const rate = getRateForDate(name, e.date);
+    const hrs = Number(e.hours||0);
+    const pay = rate ? hrs * rate : 0;
+    byWorker[name].entries.push({...e, rate, pay});
+    byWorker[name].totalHours += hrs;
+    byWorker[name].totalPay += pay;
+    if (rate) byWorker[name].hasRate = true;
+    else byWorker[name].missingRate = true;
+  });
+
+  const workers = Object.entries(byWorker).sort((a,b) => b[1].totalHours - a[1].totalHours);
+  const grandHours = workers.reduce((s,[,w]) => s+w.totalHours, 0);
+  const grandPay = workers.reduce((s,[,w]) => s+w.totalPay, 0);
+  const anyMissingRate = workers.some(([,w]) => w.missingRate);
+
+  return (
+    <section style={S.section}>
+      <h2 style={S.h2}>Labor Overview</h2>
+
+      {/* Period selector */}
+      <div style={{display:"flex", gap:6, marginBottom:12, flexWrap:"wrap", alignItems:"center"}}>
+        {[["last7","Last 7 Days"],["last30","Last 30 Days"],["mtd","Month to Date"],["ytd","Year to Date"],["custom","Custom"]].map(([key,label]) => (
+          <button key={key} onClick={() => applyPeriod(key)}
+            style={{...S.btnSmall, background: period===key ? C.accent : C.surface2,
+              color: period===key ? "#000" : C.textMuted, border:`1px solid ${period===key ? C.accent : C.border}`}}>
+            {label}
+          </button>
+        ))}
+        {period === "custom" && (
+          <div style={{display:"flex", gap:6, alignItems:"center"}}>
+            <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{...S.input, fontSize:12, padding:"4px 8px"}}/>
+            <span style={{fontSize:12, color:C.textMuted}}>to</span>
+            <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{...S.input, fontSize:12, padding:"4px 8px"}}/>
+          </div>
+        )}
+      </div>
+
+      {anyMissingRate && (
+        <div style={{fontSize:11, color:"#b45309", background:"#fef3c7", borderRadius:6, padding:"6px 10px", marginBottom:10}}>
+          ⚠️ Some workers have no hourly rate set — pay totals may be incomplete. Set rates in the Team tab.
+        </div>
+      )}
+
+      {workers.length === 0 ? (
+        <p style={{fontSize:13, color:C.textMuted}}>No labor entries in this period.</p>
+      ) : (
+        <>
+          {/* Summary totals */}
+          <div style={{display:"flex", gap:12, marginBottom:16, flexWrap:"wrap"}}>
+            <div style={{flex:1, minWidth:120, padding:"12px 14px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:11, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>TOTAL HOURS</div>
+              <div style={{fontSize:22, fontWeight:800, marginTop:4}}>{grandHours.toFixed(1)}</div>
+            </div>
+            <div style={{flex:1, minWidth:120, padding:"12px 14px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:11, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>TOTAL LABOR COST</div>
+              <div style={{fontSize:22, fontWeight:800, color:C.accent, marginTop:4}}>{formatCurrency(grandPay)}</div>
+            </div>
+            <div style={{flex:1, minWidth:120, padding:"12px 14px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:11, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>WORKERS</div>
+              <div style={{fontSize:22, fontWeight:800, marginTop:4}}>{workers.length}</div>
+            </div>
+          </div>
+
+          {/* Per-worker rows */}
+          {/* Column headers */}
+          <div style={{display:"flex", gap:8, padding:"6px 10px", borderBottom:`2px solid ${C.border}`,
+            fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:4}}>
+            <div style={{flex:2}}>Worker</div>
+            <div style={{flex:1, textAlign:"right"}}>Hours</div>
+            <div style={{flex:1, textAlign:"right"}}>Rate</div>
+            <div style={{flex:1, textAlign:"right"}}>Pay</div>
+          </div>
+          {workers.map(([name, data]) => (
+            <details key={name} style={{borderBottom:`1px solid ${C.border}`}}>
+              <summary style={{display:"flex", gap:8, padding:"10px 10px", cursor:"pointer", listStyle:"none", alignItems:"center"}}>
+                <div style={{flex:2, fontWeight:600, fontSize:13}}>{name}
+                  {data.missingRate && <span style={{fontSize:10, color:"#b45309", marginLeft:6}}>no rate</span>}
+                </div>
+                <div style={{flex:1, textAlign:"right", fontSize:13}}>{data.totalHours.toFixed(1)} hrs</div>
+                <div style={{flex:1, textAlign:"right", fontSize:12, color:C.textMuted}}>
+                  {data.hasRate ? formatCurrency(data.totalPay / data.totalHours) + "/hr" : "—"}
+                </div>
+                <div style={{flex:1, textAlign:"right", fontSize:13, fontWeight:700, color: data.totalPay > 0 ? C.accent : C.textMuted}}>
+                  {data.totalPay > 0 ? formatCurrency(data.totalPay) : "—"}
+                </div>
+              </summary>
+              {/* Breakdown by day/job */}
+              <div style={{paddingLeft:16, paddingBottom:8}}>
+                {Object.entries(
+                  data.entries.reduce((acc, e) => {
+                    if (!acc[e.date]) acc[e.date] = [];
+                    acc[e.date].push(e);
+                    return acc;
+                  }, {})
+                ).sort((a,b)=>b[0].localeCompare(a[0])).map(([date, entries]) => {
+                  const dayHrs = entries.reduce((s,e)=>s+Number(e.hours||0),0);
+                  const dayPay = entries.reduce((s,e)=>s+(e.pay||0),0);
+                  const d = new Date(date+"T12:00:00");
+                  return (
+                    <div key={date} style={{padding:"6px 0", borderBottom:`1px solid ${C.border}`}}>
+                      <div style={{display:"flex", justifyContent:"space-between", fontSize:12}}>
+                        <span style={{color:C.textMuted}}>
+                          {d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}
+                        </span>
+                        <span style={{fontWeight:600}}>{dayHrs.toFixed(1)} hrs{dayPay > 0 ? " · "+formatCurrency(dayPay) : ""}</span>
+                      </div>
+                      {entries.map((e,i) => {
+                        const job = e.jobId ? (jobs||[]).find(j=>String(j.id)===String(e.jobId)) : null;
+                        return (
+                          <div key={i} style={{fontSize:11, color:C.textMuted, paddingLeft:8, marginTop:2}}>
+                            {job ? `${job.clientName||"Job"} · ${job.address||""}` : "Unlinked"}
+                            {e.rate ? ` · $${e.rate}/hr` : ""}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          ))}
+        </>
+      )}
+    </section>
+  );
+}
+
 function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, teamUsers, currentUserId, offAppWorkers=[], jobs=[] }) {
   const isDesktop = useIsDesktop();
   const today = new Date().toISOString().slice(0,10);
@@ -3327,6 +3509,10 @@ function LaborView({ laborEntries, addLaborEntry, deleteLaborEntry, userRole, te
   return (
     <div className="tps-page" style={S.page}>
       <p style={S.subhead}>Track contractor hours by day</p>
+
+      {(userRole === "owner" || userRole === "manager") && (
+        <LaborOverview laborEntries={laborEntries} teamUsers={teamUsers} offAppWorkers={offAppWorkers} jobs={jobs}/>
+      )}
 
       {/* Clock In / Out with GPS — mobile/tablet only; desktop uses manual entry below */}
       {!isDesktop && (
