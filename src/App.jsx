@@ -5791,13 +5791,13 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
 }
 
 // ─── Shared cost calculator (used by CostsView and ReportsView) ───────────────
-function calcJobFinancials(job, rates, laborEntries=[], offAppWorkers=[], teamUsers=[]) {
-  const SEALCOAT_PRICE_PER_GAL = 4.33;
-  const SEALCOAT_SQFT_PER_GAL  = 70;
-  const CRACKFILL_PER_LINFT    = 0.14;
-  const ASPHALT_PER_TON        = 80;
-  const STONE_PER_TON          = 20;
-  const FUEL_PCT               = 0.05;
+function calcJobFinancials(job, rates, laborEntries=[], offAppWorkers=[], teamUsers=[], materialRates={}) {
+  const SEALCOAT_PRICE_PER_GAL = Number(materialRates.sealcoatPricePerGal) || 4.33;
+  const SEALCOAT_SQFT_PER_GAL  = Number(materialRates.sealcoatSqFtPerGal)  || 70;
+  const CRACKFILL_PER_LINFT    = Number(materialRates.crackfillPerLinFt)   || 0.14;
+  const ASPHALT_PER_TON        = Number(materialRates.asphaltPerTon)       || 80;
+  const STONE_PER_TON          = Number(materialRates.stonePerTon)         || 20;
+  const FUEL_PCT               = (Number(materialRates.fuelPct) || 5) / 100;
   const TARGET_MARGIN          = 0.52;
 
   const areas = job.areas || [];
@@ -6987,7 +6987,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   });
 
   // Total revenue for period (for overhead allocation %)
-  const periodRevenue = ebitdaJobs.reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}, laborEntries, offAppWorkers, teamUsers).revenue, 0);
+  const periodRevenue = ebitdaJobs.reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}, laborEntries, offAppWorkers, teamUsers, reportSettings).revenue, 0);
 
   // Category bucket assignments
   const catBuckets = {
@@ -7031,12 +7031,12 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
       const d = j.date.includes("/") ? new Date(j.date).toISOString().slice(0,10) : j.date;
       return d >= yearStart && d <= yearEnd && !["estimate","draft","lost"].includes(j.status);
     })
-    .reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}, laborEntries, offAppWorkers, teamUsers).revenue, 0);
+    .reduce((s,j) => s + calcJobFinancials(j, {...DEFAULT_RATES,...rates,other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}, laborEntries, offAppWorkers, teamUsers, reportSettings).revenue, 0);
 
   // Per-job EBITDA data
   const allRatesEbitda = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
   const ebitdaJobData = ebitdaJobs.map(j => {
-    const fin = calcJobFinancials(j, allRatesEbitda, laborEntries, offAppWorkers, teamUsers);
+    const fin = calcJobFinancials(j, allRatesEbitda, laborEntries, offAppWorkers, teamUsers, reportSettings);
     const revenue = fin.revenue;
 
     // COGS: actuals first, then FIFO material calc, then estimated
@@ -7145,7 +7145,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   // Filter jobs that have any revenue
   const reportJobs = jobs
     .filter(j => {
-      const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers, teamUsers);
+      const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers, teamUsers, reportSettings);
       if (f.revenue === 0) return false;
       if (filterStatuses.length > 0 && !filterStatuses.includes(j.status)) return false;
       return true;
@@ -7154,7 +7154,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 
   // Summary totals
   const totals = reportJobs.reduce((acc, j) => {
-    const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers, teamUsers);
+    const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers, teamUsers, reportSettings);
     acc.revenue        += f.revenue;
     acc.totalCosts     += f.totalCosts;
     acc.grossProfit    += f.grossProfit;
@@ -7248,7 +7248,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 
       // Rows
       reportJobs.forEach((j,idx)=>{
-        const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers, teamUsers);
+        const f = calcJobFinancials(j, allRates, laborEntries, offAppWorkers, teamUsers, reportSettings);
         if (y>720) { doc.addPage(); y=40; }
         doc.setFillColor(...(idx%2===0?[255,255,255]:LGRAY));
         doc.rect(ML,y,usable,18,"F");
@@ -7368,12 +7368,12 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, jobs=[], laborEntries=[], teamUsers=[], offAppWorkers=[] }) {
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
-  const SEALCOAT_PRICE_PER_GAL = 4.33;
-  const SEALCOAT_SQFT_PER_GAL  = 70;
-  const CRACKFILL_PER_LINFT    = 0.14;
-  const ASPHALT_PER_TON        = 80;
-  const STONE_PER_TON          = 20;
-  const FUEL_PCT               = 0.05;
+  const SEALCOAT_PRICE_PER_GAL = Number(reportSettings.sealcoatPricePerGal) || 4.33;
+  const SEALCOAT_SQFT_PER_GAL  = Number(reportSettings.sealcoatSqFtPerGal)  || 70;
+  const CRACKFILL_PER_LINFT    = Number(reportSettings.crackfillPerLinFt)   || 0.14;
+  const ASPHALT_PER_TON        = Number(reportSettings.asphaltPerTon)       || 80;
+  const STONE_PER_TON          = Number(reportSettings.stonePerTon)         || 20;
+  const FUEL_PCT               = (Number(reportSettings.fuelPct) || 5) / 100;
   const TARGET_MARGIN          = 0.52;
 
   const sealcoatSqFt   = (currentJob.areas||[]).filter(a=>a.serviceType==="sealcoat").reduce((s,ar)=>s+Number(ar.measurement||0),0);
@@ -7438,7 +7438,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   // Fuel: use actual expense allocation if available, else manual actual or estimate
   const actFuel      = actualFuelExp > 0 ? actualFuelExp * revenueShare_ : actVal("fuel", estFuel);
   // Labor: use calcJobFinancials which correctly handles rateHistory for team + off-app workers
-  const jobFinancials = calcJobFinancials(currentJob, rates, laborEntries, offAppWorkers, teamUsers);
+  const jobFinancials = calcJobFinancials(currentJob, rates, laborEntries, offAppWorkers, teamUsers, reportSettings);
   const laborTabCost  = jobFinancials.laborFromLinkedEntries > 0 ? jobFinancials.laborFromLinkedEntries : null;
   const actLabor      = laborTabCost !== null ? laborTabCost : actVal("labor", estLabor);
   const actStone     = actVal("stone",     estStone);
@@ -8041,7 +8041,7 @@ function UserSettingsView({ accessToken, userId, setView, onLogout, tenantData, 
 function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
   const DEFAULT_SUBCATS = { "COGS": [], "Overhead": [] };
   const DEFAULT_BUCKETS = { "COGS":"cogs", "Overhead":"overhead", "Labor":"labor" };
-  const defaults = { laborPct:15, cogsPct:35, overheadPct:15, ebitdaTargetDollars:"", categoryBuckets:DEFAULT_BUCKETS, customSubcategories:DEFAULT_SUBCATS };
+  const defaults = { laborPct:15, cogsPct:35, overheadPct:15, ebitdaTargetDollars:"", categoryBuckets:DEFAULT_BUCKETS, customSubcategories:DEFAULT_SUBCATS, sealcoatPricePerGal:4.33, sealcoatSqFtPerGal:70, crackfillPerLinFt:0.14, asphaltPerTon:80, stonePerTon:20, fuelPct:5 };
   const rs = { ...defaults, ...reportSettings, categoryBuckets:{...DEFAULT_BUCKETS,...(reportSettings.categoryBuckets||{})}, customSubcategories:{...DEFAULT_SUBCATS,...(reportSettings.customSubcategories||{})} };
   const [draft, setDraft] = useState({...rs});
   const [saving, setSaving] = useState(false);
@@ -8051,6 +8051,14 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
   const setD = (k,v) => setDraft(p=>({...p,[k]:v}));
   const totalEstPct = (draft.cogsPct||0) + (draft.laborPct||0) + (draft.overheadPct||0);
   const calcEbitdaPct = Math.max(0, 100 - totalEstPct);
+  const matRates = {
+    sealcoatPricePerGal: draft.sealcoatPricePerGal ?? 4.33,
+    sealcoatSqFtPerGal:  draft.sealcoatSqFtPerGal  ?? 70,
+    crackfillPerLinFt:   draft.crackfillPerLinFt    ?? 0.14,
+    asphaltPerTon:       draft.asphaltPerTon        ?? 80,
+    stonePerTon:         draft.stonePerTon          ?? 20,
+    fuelPct:             draft.fuelPct              ?? 5,
+  };
 
   const autoSaveDraft = (updater) => {
     setDraft(prev => {
@@ -8177,7 +8185,36 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
           {totalEstPct > 100 && <div style={{fontSize:12, color:C.danger, marginTop:6}}>⚠️ Percentages exceed 100%</div>}
         </div>
 
-        <button onClick={save} disabled={saving} style={{...S.btnPrimary, alignSelf:"flex-start", opacity:saving?0.6:1}}>
+        {/* Material Cost Rates */}
+        <div style={{marginTop:24, paddingTop:20, borderTop:`1px solid ${C.border}`}}>
+          <h3 style={{...S.h2, fontSize:12, letterSpacing:"0.08em", marginBottom:4}}>ESTIMATED MATERIAL COSTS</h3>
+          <p style={{fontSize:12, color:C.textMuted, marginBottom:14}}>Used when estimating job costs on the Costs tab. Update these as your actual material costs change.</p>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12}}>
+            {[
+              ["sealcoatPricePerGal", "Sealcoat price",     "$",  "gal",    "4.33"],
+              ["sealcoatSqFtPerGal",  "Sealcoat coverage",  "",   "sq ft/gal", "70"],
+              ["crackfillPerLinFt",   "Crack fill price",   "$",  "lin ft", "0.14"],
+              ["asphaltPerTon",       "Asphalt price",      "$",  "ton",    "80"],
+              ["stonePerTon",         "Stone price",        "$",  "ton",    "20"],
+              ["fuelPct",             "Fuel",               "",   "% of revenue", "5"],
+            ].map(([key, label, prefix, unit, placeholder]) => (
+              <div key={key}>
+                <label style={{...S.formLabel, fontSize:11}}>{label}</label>
+                <div style={{display:"flex", alignItems:"center", gap:4}}>
+                  {prefix && <span style={{fontSize:13, color:C.textMuted}}>{prefix}</span>}
+                  <input type="number" min="0" step="0.01"
+                    value={draft[key] ?? ""}
+                    onChange={e => autoSaveDraft(p => ({...p, [key]: e.target.value === "" ? "" : Number(e.target.value)}))}
+                    placeholder={placeholder}
+                    style={{...S.input, flex:1}}/>
+                  <span style={{fontSize:11, color:C.textMuted, whiteSpace:"nowrap"}}>{unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={save} disabled={saving} style={{...S.btnPrimary, alignSelf:"flex-start", opacity:saving?0.6:1, marginTop:20}}>
           {saving?"Saving…":saved?"✓ Saved":"Save Settings"}
         </button>
       </div>
@@ -14525,6 +14562,8 @@ function App() {
     laborPct: 15, cogsPct: 35, overheadPct: 15, ebitdaTargetDollars: "",
     categoryBuckets: { "COGS":"cogs", "Overhead":"overhead", "Labor":"labor" },
     customSubcategories: { "COGS": [], "Overhead": [] },
+    sealcoatPricePerGal: 4.33, sealcoatSqFtPerGal: 70,
+    crackfillPerLinFt: 0.14, asphaltPerTon: 80, stonePerTon: 20, fuelPct: 5,
   });
   const [offAppWorkers, setOffAppWorkers] = useState([]);
   const [teamUsers,     setTeamUsers]    = useState([]);
