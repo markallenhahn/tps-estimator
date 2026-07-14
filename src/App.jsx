@@ -7432,9 +7432,27 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const overheadPct_ = revenue > 0 ? (overhead / revenue) : (reportSettings.overheadPct||16.45) / 100;
 
   const actVal  = (key, est) => actuals[key]!=null && actuals[key]!=="" ? Number(actuals[key]) : est;
+
+  // ── Auto-populate actuals from linked expenses ──
+  const linkedExpenses = (expenses||[]).filter(e => String(e.jobId) === String(currentJob.id));
+  const linkedBySubcat = {};
+  linkedExpenses.filter(e => e.category === "COGS").forEach(e => {
+    const sub = e.subcategory || "Other";
+    if (!linkedBySubcat[sub]) linkedBySubcat[sub] = 0;
+    linkedBySubcat[sub] += Number(e.amount||0);
+  });
+  // Dynamic rows: COGS subcats that don't map to existing hardcoded fields
+  const KNOWN_COGS_SUBCATS = new Set(["Materials", "Fuel"]);
+  const dynamicCogsRows = Object.entries(linkedBySubcat)
+    .filter(([sub]) => !KNOWN_COGS_SUBCATS.has(sub))
+    .sort((a,b) => a[0].localeCompare(b[0]));
   const actSealcoat  = actVal("sealcoat",  estSealcoat);
   const actCrackFill = actVal("crackfill", estCrackFill);
-  const actAsphalt   = actVal("asphalt",   estAsphalt);
+  // Asphalt: linked Materials expenses auto-populate; manual override takes precedence
+  const linkedMaterialsAmt = linkedBySubcat["Materials"] || 0;
+  const actAsphalt   = (actuals["asphalt"]!=null && actuals["asphalt"]!=="")
+    ? Number(actuals["asphalt"])
+    : linkedMaterialsAmt > 0 ? linkedMaterialsAmt : estAsphalt;
   // Fuel: use actual expense allocation if available, else manual actual or estimate
   const actFuel      = actualFuelExp > 0 ? actualFuelExp * revenueShare_ : actVal("fuel", estFuel);
   // Labor: use calcJobFinancials which correctly handles rateHistory for team + off-app workers
@@ -7443,7 +7461,8 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const actLabor      = laborTabCost !== null ? laborTabCost : actVal("labor", estLabor);
   const actStone     = actVal("stone",     estStone);
   const actOther     = actVal("other",     estOther);
-  const actTotal     = actSealcoat + actCrackFill + actAsphalt + actFuel + actLabor + actStone + actOther;
+  const dynamicCogsTotal = dynamicCogsRows.reduce((s,[,amt]) => s + amt, 0);
+  const actTotal     = actSealcoat + actCrackFill + actAsphalt + actFuel + actLabor + actStone + actOther + dynamicCogsTotal;
 
   const updateActual = (key, val) => updateJob(j => ({...j, costs:{...(j.costs||{}), actuals:{...(j.costs?.actuals||{}), [key]:val}}}));
   const updateCosts  = (patch) => updateJob(j => ({...j, costs:{...(j.costs||{}), ...patch}}));
@@ -7531,11 +7550,23 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
           estCrackFill, "crackfill",
           `${crackFillLinFt.toLocaleString()} lin ft × $${CRACKFILL_PER_LINFT}/ft`
         )}
-        {patchTons > 0 && costRow(
-          "Asphalt (Patching)",
-          estAsphalt, "asphalt",
-          `${patchTons.toFixed(2)} tons × $${ASPHALT_PER_TON}/ton`
-        )}
+        {(patchTons > 0 || linkedMaterialsAmt > 0) && (() => {
+          const hasManualOverride = actuals["asphalt"]!=null && actuals["asphalt"]!=="";
+          const label = linkedMaterialsAmt > 0 ? "Asphalt / Materials" : "Asphalt (Patching)";
+          const sub = linkedMaterialsAmt > 0 && !hasManualOverride
+            ? `Auto-populated from ${linkedExpenses.filter(e=>e.category==="COGS"&&e.subcategory==="Materials").length} linked expense(s)`
+            : `${patchTons.toFixed(2)} tons × $${ASPHALT_PER_TON}/ton`;
+          return (
+            <>
+              {linkedMaterialsAmt > 0 && !hasManualOverride && (
+                <div style={{fontSize:11, color:"#0e7490", background:"#e0f2fe", borderRadius:6, padding:"5px 10px", marginBottom:4}}>
+                  ✓ Auto-populated from linked material expenses
+                </div>
+              )}
+              {costRow(label, estAsphalt, "asphalt", sub)}
+            </>
+          );
+        })()}
         {/* Fuel: show expense-allocated actual if available */}
         {(() => {
           const fuelActRaw = actuals["fuel"];
@@ -7692,30 +7723,53 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
         </div>
       </section>
 
-      {/* Linked Expenses */}
+      {/* Dynamic COGS rows from linked expenses */}
+      {dynamicCogsRows.length > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Additional Job Costs</h2>
+          <div style={{fontSize:12, color:C.textMuted, marginBottom:10, marginTop:-8}}>
+            Auto-populated from expenses linked to this job.
+          </div>
+          {dynamicCogsRows.map(([subcat, amt]) => {
+            // Show individual expense lines under each subcategory
+            const subcatExps = linkedExpenses.filter(e => e.category === "COGS" && (e.subcategory||"Other") === subcat);
+            return (
+              <div key={subcat} style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4}}>
+                  <div style={{fontSize:13, fontWeight:600}}>{subcat}</div>
+                  <div style={{fontSize:13, fontWeight:700, color:C.accent}}>{formatCurrency(amt)}</div>
+                </div>
+                {subcatExps.map(e => (
+                  <div key={e.id} style={{display:"flex", justifyContent:"space-between", padding:"3px 0 3px 12px", fontSize:11, color:C.textMuted}}>
+                    <span>{e.vendorName||"Unknown"} · {e.date}{e.notes ? " · "+e.notes : ""}</span>
+                    <span>{formatCurrency(Number(e.amount||0))}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {/* Linked non-COGS expenses (overhead etc.) */}
       {(() => {
-        const linked = (expenses||[]).filter(e => String(e.jobId) === String(currentJob.id));
-        if (linked.length === 0) return null;
-        const linkedTotal = linked.reduce((s,e) => s + Number(e.amount||0), 0);
+        const nonCogs = linkedExpenses.filter(e => e.category !== "COGS");
+        if (nonCogs.length === 0) return null;
         return (
           <section style={S.section}>
-            <h2 style={S.h2}>Logged Expenses</h2>
+            <h2 style={S.h2}>Other Linked Expenses</h2>
             <div style={{fontSize:12, color:C.textMuted, marginBottom:10, marginTop:-8}}>
-              Expenses from the Expenses tab linked to this job. Not included in cost totals above — add to "Actual" fields manually if needed.
+              Non-COGS expenses linked to this job — not included in cost totals above.
             </div>
-            {linked.map(e => (
+            {nonCogs.map(e => (
               <div key={e.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${C.border}`}}>
                 <div>
-                  <div style={{fontSize:13, fontWeight:600}}>{e.vendorName||"Unknown"} — {e.category}</div>
+                  <div style={{fontSize:13, fontWeight:600}}>{e.vendorName||"Unknown"} — {e.subcategory||e.category}</div>
                   <div style={{fontSize:11, color:C.textMuted}}>{e.date} · {e.paymentMethod}{e.notes ? " · "+e.notes : ""}</div>
                 </div>
                 <div style={{fontWeight:700, fontSize:14, color:C.accent, flexShrink:0, marginLeft:12}}>{formatCurrency(Number(e.amount||0))}</div>
               </div>
             ))}
-            <div style={{display:"flex", justifyContent:"space-between", padding:"10px 0", fontWeight:700, fontSize:14}}>
-              <span>Total Logged</span>
-              <span style={{color:C.accent}}>{formatCurrency(linkedTotal)}</span>
-            </div>
           </section>
         );
       })()}
