@@ -2505,9 +2505,10 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
   const GREEN  = [34,197,94];
 
   const LOGO_MAX_W = 260, LOGO_MAX_H = 90;
-  if (companySettings?.logoB64) {
+  if (companySettings?.logoUrl || companySettings?.logoB64) {
     try {
-      const logoDataUrl = "data:image/png;base64," + companySettings.logoB64;
+      const rawLogo = companySettings.logoUrl || companySettings.logoB64 || "";
+      const logoDataUrl = rawLogo.startsWith("http") ? rawLogo : (rawLogo.startsWith("data:") ? rawLogo : "data:image/png;base64," + rawLogo);
       await new Promise((res) => {
         const im = new Image();
         im.onload = () => {
@@ -2677,7 +2678,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessT
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
-  const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
+  const CS_LOGO = companySettings?.logoUrl || companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
   const CS_GOOGLE_REVIEW_URL = companySettings?.googleReviewUrl || "";
@@ -6965,7 +6966,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
-  const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
+  const CS_LOGO = companySettings?.logoUrl || companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
 
@@ -7204,7 +7205,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
       // Logo — fixed max size, Image element for reliable natural dimensions
       await new Promise((res) => {
         try {
-          const logoDataUrl3 = "data:image/png;base64," + CS_LOGO;
+          const logoDataUrl3 = CS_LOGO.startsWith("http") ? CS_LOGO : (CS_LOGO.startsWith("data:") ? CS_LOGO : "data:image/png;base64," + CS_LOGO);
           const im3 = new Image();
           im3.onload = () => {
             const ratio3 = Math.min(260 / im3.naturalWidth, 90 / im3.naturalHeight);
@@ -10686,7 +10687,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
-  const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
+  const CS_LOGO = companySettings?.logoUrl || companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
 
@@ -11755,7 +11756,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   const CS_NAME = companySettings?.name || "";
   const CS_PHONE = formatPhone(companySettings?.phone || "");
   const CS_EMAIL = companySettings?.email || "";
-  const CS_LOGO = companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
+  const CS_LOGO = companySettings?.logoUrl || companySettings?.logoB64 || BLACKTOPIQ_LOGO_B64;
   const CS_LEGAL = companySettings?.legalTerms || "";
   const CS_DEPOSIT = companySettings?.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.";
   const CS_GOOGLE_REVIEW_URL = companySettings?.googleReviewUrl || "";
@@ -12070,9 +12071,9 @@ ${owner}${phone ? `\n${phone}` : ""}${email ? `\n${email}` : ""}`;
 
       // Logo or company name fallback — fixed max size for every tenant
       const LOGO_MAX_W = 260, LOGO_MAX_H = 90; // pt
-      if (companySettings?.logoB64) {
+      if (companySettings?.logoUrl || companySettings?.logoB64) {
         try {
-          const logoDataUrl = "data:image/png;base64," + companySettings.logoB64;
+          const logoDataUrl = companySettings.logoUrl || ("data:image/png;base64," + companySettings.logoB64);
           await new Promise((res) => {
             const im = new Image();
             im.onload = () => {
@@ -13166,6 +13167,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
   const [state_,   setState_]   = useState(cs.state||"PA");
   const [zip,      setZip]      = useState(cs.zip||"");
   const [logoB64,  setLogoB64]  = useState(cs.logoB64||"");
+  const [logoUrl,  setLogoUrl]  = useState(cs.logoUrl||"");
   const [logoName, setLogoName] = useState("");
   const [legalTerms,   setLegalTerms]   = useState(cs.legalTerms||"");
   const [depositTerms, setDepositTerms] = useState(cs.depositTerms||"A 25% deposit is required to schedule work. Balance due upon completion.");
@@ -13196,6 +13198,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       setGoogleReviewUrl(companySettings.googleReviewUrl || "");
       setAccentColor(companySettings.accentColor || DEFAULT_ACCENT);
       setHeaderColor(companySettings.headerColor || DEFAULT_HEADER);
+      if (companySettings.logoUrl) setLogoUrl(companySettings.logoUrl);
       hydrated.current = true;
     }
   }, [companySettings]);
@@ -13231,10 +13234,32 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
   const save = async () => {
     if (!name.trim()) { setMessage("⚠️ Company name is required."); return; }
     setSaving(true); setMessage("");
+    let finalLogoUrl = logoUrl || cs.logoUrl || "";
+    let finalLogoB64 = ""; // Don't store base64 in DB anymore
+    // If user selected a new logo, upload to Storage
+    if (logoB64 && logoB64 !== cs.logoB64 && accessToken && tenantId) {
+      try {
+        const logoPath = `${tenantId}/company-logo.png`;
+        const blob = dataUrlToBlob("data:image/png;base64," + logoB64);
+        finalLogoUrl = await storageUpload(logoPath, blob, accessToken, "image/png");
+        setLogoUrl(finalLogoUrl);
+      } catch(err) {
+        console.error("Logo upload failed:", err);
+        // Fall back to storing b64 if Storage upload fails
+        finalLogoB64 = logoB64 || cs.logoB64 || "";
+      }
+    } else if (cs.logoUrl) {
+      finalLogoUrl = cs.logoUrl;
+    } else if (cs.logoB64) {
+      // Still has old b64 in DB — keep it until they save again
+      finalLogoB64 = cs.logoB64;
+    }
     const csData = {
       name:name.trim(), phone:phone.trim(), email:email.trim(), website:website.trim(),
       street:street.trim(), city:city.trim(), state:state_.trim(), zip:zip.trim(),
-      logoB64: logoB64||cs.logoB64||"", legalTerms:legalTerms.trim(), depositTerms:depositTerms.trim(),
+      logoUrl: finalLogoUrl,
+      logoB64: finalLogoB64,
+      legalTerms:legalTerms.trim(), depositTerms:depositTerms.trim(),
       googleReviewUrl: googleReviewUrl.trim(),
       accentColor, headerColor,
     };
@@ -15049,8 +15074,8 @@ function App() {
           // Strip logoB64 from initial load — load it separately to avoid blocking
           const { logoB64, ...settingsWithoutLogo } = csd[0].data;
           setCompanySettings(prev => ({...prev, ...settingsWithoutLogo}));
-          // Load logo asynchronously after home screen renders
-          if (logoB64) setTimeout(() => setCompanySettings(prev => ({...prev, logoB64})), 100);
+          // Only defer large base64 logo, URL logos load fast
+          if (logoB64 && !settingsWithoutLogo.logoUrl) setTimeout(() => setCompanySettings(prev => ({...prev, logoB64})), 100);
         }
         if (Array.isArray(sd) && sd.length > 0) {
           if (sd[0].data?.iconStyle) setIconStyle(sd[0].data.iconStyle);
@@ -15107,6 +15132,19 @@ function App() {
 
         // ── Signature migration: upload any inline base64 signatures to Storage ──
         migrateInlineSignatures();
+
+        // ── Logo migration: upload base64 logo to Storage ──
+        if (companySettings?.logoB64 && !companySettings?.logoUrl && session?.access_token && currentTenantId) {
+          try {
+            const logoPath = `${currentTenantId}/company-logo.png`;
+            const blob = dataUrlToBlob("data:image/png;base64," + companySettings.logoB64);
+            const url = await storageUpload(logoPath, blob, session.access_token, "image/png");
+            const updatedCs = {...companySettings, logoUrl: url, logoB64: ""};
+            syncCompanySettings(updatedCs);
+            setCompanySettings(updatedCs);
+            console.log("Logo migrated to Storage:", url);
+          } catch(e) { console.error("Logo migration failed:", e); }
+        }
       };
 
       loadSecondary();
