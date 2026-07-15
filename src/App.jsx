@@ -15830,6 +15830,27 @@ function App() {
     try { await tFetch("vendors?id=eq."+id, { method: "DELETE" }); } catch(e) {}
   };
 
+  // ── Vehicles ──
+  const saveVehicle = async (vehicle) => {
+    setVehicles(prev => {
+      const exists = prev.find(v => v.id === vehicle.id);
+      return exists ? prev.map(v => v.id === vehicle.id ? vehicle : v) : [...prev, vehicle];
+    });
+    try {
+      await tFetch("vehicles", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ id: vehicle.id, tenant_id: currentTenantId, name: vehicle.name,
+          type: vehicle.type||null, mpg: vehicle.mpg||null, color: vehicle.color||"#888888",
+          notes: vehicle.notes||null, is_active: vehicle.is_active !== false }),
+      });
+    } catch(e) { console.error("saveVehicle error:", e); }
+  };
+  const deleteVehicle = async (id) => {
+    setVehicles(prev => prev.filter(v => v.id !== id));
+    try { await tFetch("vehicles?id=eq."+id, { method: "DELETE" }); } catch(e) {}
+  };
+
   // ── Material purchases (Materials tab) ──
   const syncMaterial = (entry) => syncItem("materials", entry);
 
