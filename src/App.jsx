@@ -1654,7 +1654,10 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
           }, 0);
           return total === 100;
         });
-        const completionBlocked = unscheduledSvcs.length > 0 || !svcPctValid;
+        const daysWithoutVehicle = (vehicles||[]).length > 0
+          ? (currentJob.scheduleDays||[]).filter(d => d.date && !(d.vehicleIds||[]).length)
+          : [];
+        const completionBlocked = unscheduledSvcs.length > 0 || !svcPctValid || daysWithoutVehicle.length > 0;
         const canMarkPaid = canSeeAllJobs && currentJob.status === "completed";
         const showSection = needsReview || waitingOnReview || managerCanReview || canMarkCompleted || canMarkPaid || currentJob.revisionNote;
         if (!showSection) return null;
@@ -1722,7 +1725,10 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                       {!svcPctValid && (
                         <div>⚠️ Service percentages must add up to 100% for each service on multiple days</div>
                       )}
-                      <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>Go to the Schedule tab to assign dates.</div>
+                      {daysWithoutVehicle.length > 0 && (
+                        <div>⚠️ Vehicle required for: {daysWithoutVehicle.map(d=>d.date).join(", ")}</div>
+                      )}
+                      <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>Go to the Schedule tab to assign dates and vehicles.</div>
                     </div>
                   </div>
                 ) : (
@@ -1913,6 +1919,42 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
                       </div>
                     );
                   })}
+                  {/* Vehicle assignment for this day */}
+                  {(vehicles||[]).length > 0 && (
+                    <div style={{marginTop:8, paddingTop:8, borderTop:`1px solid ${C.border}`}}>
+                      <div style={{fontSize:11, color:C.textMuted, marginBottom:5, fontWeight:600}}>VEHICLES THIS DAY</div>
+                      <div style={{display:"flex", flexWrap:"wrap", gap:5}}>
+                        {(vehicles||[]).map(v => {
+                          const dayVehicleIds = d.vehicleIds||[];
+                          const assigned = dayVehicleIds.includes(v.id);
+                          const toggleDayVehicle = () => {
+                            const newIds = assigned
+                              ? dayVehicleIds.filter(id=>id!==v.id)
+                              : [...dayVehicleIds, v.id];
+                            const newDays = days.map((day,di) => di===i ? {...day, vehicleIds:newIds} : day);
+                            // Also update job-level vehicleIds to union of all days
+                            const allIds = [...new Set(newDays.flatMap(day=>day.vehicleIds||[]))];
+                            updateJob(j => ({...j, scheduleDays:newDays, vehicleIds:allIds,
+                              scheduledDate:[...newDays].filter(d=>d.date).map(d=>d.date).sort()[0]||""}));
+                          };
+                          return (
+                            <button key={v.id} onClick={toggleDayVehicle}
+                              style={{display:"flex", alignItems:"center", gap:5, padding:"3px 8px",
+                                borderRadius:16, border:`1.5px solid ${assigned ? v.color||C.accent : C.border}`,
+                                background: assigned ? (v.color||C.accent)+"22" : "transparent",
+                                cursor:"pointer", fontSize:11, fontWeight: assigned ? 700 : 400,
+                                color: assigned ? v.color||C.accent : C.textMuted}}>
+                              <div style={{width:7, height:7, borderRadius:"50%", background:v.color||"#888", flexShrink:0}}/>
+                              {v.name}{assigned ? " ✓" : ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {!(d.vehicleIds||[]).length && (
+                        <div style={{fontSize:11, color:"#b45309", marginTop:4}}>⚠️ No vehicle assigned for this day</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
               <button style={S.btnSecondary} onClick={addDay}>+ Add Date</button>
