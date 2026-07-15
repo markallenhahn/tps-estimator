@@ -7759,7 +7759,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 }
 
 // ─── Costs View ───────────────────────────────────────────────────────────────
-function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, jobs=[], laborEntries=[], teamUsers=[], offAppWorkers=[] }) {
+function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, jobs=[], laborEntries=[], teamUsers=[], offAppWorkers=[], homeBase={} }) {
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const SEALCOAT_PRICE_PER_GAL = Number(reportSettings.sealcoatPricePerGal) || 4.33;
@@ -7847,8 +7847,60 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const actAsphalt   = (actuals["asphalt"]!=null && actuals["asphalt"]!=="")
     ? Number(actuals["asphalt"])
     : linkedMaterialsAmt > 0 ? linkedMaterialsAmt : estAsphalt;
-  // Fuel: use actual expense allocation if available, else manual actual or estimate
-  const actFuel      = actualFuelExp > 0 ? actualFuelExp * revenueShare_ : actVal("fuel", estFuel);
+  // ── Distance-based fuel allocation ──────────────────────────────────────────
+  // For each day this job is scheduled, calculate the route legs using the
+  // nearest-neighbor order of all geocoded jobs on that day. This job's share
+  // of total period miles determines its share of actual fuel expenses.
+  const calcJobRouteMiles = () => {
+    const jobDays = (currentJob.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
+    if (!currentJob.geoLat || !currentJob.geoLng || jobDays.length === 0) return null;
+    const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng} : null;
+    if (!hb) return null;
+    const ROAD_FACTOR = 1.25;
+    let totalJobMiles = 0;
+    let totalPeriodMiles = 0;
+    jobDays.forEach(date => {
+      // Get all geocoded jobs scheduled on this date
+      const dayJobs = (jobs||[]).filter(j =>
+        (j.scheduledDate === date || (j.scheduleDays||[]).some(d=>d.date===date)) &&
+        j.geoLat && j.geoLng
+      );
+      if (dayJobs.length === 0) return;
+      // Run nearest-neighbor from homebase to get route order
+      const points = dayJobs.map(j=>({lat:j.geoLat, lng:j.geoLng, id:j.id}));
+      const ordered = optimizeRoute(points, {lat:hb.lat, lng:hb.lng, id:"home"})
+        .filter(p=>p.id!=="home");
+      // Calculate leg distances: home→j1→j2→...→home
+      let prev = hb;
+      const legMiles = {};
+      ordered.forEach((p,i) => {
+        const leg = haversine(prev, {lat:p.lat, lng:p.lng}) * ROAD_FACTOR;
+        const next = ordered[i+1] ? {lat:ordered[i+1].lat, lng:ordered[i+1].lng} : hb;
+        // Each job gets the leg to get there PLUS half the leg to the next stop
+        legMiles[p.id] = (legMiles[p.id]||0) + haversine(prev, {lat:p.lat, lng:p.lng}) * ROAD_FACTOR;
+        if (!ordered[i+1]) {
+          // Last job gets the return leg too
+          legMiles[p.id] += haversine({lat:p.lat, lng:p.lng}, hb) * ROAD_FACTOR;
+        }
+        prev = {lat:p.lat, lng:p.lng};
+      });
+      // Sum up
+      const dayTotal = Object.values(legMiles).reduce((s,m)=>s+m,0);
+      totalPeriodMiles += dayTotal;
+      totalJobMiles += legMiles[currentJob.id]||0;
+    });
+    if (totalPeriodMiles === 0 || totalJobMiles === 0) return null;
+    return { jobMiles: totalJobMiles, periodMiles: totalPeriodMiles, pct: totalJobMiles/totalPeriodMiles };
+  };
+  const distFuel = (actualFuelExp > 0) ? calcJobRouteMiles() : null;
+  const actFuel = (() => {
+    const fuelActRaw = actuals["fuel"];
+    const hasManual = fuelActRaw!=null && fuelActRaw!=="";
+    if (hasManual) return Number(fuelActRaw);
+    if (distFuel && actualFuelExp > 0) return actualFuelExp * distFuel.pct;
+    if (actualFuelExp > 0) return actualFuelExp * revenueShare_; // fallback: no geocoords
+    return actVal("fuel", estFuel);
+  })();
   // Labor: use calcJobFinancials which correctly handles rateHistory for team + off-app workers
   const jobFinancials = calcJobFinancials(currentJob, rates, laborEntries, offAppWorkers, teamUsers, reportSettings);
   const laborTabCost  = jobFinancials.laborFromLinkedEntries > 0 ? jobFinancials.laborFromLinkedEntries : null;
@@ -7996,10 +8048,14 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
           const fuelDisplay = fuelHasManual ? Number(fuelActRaw) : actFuel;
           const fuelHasAct = fuelDisplay !== estFuel;
           const fuelDiff = fuelDisplay - estFuel;
-          const fuelLabel = actualFuelExp > 0 ? "Fuel (actual, by rev share)" : "Fuel (5%)";
-          const fuelSub = actualFuelExp > 0
-            ? `${formatCurrency(actualFuelExp)} total × ${(revenueShare_*100).toFixed(1)}% share`
-            : `${formatCurrency(revenue)} × 5%`;
+          const fuelLabel = distFuel
+            ? `Fuel (${distFuel.jobMiles.toFixed(1)} mi, ${(distFuel.pct*100).toFixed(1)}% of period)`
+            : actualFuelExp > 0 ? "Fuel (actual, by rev share)" : `Fuel (${reportSettings.fuelPct||5}%)`;
+          const fuelSub = distFuel
+            ? `${distFuel.jobMiles.toFixed(1)} mi ÷ ${distFuel.periodMiles.toFixed(1)} total mi × ${formatCurrency(actualFuelExp)} fuel expenses`
+            : actualFuelExp > 0
+            ? `${formatCurrency(actualFuelExp)} total × ${(revenueShare_*100).toFixed(1)}% rev share`
+            : `${formatCurrency(revenue)} × ${reportSettings.fuelPct||5}%`;
           return (
             <div style={{padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
               <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
@@ -16343,7 +16399,7 @@ function App() {
         }
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} reportSettings={reportSettings} jobs={jobs} laborEntries={laborEntries} teamUsers={teamUsers} offAppWorkers={offAppWorkers}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} reportSettings={reportSettings} jobs={jobs} laborEntries={laborEntries} teamUsers={teamUsers} offAppWorkers={offAppWorkers} homeBase={homeBase}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
