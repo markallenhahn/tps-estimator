@@ -1087,7 +1087,126 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
 }
 
 // ─── Media View ───────────────────────────────────────────────────────────────
-function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userRoles, userId, jobs, companySettings={}, accessToken, tenantId, servicesOffered=[], currentUserName="" }) {
+// ─── VehicleAssignment — assign vehicles to a job with conflict detection ─────
+function VehicleAssignment({ currentJob, updateJob, vehicles, jobs }) {
+  const [conflictModal, setConflictModal] = useState(null);
+  // conflictModal = { vehicleId, vehicleName, conflicts: [{job, date}] }
+
+  const jobVehicleIds = currentJob.vehicleIds || [];
+  const jobDate = currentJob.scheduledDate || (currentJob.scheduleDays||[])[0];
+
+  const toggleVehicle = (vehicleId) => {
+    // If removing, just remove
+    if (jobVehicleIds.includes(vehicleId)) {
+      updateJob(j => ({...j, vehicleIds: (j.vehicleIds||[]).filter(id => id !== vehicleId)}));
+      return;
+    }
+    // If adding, check for conflicts on same day
+    if (jobDate) {
+      const conflicts = (jobs||[]).filter(j =>
+        j.id !== currentJob.id &&
+        (j.vehicleIds||[]).includes(vehicleId) &&
+        (j.scheduledDate === jobDate || (j.scheduleDays||[]).includes(jobDate))
+      );
+      if (conflicts.length > 0) {
+        const vehicle = vehicles.find(v => v.id === vehicleId);
+        setConflictModal({ vehicleId, vehicleName: vehicle?.name, conflicts, date: jobDate });
+        return;
+      }
+    }
+    updateJob(j => ({...j, vehicleIds: [...(j.vehicleIds||[]), vehicleId]}));
+  };
+
+  const confirmAssign = () => {
+    if (!conflictModal) return;
+    updateJob(j => ({...j, vehicleIds: [...(j.vehicleIds||[]), conflictModal.vehicleId]}));
+    setConflictModal(null);
+  };
+
+  if (vehicles.length === 0) return null;
+
+  const dateStr = jobDate ? new Date(jobDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}) : null;
+
+  return (
+    <div style={{marginTop:16, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+      <label style={{...S.formLabel, marginBottom:6}}>Vehicles & Equipment</label>
+      <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
+        {vehicles.map(v => {
+          const assigned = jobVehicleIds.includes(v.id);
+          return (
+            <button key={v.id} onClick={() => toggleVehicle(v.id)}
+              style={{display:"flex", alignItems:"center", gap:6, padding:"5px 10px",
+                borderRadius:20, border:`1.5px solid ${assigned ? v.color||C.accent : C.border}`,
+                background: assigned ? (v.color||C.accent)+"22" : C.surface2,
+                cursor:"pointer", fontSize:12, fontWeight: assigned ? 700 : 400,
+                color: assigned ? v.color||C.accent : C.textMuted}}>
+              <div style={{width:8, height:8, borderRadius:"50%", background:v.color||"#888", flexShrink:0}}/>
+              {v.name}
+              {assigned && " ✓"}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Conflict modal */}
+      {conflictModal && createPortal(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:C.surface,borderRadius:12,padding:20,maxWidth:420,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+            <h3 style={{fontSize:16,fontWeight:700,marginBottom:4,color:C.danger}}>⚠️ Vehicle Conflict</h3>
+            <p style={{fontSize:13,color:C.textMuted,marginBottom:12}}>
+              <strong>{conflictModal.vehicleName}</strong> is already assigned to {conflictModal.conflicts.length} job{conflictModal.conflicts.length!==1?"s":""} on {dateStr}:
+            </p>
+            {conflictModal.conflicts.map(j => {
+              const jobVehicles = (j.vehicleIds||[]).map(vid => vehicles.find(v=>v.id===vid)?.name).filter(Boolean);
+              const services = (j.areas||[]).map(a=>a.serviceType).filter((v,i,a)=>a.indexOf(v)===i).join(", ");
+              return (
+                <div key={j.id} style={{padding:"8px 10px",background:C.surface2,borderRadius:8,marginBottom:6}}>
+                  <div style={{fontWeight:600,fontSize:13}}>{j.clientName||"Unnamed"}</div>
+                  <div style={{fontSize:11,color:C.textMuted}}>{j.address}{services ? " · "+services : ""}</div>
+                  {jobVehicles.length > 0 && (
+                    <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>
+                      Vehicles: {jobVehicles.join(", ")}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {/* Show all jobs that day for context */}
+            {(() => {
+              const allDayJobs = (jobs||[]).filter(j =>
+                j.id !== currentJob.id &&
+                (j.scheduledDate === conflictModal.date || (j.scheduleDays||[]).includes(conflictModal.date))
+              );
+              const otherJobs = allDayJobs.filter(j => !conflictModal.conflicts.find(c=>c.id===j.id));
+              if (otherJobs.length === 0) return null;
+              return (
+                <div style={{marginTop:8,marginBottom:8}}>
+                  <div style={{fontSize:11,color:C.textMuted,fontWeight:700,marginBottom:4}}>OTHER JOBS THIS DAY:</div>
+                  {otherJobs.map(j => {
+                    const jv = (j.vehicleIds||[]).map(vid=>vehicles.find(v=>v.id===vid)?.name).filter(Boolean);
+                    return (
+                      <div key={j.id} style={{padding:"6px 10px",background:C.surface2,borderRadius:6,marginBottom:4}}>
+                        <div style={{fontSize:12,fontWeight:600}}>{j.clientName||"Unnamed"}</div>
+                        <div style={{fontSize:11,color:C.textMuted}}>{j.address}{jv.length>0?" · "+jv.join(", "):""}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            <div style={{display:"flex",gap:8,marginTop:16}}>
+              <button onClick={() => setConflictModal(null)} style={{...S.btnSecondary,flex:1}}>Cancel</button>
+              <button onClick={confirmAssign} style={{...S.btnPrimary,flex:1,background:"#ef4444",border:"none"}}>Assign Anyway</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamUsers, crews, zones, homeBase, userRole, userRoles, userId, jobs, companySettings={}, accessToken, tenantId, servicesOffered=[], currentUserName="", vehicles=[] }) {
   const CS_NAME = companySettings?.name || "";
   const isDesktop = useIsDesktop();
   // ── Photo capture ──
@@ -1506,6 +1625,10 @@ function JobDetailView({ currentJob, updateJob, deleteJob, rates, setView, teamU
               })}
             </select>
           </div>
+
+          {/* Vehicle Assignment */}
+          <VehicleAssignment currentJob={currentJob} updateJob={updateJob} vehicles={vehicles} jobs={jobs}/>
+
         </section>
       )}
 
@@ -5752,7 +5875,7 @@ function ScheduleRouteButton({ jobs: routableJobs, homeBase, setJobs, tFetch, S 
   );
 }
 
-function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userId, homeBase, tenantData, setJobs, tFetch }) {
+function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userId, homeBase, tenantData, setJobs, tFetch, vehicles=[] }) {
   const today    = new Date();
   const roles = userRoles || [userRole];
   const canSeeAll = hasRole(roles, "owner") || hasRole(roles, "manager") || hasRole(roles, "crewlead");
@@ -5909,6 +6032,22 @@ function ScheduleView({ jobs, setCurrentJob, setView, userRole, userRoles, userI
                       </div>
                     )}
                     {!j.isEstimateVisit && j.notes && <div style={S.schedJobNotes}>{j.notes}</div>}
+                    {/* Vehicle chips */}
+                    {(j.vehicleIds||[]).length > 0 && (
+                      <div style={{display:"flex", flexWrap:"wrap", gap:4, marginTop:4}}>
+                        {(j.vehicleIds||[]).map(vid => {
+                          const v = (vehicles||[]).find(v=>v.id===vid);
+                          if (!v) return null;
+                          return (
+                            <span key={vid} style={{fontSize:10, fontWeight:600, padding:"2px 7px",
+                              borderRadius:10, background:(v.color||"#888")+"22",
+                              color:v.color||"#888", border:`1px solid ${v.color||"#888"}44`}}>
+                              {v.name}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <span style={{...S.statusBadge,...S[`status_${j.status}`]}}>{j.status}</span>
                 </div>
@@ -8517,7 +8656,104 @@ function ReportSettingsCard({ reportSettings={}, syncReportSettings }) {
   );
 }
 
-function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, syncReportSettings }) {
+// ─── VehiclesCard — manage fleet vehicles and equipment ──────────────────────
+const VEHICLE_TYPES = ["Truck","Truck + Trailer","Truck + Trailer + Equipment","Van","Other"];
+const VEHICLE_COLORS = ["#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#ec4899","#6b7280"];
+
+function VehiclesCard({ vehicles=[], saveVehicle, deleteVehicle }) {
+  const [editing, setEditing] = useState(null); // null | {id, name, type, mpg, color, notes} | "new"
+  const [draft, setDraft] = useState({});
+
+  const startNew = () => {
+    const id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+    setDraft({ id, name:"", type:"Truck", mpg:"", color:"#3b82f6", notes:"", is_active:true });
+    setEditing("new");
+  };
+  const startEdit = (v) => { setDraft({...v}); setEditing(v.id); };
+  const cancel = () => { setEditing(null); setDraft({}); };
+  const save = () => {
+    if (!draft.name?.trim()) return;
+    saveVehicle({...draft, name: draft.name.trim(), mpg: draft.mpg ? Number(draft.mpg) : null});
+    cancel();
+  };
+
+  const form = (
+    <div style={{background:C.surface2, borderRadius:10, padding:14, marginBottom:12, border:`1px solid ${C.border}`}}>
+      <div style={{display:"flex", gap:8, marginBottom:8}}>
+        <input value={draft.name||""} onChange={e=>setDraft(p=>({...p,name:e.target.value}))}
+          placeholder="Vehicle name (e.g. F-350 + Spray Trailer)"
+          style={{...S.input, flex:2}}/>
+        <select value={draft.type||"Truck"} onChange={e=>setDraft(p=>({...p,type:e.target.value}))}
+          style={{...S.input, flex:1}}>
+          {VEHICLE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+      <div style={{display:"flex", gap:8, marginBottom:8, alignItems:"center"}}>
+        <input type="number" value={draft.mpg||""} onChange={e=>setDraft(p=>({...p,mpg:e.target.value}))}
+          placeholder="MPG (optional)" style={{...S.input, flex:1}}/>
+        <div style={{display:"flex", gap:6, alignItems:"center"}}>
+          {VEHICLE_COLORS.map(col => (
+            <button key={col} onClick={() => setDraft(p=>({...p,color:col}))}
+              style={{width:22, height:22, borderRadius:"50%", background:col, border:
+                draft.color===col ? `3px solid ${C.text}` : `2px solid transparent`,
+                cursor:"pointer", padding:0, flexShrink:0}}/>
+          ))}
+        </div>
+      </div>
+      <input value={draft.notes||""} onChange={e=>setDraft(p=>({...p,notes:e.target.value}))}
+        placeholder="Notes (e.g. main sealcoat rig)" style={{...S.input, width:"100%", marginBottom:10}}/>
+      <div style={{display:"flex", gap:8}}>
+        <button onClick={save} style={S.btnPrimary}>Save</button>
+        <button onClick={cancel} style={S.btnSecondary}>Cancel</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <section style={S.section}>
+      <h2 style={S.h2}>Vehicles & Equipment</h2>
+      <p style={{fontSize:12, color:C.textMuted, marginTop:-8, marginBottom:12}}>
+        Track which vehicles and equipment are used on each job.
+      </p>
+
+      {editing === "new" && form}
+
+      {vehicles.length === 0 && editing !== "new" && (
+        <p style={{fontSize:13, color:C.textMuted, marginBottom:12}}>No vehicles added yet.</p>
+      )}
+
+      {vehicles.map(v => (
+        <div key={v.id}>
+          {editing === v.id ? form : (
+            <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 0",
+              borderBottom:`1px solid ${C.border}`}}>
+              <div style={{width:14, height:14, borderRadius:"50%", background:v.color||"#888",
+                flexShrink:0, border:`2px solid ${C.border}`}}/>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600, fontSize:14}}>{v.name}</div>
+                <div style={{fontSize:12, color:C.textMuted}}>
+                  {v.type}{v.mpg ? ` · ${v.mpg} MPG` : ""}
+                  {v.notes ? ` · ${v.notes}` : ""}
+                </div>
+              </div>
+              <button onClick={() => startEdit(v)} style={S.btnSmall}>Edit</button>
+              <button onClick={() => { if(confirm("Remove this vehicle?")) deleteVehicle(v.id); }}
+                style={S.btnSmallDanger}><Icon name="Trash2" size={13}/></button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {editing !== "new" && (
+        <button onClick={startNew} style={{...S.btnSecondary, marginTop:12}}>
+          <Icon name="Plus" size={14} style={{verticalAlign:"middle",marginRight:5}}/> Add Vehicle
+        </button>
+      )}
+    </section>
+  );
+}
+
+function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, syncReportSettings, vehicles=[], saveVehicle, deleteVehicle }) {
   const cards = [
     { key:"company-settings", icon:"🏢", lucide:"Building2",    title:"Company Settings",      desc:"Update your company name, contact info, logo, and legal terms." },
     { key:"permissions",      icon:"🔐", lucide:"Lock",         title:"Permissions",           desc:"View what each role can see. Contact BlacktopIQ support to change." },
@@ -8560,6 +8796,9 @@ function OwnerHubView({ setView, iconStyle, syncIconStyle, reportSettings={}, sy
           </button>
         </div>
       </section>
+
+      {/* ── Vehicles & Equipment ── */}
+      <VehiclesCard vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle}/>
 
       <ReportSettingsCard reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>
 
@@ -14894,6 +15133,7 @@ function App() {
   const [customers,         setCustomers]         = useState([]);
   const [expenses,          setExpenses]          = useState([]);
   const [vendors,           setVendors]           = useState([]);
+  const [vehicles,          setVehicles]          = useState([]);
   const [currentUserName,   setCurrentUserName]   = useState("");
   const isDesktopLayout = useIsDesktop();
 
@@ -15294,7 +15534,7 @@ function App() {
       // ── Phase 2: load secondary data in background ──
       const loadSecondary = async () => {
         try {
-          const [lr, er, vr, mr, msr, scr, clr, cur] = await Promise.all([
+          const [lr, er, vr, mr, msr, scr, clr, cur, vcr] = await Promise.all([
             tFetch("labor?select=id,data&order=id.desc"),
             tFetch("expenses?select=id,data&order=id.desc"),
             tFetch("vendors?select=id,data&order=id.desc"),
@@ -15303,11 +15543,12 @@ function App() {
             tFetch("materialstock?select=id,data&order=id.desc"),
             tFetch("crmlogs?select=id,data&order=id.desc"),
             tFetch("customers?select=id,data&order=id.desc"),
+            tFetch("vehicles?select=id,name,type,mpg,color,notes,is_active&order=created_at.asc"),
           ]);
 
-          const [ld, ed, vd, md, msd, scd, cld, cud] = await Promise.all([
+          const [ld, ed, vd, md, msd, scd, cld, cud, vcd] = await Promise.all([
             lr.json(), er.json(), vr.json(), mr.json(),
-            msr.json(), scr.json(), clr.json(), cur.json(),
+            msr.json(), scr.json(), clr.json(), cur.json(), vcr.json(),
           ]);
 
           if (Array.isArray(ld)) setLaborEntries(ld.map(row => ({...row.data, id: row.id})));
@@ -15318,6 +15559,7 @@ function App() {
           if (Array.isArray(scd)) setStockChecks(scd.map(row => ({...row.data, id: row.id})));
           if (Array.isArray(cld)) setCrmLogs(cld.map(row => ({...row.data, id: row.id})));
           if (Array.isArray(cud)) setCustomers(cud.map(row => ({...row.data, id: row.id})));
+          if (Array.isArray(vcd)) setVehicles(vcd.filter(v => v.is_active !== false));
         } catch(e) { console.error("Secondary load error:", e); }
 
         // Load team users last (hits API route, slightly slower)
@@ -16012,7 +16254,7 @@ function App() {
         {getAccessLevel(permissions,"home",userRoles)!=="hidden" && <div style={{display: view==="home" ? "block" : "none"}}><HomeView jobs={jobs} crews={crews} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} tFetch={tFetch} setJobs={setJobs} updateJobById={updateJobById} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="jobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id}/></div>}
         {getAccessLevel(permissions,"jobs",userRoles)!=="hidden" && <div style={{display: view==="myjobs" ? "block" : "none"}}><JobsPipelineView jobs={jobs} setJobs={handleSetJobs} setCurrentJob={setCurrentJob} setView={navigateTo} rates={rates} updateJobById={updateJobById} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} scope="mine" showBackButton/></div>}
-        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} homeBase={homeBase} tenantData={currentTenant?.data} setJobs={setJobs} tFetch={tFetch}/></div>}
+        {getAccessLevel(permissions,"schedule",userRoles)!=="hidden" && <div style={{display: view==="schedule" ? "block" : "none"}}><ScheduleView jobs={jobs} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} homeBase={homeBase} tenantData={currentTenant?.data} setJobs={setJobs} tFetch={tFetch} vehicles={vehicles}/></div>}
         {getAccessLevel(permissions,"zones",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"zones") && <div style={{display: view==="zones" ? "block" : "none"}}><ZonesView jobs={jobs} setJobs={setJobs} zones={zones} setZones={setZones} syncZones={syncZones} setCurrentJob={setCurrentJob} setView={navigateTo} homeBase={homeBase} tFetch={tFetch}/></div>}
         {/* ── Job context bar — shared across all job-scoped views ── */}
         {["jobdetail","estimate","invoice","costs"].includes(view) && currentJob && (
@@ -16028,7 +16270,7 @@ function App() {
             iconStyle={iconStyle}
           />
         )}
-        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId} servicesOffered={currentTenant?.data?.servicesOffered||[]} currentUserName={currentUserName}/>}
+        {view==="jobdetail" && <JobDetailView currentJob={currentJob} updateJob={updateJob} deleteJob={deleteJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} setView={navigateTo} teamUsers={teamUsers} crews={crews} zones={zones} homeBase={homeBase} userRole={userRole} userRoles={userRoles} userId={session?.user?.id} jobs={jobs} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId} servicesOffered={currentTenant?.data?.servicesOffered||[]} currentUserName={currentUserName} vehicles={vehicles}/>}
         {view==="estimate" && getAccessLevel(permissions,"estimate",userRoles)!=="hidden" && <EstimateView currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} syncJob={syncJob}
           canOverridePrice={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager")}
           readOnly={
@@ -16055,7 +16297,7 @@ function App() {
         {view==="help" && getAccessLevel(permissions,"help",userRoles)!=="hidden" && <HelpView tFetch={tFetch} currentTenantId={currentTenantId} session={session} userRole={userRole} accessToken={session?.access_token} currentUserName={currentUserName} currentTenant={currentTenant}/>}
         {view==="request-form"  && userRole==="owner" && <EstimateRequestLinkView setView={navigateTo} currentTenantId={currentTenantId}/>}
         {view==="team"     && (userRole==="owner"||userRole==="manager") && getTenantPlan(currentTenant?.data).userCap > 1 && <TeamView accessToken={session?.access_token} userRole={userRole} tFetch={tFetch} tenantId={currentTenantId} tenantData={currentTenant?.data} offAppWorkers={offAppWorkers} syncOffAppWorkers={syncOffAppWorkers}/>}
-        {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle} reportSettings={reportSettings} syncReportSettings={syncReportSettings}/>}
+        {view==="owner-hub"    && userRole==="owner" && <OwnerHubView setView={navigateTo} iconStyle={iconStyle} syncIconStyle={syncIconStyle} reportSettings={reportSettings} syncReportSettings={syncReportSettings} vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle}/>}
         {view==="global-permissions" && isPlatformAdmin && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={false}/>}
         {view==="permissions" && userRole==="owner" && <PermissionsView permissions={permissions} setPermissions={setPermissions} syncPermissions={syncPermissions} setView={navigateTo} readOnly={true}/>}
         {view==="account" && <UserSettingsView accessToken={session?.access_token} userId={session?.user?.id} setView={navigateTo} onLogout={handleLogout} tenantData={currentTenant?.data} userRole={userRole} teamUsers={teamUsers}/>}
