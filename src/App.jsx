@@ -3219,42 +3219,44 @@ function LaborOverview({ laborEntries, teamUsers, offAppWorkers, jobs }) {
         <p style={{fontSize:13, color:C.textMuted}}>No labor entries in this period.</p>
       ) : (
         <>
-          {/* Summary totals */}
-          <div style={{display:"flex", gap:12, marginBottom:16, flexWrap:"wrap"}}>
-            <div style={{flex:1, minWidth:120, padding:"12px 14px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:11, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>TOTAL HOURS</div>
-              <div style={{fontSize:22, fontWeight:800, marginTop:4}}>{grandHours.toFixed(1)}</div>
+          {/* Summary totals — 2-col grid on mobile, 3-col on desktop */}
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:16}}>
+            <div style={{padding:"10px 12px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>TOTAL HOURS</div>
+              <div style={{fontSize:20, fontWeight:800, marginTop:2}}>{grandHours.toFixed(1)}</div>
             </div>
-            <div style={{flex:1, minWidth:120, padding:"12px 14px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:11, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>TOTAL LABOR COST</div>
-              <div style={{fontSize:22, fontWeight:800, color:C.accent, marginTop:4}}>{formatCurrency(grandPay)}</div>
+            <div style={{padding:"10px 12px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>LABOR COST</div>
+              <div style={{fontSize:20, fontWeight:800, color:C.accent, marginTop:2}}>{formatCurrency(grandPay)}</div>
             </div>
-            <div style={{flex:1, minWidth:120, padding:"12px 14px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:11, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>WORKERS</div>
-              <div style={{fontSize:22, fontWeight:800, marginTop:4}}>{workers.length}</div>
+            <div style={{padding:"10px 12px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>WORKERS</div>
+              <div style={{fontSize:20, fontWeight:800, marginTop:2}}>{workers.length}</div>
+            </div>
+            <div style={{padding:"10px 12px", background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10, color:C.textMuted, fontWeight:700, letterSpacing:"0.05em"}}>AVG RATE</div>
+              <div style={{fontSize:20, fontWeight:800, marginTop:2}}>{grandHours > 0 ? formatCurrency(grandPay/grandHours)+"/hr" : "—"}</div>
             </div>
           </div>
 
-          {/* Per-worker rows */}
-          {/* Column headers */}
+          {/* Per-worker rows — name + hours + pay, rate shown on expand */}
           <div style={{display:"flex", gap:8, padding:"6px 10px", borderBottom:`2px solid ${C.border}`,
             fontSize:11, fontWeight:700, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:4}}>
-            <div style={{flex:2}}>Worker</div>
-            <div style={{flex:1, textAlign:"right"}}>Hours</div>
-            <div style={{flex:1, textAlign:"right"}}>Rate</div>
-            <div style={{flex:1, textAlign:"right"}}>Pay</div>
+            <div style={{flex:1}}>Worker</div>
+            <div style={{width:70, textAlign:"right", flexShrink:0}}>Hours</div>
+            <div style={{width:80, textAlign:"right", flexShrink:0}}>Pay</div>
           </div>
           {workers.map(([name, data]) => (
             <details key={name} style={{borderBottom:`1px solid ${C.border}`}}>
-              <summary style={{display:"flex", gap:8, padding:"10px 10px", cursor:"pointer", listStyle:"none", alignItems:"center"}}>
-                <div style={{flex:2, fontWeight:600, fontSize:13}}>{name}
+              <summary style={{display:"flex", gap:8, padding:"11px 10px", cursor:"pointer", listStyle:"none", alignItems:"center"}}>
+                <div style={{flex:1, fontWeight:600, fontSize:13, minWidth:0}}>
+                  {name}
                   {data.missingRate && <span style={{fontSize:10, color:"#b45309", marginLeft:6}}>no rate</span>}
+                  {data.hasRate && <div style={{fontSize:11, color:C.textMuted, fontWeight:400}}>{formatCurrency(data.totalPay/data.totalHours)}/hr</div>}
                 </div>
-                <div style={{flex:1, textAlign:"right", fontSize:13}}>{data.totalHours.toFixed(1)} hrs</div>
-                <div style={{flex:1, textAlign:"right", fontSize:12, color:C.textMuted}}>
-                  {data.hasRate ? formatCurrency(data.totalPay / data.totalHours) + "/hr" : "—"}
-                </div>
-                <div style={{flex:1, textAlign:"right", fontSize:13, fontWeight:700, color: data.totalPay > 0 ? C.accent : C.textMuted}}>
+                <div style={{width:70, textAlign:"right", fontSize:13, flexShrink:0, whiteSpace:"nowrap"}}>{data.totalHours.toFixed(1)} hrs</div>
+                <div style={{width:80, textAlign:"right", fontSize:13, fontWeight:700, flexShrink:0, whiteSpace:"nowrap",
+                  color: data.totalPay > 0 ? C.accent : C.textMuted}}>
                   {data.totalPay > 0 ? formatCurrency(data.totalPay) : "—"}
                 </div>
               </summary>
