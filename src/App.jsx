@@ -2798,7 +2798,7 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
 
   if (discount > 0) {
     doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(220,38,38);
-    doc.text("Discount (" + discount + "%)", ML+10, y+12);
+    doc.text(((currentJob.discountType||"pct")==="flat" ? "Discount " + formatCurrency(currentJob.discountFlat||0) : "Discount (" + discount + "%)"), ML+10, y+12);
     doc.text("-" + formatCurrency(discountAmt), PW-MR-6, y+12, {align:"right"});
     y += 18;
   } else { y += 8; }
@@ -2871,7 +2871,9 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessT
   const discount    = Number(currentJob.discount || 0);
   const subtotal    = (currentJob.areas||[]).reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
   const marginAmt   = subtotal * (margin/100);
-  const discountAmt = (subtotal + marginAmt) * (discount/100);
+  const discountAmt = (currentJob.discountType||"pct")==="flat"
+    ? Math.min(Number(currentJob.discountFlat||0), subtotal + marginAmt)
+    : (subtotal + marginAmt) * (discount/100);
   const calcTotal   = subtotal + marginAmt - discountAmt;
   const hasOverride = currentJob.priceOverride !== undefined && currentJob.priceOverride !== null && currentJob.priceOverride !== "";
   const total       = hasOverride ? Number(currentJob.priceOverride) : calcTotal;
@@ -12734,9 +12736,9 @@ ${a.notes}` : "");
       y += 8;
 
       // ── Totals ── (discount only, no margin)
-      if (discount>0) {
+      if (discountAmt>0) {
         doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(220,38,38);
-        doc.text("Discount (" + discount + "%)", ML+10, y+12);
+        doc.text(((currentJob.discountType||"pct")==="flat" ? "Discount " + formatCurrency(currentJob.discountFlat||0) : "Discount (" + discount + "%)"), ML+10, y+12);
         doc.text("-" + formatCurrency(discountAmt), PW-MR-6, y+12, { align:"right" });
         y += 18;
       } else {
