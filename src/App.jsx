@@ -12468,6 +12468,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
           toEmail: emailTo.trim(),
           toName: currentJob.clientName || "",
           subject,
+          body,
           pdfBase64,
           pdfFilename: filename,
           fromName:   CS_NAME  || "BlacktopIQ",
@@ -12478,7 +12479,6 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
       });
       const data = await res.json();
       if (!res.ok) { setEmailError(data.error || "Failed to send email."); setSendingEmail(false); return; }
-
       setShowEmailModal(false);
       setSendingEmail(false);
       setPdfLoading(false);
