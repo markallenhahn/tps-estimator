@@ -12468,7 +12468,6 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
           toEmail: emailTo.trim(),
           toName: currentJob.clientName || "",
           subject,
-          body,
           pdfBase64,
           pdfFilename: filename,
           fromName:   CS_NAME  || "BlacktopIQ",
