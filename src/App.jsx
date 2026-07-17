@@ -2715,7 +2715,7 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
   const subtotal = (job.areas||[]).reduce((s,a) => s + calcLineAmt(a, allRates), 0);
   const discount = Number(job.discount||0);
-  const discountAmt = subtotal * (discount/100);
+  const discountAmt = (currentJob.discountType||"pct")==="flat" ? Math.min(Number(currentJob.discountFlat||0), subtotal) : subtotal * (discount/100);
   const total = job.priceOverride !== undefined && job.priceOverride !== null && job.priceOverride !== ""
     ? Number(job.priceOverride)
     : subtotal - discountAmt;
@@ -2895,7 +2895,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessT
       return a.name + " | " + svc?.label + " | " + qtyStr + " | " + formatCurrency(amt);
     }),
     "", "─────────────────────────",
-    discount>0 ? ("Discount (" + discount + "%): -" + formatCurrency(discountAmt)) : null,
+    discount>0 ? (((currentJob.discountType||"pct")==="flat" ? "Discount " + formatCurrency(currentJob.discountFlat||0) : "Discount (" + discount + "%)") + ": -" + formatCurrency(discountAmt)) : null,
     "TOTAL DUE: " + formatCurrency(total),
     isPaid ? ("PAID: " + paymentDate + " via " + paymentMethod) : "",
     "─────────────────────────", "",
@@ -12319,15 +12319,21 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
   // means margin/discount editing and the signature pad respect it for free.
   const isLocked = isSigned || readOnly;
 
-  const margin   = Number(currentJob.margin   || 0);
-  const discount = Number(currentJob.discount || 0);
-  const setMargin   = val => { if (isLocked) return; updateJob(j => ({...j, margin:   Number(val)})); };
-  const setDiscount = val => { if (isLocked) return; updateJob(j => ({...j, discount: Number(val)})); };
+  const margin        = Number(currentJob.margin || 0);
+  const discount      = Number(currentJob.discount || 0);
+  const discountType  = currentJob.discountType || "pct"; // "pct" | "flat"
+  const discountFlat  = Number(currentJob.discountFlat || 0);
+  const setMargin     = val => { if (isLocked) return; updateJob(j => ({...j, margin: Number(val)})); };
+  const setDiscount   = val => { if (isLocked) return; updateJob(j => ({...j, discount: Number(val)})); };
+  const setDiscountFlat = val => { if (isLocked) return; updateJob(j => ({...j, discountFlat: Number(val)})); };
+  const setDiscountType = val => { if (isLocked) return; updateJob(j => ({...j, discountType: val, discount: 0, discountFlat: 0})); };
 
   if (!Array.isArray(currentJob.areas)) return <div className="tps-page" style={S.page}><p style={S.noJob}>Loading job data...</p></div>;
   const subtotal    = (currentJob.areas||[]).reduce((sum,a) => sum + calcLineAmt(a,rates), 0);
   const marginAmt   = subtotal * (margin/100);
-  const discountAmt = (subtotal + marginAmt) * (discount/100);
+  const discountAmt = discountType === "flat"
+    ? Math.min(discountFlat, subtotal + marginAmt)
+    : (subtotal + marginAmt) * (discount/100);
   const calcTotal   = subtotal + marginAmt - discountAmt;
 
   // Price override — when set, replaces calculated total everywhere
@@ -12435,7 +12441,7 @@ function EstimateView({ currentJob, updateJob, rates, syncJob, readOnly, canOver
     }),
     "", "─────────────────────────",
     "Subtotal: " + formatCurrency(subtotal),
-    discount>0 ? ("Discount (" + discount + "%): -" + formatCurrency(discountAmt)) : null,
+    discount>0 ? (((currentJob.discountType||"pct")==="flat" ? "Discount " + formatCurrency(currentJob.discountFlat||0) : "Discount (" + discount + "%)") + ": -" + formatCurrency(discountAmt)) : null,
     "TOTAL: " + formatCurrency(finalTotal), "─────────────────────────", "",
     currentJob.notes ? ("Site Notes: " + currentJob.notes) : null, "",
     CS_DEPOSIT,
@@ -12942,15 +12948,35 @@ ${a.notes}` : "");
                 <input type="number" value={margin} min="0" max="100" disabled={isLocked}
                   onChange={e => setMargin(Number(e.target.value))} style={{...S.adjustInput, ...(isLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
               </label>
-              <label style={S.adjustLabel}>Discount %
-                <input type="number" value={discount} min="0" max="100" disabled={isLocked}
-                  onChange={e => setDiscount(Number(e.target.value))} style={{...S.adjustInput, ...(isLocked?{opacity:0.6, cursor:"not-allowed"}:{})}}/>
+              <label style={S.adjustLabel}>Discount
+                <div style={{display:"flex", gap:4, alignItems:"center", marginTop:4}}>
+                  <button onClick={() => setDiscountType("pct")} disabled={isLocked}
+                    style={{...S.btnSmall, padding:"2px 8px", fontSize:11,
+                      background: discountType==="pct" ? C.accent : C.surface2,
+                      color: discountType==="pct" ? "#000" : C.textMuted,
+                      border:`1px solid ${discountType==="pct" ? C.accent : C.border}`}}>%</button>
+                  <button onClick={() => setDiscountType("flat")} disabled={isLocked}
+                    style={{...S.btnSmall, padding:"2px 8px", fontSize:11,
+                      background: discountType==="flat" ? C.accent : C.surface2,
+                      color: discountType==="flat" ? "#000" : C.textMuted,
+                      border:`1px solid ${discountType==="flat" ? C.accent : C.border}`}}>$</button>
+                  {discountType === "pct"
+                    ? <input type="number" value={discount} min="0" max="100" disabled={isLocked}
+                        onChange={e => setDiscount(Number(e.target.value))}
+                        style={{...S.adjustInput, ...(isLocked?{opacity:0.6,cursor:"not-allowed"}:{})}}/>
+                    : <input type="number" value={discountFlat||""} min="0" disabled={isLocked}
+                        onChange={e => setDiscountFlat(Number(e.target.value))}
+                        placeholder="0.00"
+                        style={{...S.adjustInput, ...(isLocked?{opacity:0.6,cursor:"not-allowed"}:{})}}/>
+                  }
+                </div>
+              </label>
               </label>
             </div>}
 
             {canSeeMoney && <div style={S.totalsBox}>
               <div style={S.totalLine}><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-              {discount>0 && <div style={{...S.totalLine, color:C.danger, fontWeight:700}}><span>Discount ({discount}%)</span><span>-{formatCurrency(discountAmt)}</span></div>}
+              {discountAmt>0 && <div style={{...S.totalLine, color:C.danger, fontWeight:700}}><span>Discount {discountType==="flat" ? formatCurrency(discountFlat) : `(${discount}%)`}</span><span>-{formatCurrency(discountAmt)}</span></div>}
               <div style={{...S.totalLineBold, color:brand.accent}}><span>TOTAL</span><span>{formatCurrency(finalTotal)}</span></div>
               {/* Price override — admin/manager only */}
               {canSeeMoney && canOverridePrice && (
