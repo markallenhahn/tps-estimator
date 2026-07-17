@@ -5114,9 +5114,6 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                   {label}
                 </button>
               ))}
-                  {label}
-                </button>
-              ))}
             </div>
           </div>
           <button style={S.btnPrimary} onClick={addCheck}><Icon name="Ruler" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Log Stock Check</button>
