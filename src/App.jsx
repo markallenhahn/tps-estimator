@@ -4134,6 +4134,9 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const [supplier,    setSupplier]   = useState("");
   const [notes,        setNotes]      = useState("");
   const [date,        setDate]       = useState(new Date().toISOString().slice(0,10));
+  const [timing,      setTiming]     = useState("before"); // "before"|"between"|"after"
+  const [appliesToJobIds, setAppliesToJobIds] = useState([]); // for "between"
+  const [midJobSplit, setMidJobSplit] = useState(null); // {jobId, pctBefore} or null
   const [showSettings, setShowSettings] = useState(false);
   const todayStr = new Date().toISOString().slice(0,10);
   const in30 = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
@@ -4143,6 +4146,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const [checkQty,       setCheckQty]       = useState("");
   const [checkDate,      setCheckDate]      = useState(todayStr);
   const [checkNotes,     setCheckNotes]     = useState("");
+  const [checkTiming,    setCheckTiming]    = useState("before"); // "before"|"|between"|"|after"
 
   const [matTab, setMatTab] = useState("inventory"); // "inventory" | "reconciliation"
 
@@ -4157,7 +4161,8 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
 
   const addCheck = () => {
     if (checkQty === "" || isNaN(Number(checkQty)) || Number(checkQty) < 0) { alert("Enter a valid quantity reading."); return; }
-    addStockCheck({ id: Date.now(), date: checkDate, category: checkCategory, qty: Number(checkQty), notes: checkNotes.trim() });
+    addStockCheck({ id: Date.now(), date: checkDate, category: checkCategory, qty: Number(checkQty), notes: checkNotes.trim(), timing: checkTiming });
+    setCheckTiming('before');
     setCheckQty(""); setCheckNotes("");
   };
 
@@ -4238,9 +4243,20 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
     const costNum = Number(cost);
     const calcUnitCost = qtyNum > 0 ? costNum / qtyNum : 0;
     const finalUnitCost = (unitCostManual && unitCost && !isNaN(Number(unitCost))) ? Number(unitCost) : calcUnitCost;
+    // Auto-populate appliesToJobIds for "between" timing based on today's jobs
+    let finalAppliesToJobIds = appliesToJobIds;
+    if (timing === "between" && appliesToJobIds.length === 0) {
+      // Default: all of today's jobs that use this material type
+      finalAppliesToJobIds = (jobs||[])
+        .filter(j => j.scheduledDate === date || (j.scheduleDays||[]).some(d=>d.date===date))
+        .map(j => j.id);
+    }
     addMaterial({
       id: Date.now(), date, category, qty: qtyNum, unit: unit.trim() || "unit",
       cost: costNum, unitCost: finalUnitCost, supplier: supplier.trim(), notes: notes.trim(),
+      timing,
+      appliesToJobIds: timing === "between" ? finalAppliesToJobIds : null,
+      midJobSplit: (timing === "between" && midJobSplit?.jobId) ? midJobSplit : null,
       ...(basis && coverageNum ? { coverageRate: coverageNum, coverageBasis: basis } : {}),
     });
     // Keep this category's "active" coverage rate in sync with whatever was
@@ -4254,6 +4270,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
       syncMaterialSettings(updated);
     }
     setQty(""); setCost(""); setUnitCost(""); setUnitCostManual(false); setSupplier(""); setNotes("");
+    setTiming("before"); setAppliesToJobIds([]); setMidJobSplit(null);
   };
 
   const coverageBasis = coverageBasisFor(category);
@@ -4945,6 +4962,80 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
           <label style={{...S.formLabel, marginBottom:10}}>Notes (optional)
             <input value={notes} onChange={e => setNotes(e.target.value)} style={S.input}/>
           </label>
+
+          {/* Timing */}
+          <div style={{marginBottom:12}}>
+            <div style={{...S.formLabel, marginBottom:6}}>When was this purchased?</div>
+            <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+              {[["before","Before day's jobs"],["between","Between jobs"],["after","After day's jobs"]].map(([key,label]) => (
+                <button key={key} onClick={() => { setTiming(key); setAppliesToJobIds([]); setMidJobSplit(null); }}
+                  style={{...S.btnSmall, padding:"5px 12px", fontSize:12,
+                    background: timing===key ? C.accent : C.surface2,
+                    color: timing===key ? "#000" : C.textMuted,
+                    border:`1px solid ${timing===key ? C.accent : C.border}`}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Between jobs: job picker + mid-job split */}
+          {timing === "between" && (() => {
+            const todayJobs = (jobs||[]).filter(j =>
+              j.scheduledDate === date || (j.scheduleDays||[]).some(d=>d.date===date)
+            );
+            if (todayJobs.length === 0) return (
+              <p style={{fontSize:12, color:C.textMuted, marginBottom:12}}>No jobs scheduled on {date}. This purchase will apply to all future jobs.</p>
+            );
+            return (
+              <div style={{marginBottom:12, padding:12, background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:12, fontWeight:700, marginBottom:8}}>Which jobs does this purchase apply to?</div>
+                <div style={{fontSize:11, color:C.textMuted, marginBottom:8}}>Jobs scheduled on {date} — uncheck jobs that used previous stock</div>
+                {todayJobs.map(j => {
+                  const checked = appliesToJobIds.length === 0 || appliesToJobIds.includes(j.id);
+                  return (
+                    <div key={j.id} style={{display:"flex", alignItems:"center", gap:8, marginBottom:6}}>
+                      <input type="checkbox" checked={checked} onChange={() => {
+                        const base = appliesToJobIds.length === 0 ? todayJobs.map(x=>x.id) : appliesToJobIds;
+                        setAppliesToJobIds(checked ? base.filter(id=>id!==j.id) : [...base, j.id]);
+                      }} style={{cursor:"pointer"}}/>
+                      <span style={{fontSize:13}}>{j.clientName||"Unnamed"} · {j.address||""}</span>
+                    </div>
+                  );
+                })}
+
+                {/* Mid-job split */}
+                <div style={{marginTop:12, paddingTop:10, borderTop:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:12, fontWeight:700, marginBottom:6}}>Were you mid-job when you ran out?</div>
+                  <div style={{display:"flex", gap:8, marginBottom:8}}>
+                    <button onClick={() => setMidJobSplit(null)}
+                      style={{...S.btnSmall, background: !midJobSplit ? C.accent : C.surface2, color: !midJobSplit ? "#000" : C.textMuted, border:`1px solid ${!midJobSplit ? C.accent : C.border}`}}>
+                      No
+                    </button>
+                    <button onClick={() => setMidJobSplit({ jobId: todayJobs[0]?.id, pctBefore: 50 })}
+                      style={{...S.btnSmall, background: midJobSplit ? C.accent : C.surface2, color: midJobSplit ? "#000" : C.textMuted, border:`1px solid ${midJobSplit ? C.accent : C.border}`}}>
+                      Yes
+                    </button>
+                  </div>
+                  {midJobSplit && (
+                    <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
+                      <select value={midJobSplit.jobId} onChange={e => setMidJobSplit(p=>({...p, jobId:e.target.value}))}
+                        style={{...S.input, flex:2}}>
+                        {todayJobs.map(j => <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>)}
+                      </select>
+                      <div style={{display:"flex", alignItems:"center", gap:4, flex:1}}>
+                        <input type="number" min="0" max="100" value={midJobSplit.pctBefore}
+                          onChange={e => setMidJobSplit(p=>({...p, pctBefore:Number(e.target.value)}))}
+                          style={{...S.input, width:60}}/>
+                        <span style={{fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>% done before refill</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           <button style={S.btnPrimary} onClick={addEntry}>+ Add Purchase</button>
         </section>
       )}
@@ -5010,6 +5101,20 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
             <label style={S.formLabel}>Notes (optional)
               <input value={checkNotes} onChange={e => setCheckNotes(e.target.value)} style={S.input} placeholder="e.g. tank filled to 480 gal"/>
             </label>
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{...S.formLabel, marginBottom:6}}>When is this check being taken?</div>
+            <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+              {[["before","Before day's jobs"],["between","Between jobs"],["after","After day's jobs"]].map(([key,label]) => (
+                <button key={key} onClick={() => setCheckTiming(key)}
+                  style={{...S.btnSmall, padding:"5px 12px", fontSize:12,
+                    background: checkTiming===key ? C.accent : C.surface2,
+                    color: checkTiming===key ? "#000" : C.textMuted,
+                    border:}}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <button style={S.btnPrimary} onClick={addCheck}><Icon name="Ruler" size={15} style={{verticalAlign:"middle",marginRight:5}}/> Log Stock Check</button>
           <div style={{marginTop:14, display:"flex", flexWrap:"wrap", gap:10}}>
