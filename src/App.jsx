@@ -12971,7 +12971,6 @@ ${a.notes}` : "");
                   }
                 </div>
               </label>
-              </label>
             </div>}
 
             {canSeeMoney && <div style={S.totalsBox}>
