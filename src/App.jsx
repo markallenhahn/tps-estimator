@@ -12696,7 +12696,7 @@ ${owner}${phone ? `\n${phone}` : ""}${email ? `\n${email}` : ""}`;
           ? qty.toLocaleString() + " sq ft\n" + tons.toFixed(2) + " tons"
           : qty.toLocaleString() + (svc?.unit === "linft" ? " lin ft" : " sq ft");
         const nameStr = a.name + (a.notes ? `
-${a}`.notes : "");
+${a.notes}` : "");
         const nameArr = doc.splitTextToSize(nameStr, cols[0]-12);
         const qtyParts = qtyStr.split("\n");
         const rh = Math.max(nameArr.length, qtyParts.length) * 13 + 10;
