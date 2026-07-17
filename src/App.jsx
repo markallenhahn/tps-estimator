@@ -5110,7 +5110,10 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
                   style={{...S.btnSmall, padding:"5px 12px", fontSize:12,
                     background: checkTiming===key ? C.accent : C.surface2,
                     color: checkTiming===key ? "#000" : C.textMuted,
-                    border:}}>
+                    border:`1px solid ${checkTiming===key ? C.accent : C.border}`}}>
+                  {label}
+                </button>
+              ))}
                   {label}
                 </button>
               ))}
