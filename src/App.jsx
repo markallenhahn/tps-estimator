@@ -7980,65 +7980,41 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng} : null;
     if (!hb) return null;
 
-    // Get driving distance between two points via OSRM (free, no key required)
+    // Get real driving distance via OSRM
     const drivingMiles = async (a, b) => {
       try {
         const url = `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;
         const res = await fetch(url);
         const data = await res.json();
-        if (data.routes?.[0]?.distance) return data.routes[0].distance / 1609.34; // meters → miles
+        if (data.routes?.[0]?.distance) return data.routes[0].distance / 1609.34;
       } catch(e) {}
-      // Fallback to haversine × 1.5 if OSRM fails
       return haversine(a, b) * 1.5;
     };
 
-    // Calculate miles for a single day's route using real driving distances
-    const calcDayMiles = async (date) => {
-      const dayJobs = (jobs||[]).filter(j =>
-        (j.scheduledDate === date || (j.scheduleDays||[]).some(d=>d.date===date)) &&
-        j.geoLat && j.geoLng
-      );
-      if (dayJobs.length === 0) return {};
-      const points = dayJobs.map(j=>({lat:j.geoLat, lng:j.geoLng, id:j.id}));
-      const ordered = optimizeRoute(points, {lat:hb.lat, lng:hb.lng, id:"home"})
-        .filter(p=>p.id!=="home");
-      let prev = hb;
-      const legMiles = {};
-      for (let i = 0; i < ordered.length; i++) {
-        const p = ordered[i];
-        const miles = await drivingMiles(prev, {lat:p.lat, lng:p.lng});
-        legMiles[p.id] = (legMiles[p.id]||0) + miles;
-        if (!ordered[i+1]) {
-          // Last job gets the return leg too
-          legMiles[p.id] += await drivingMiles({lat:p.lat, lng:p.lng}, hb);
-        }
-        prev = {lat:p.lat, lng:p.lng};
-      }
-      return legMiles;
-    };
-
-    // This job's miles (only on its scheduled days)
-    let totalJobMiles = 0;
+    // This job's round-trip miles (home → job → home for each scheduled day)
+    let jobMiles = 0;
     for (const date of jobDays) {
-      const legMiles = await calcDayMiles(date);
-      totalJobMiles += legMiles[currentJob.id]||0;
+      jobMiles += await drivingMiles(hb, {lat:currentJob.geoLat, lng:currentJob.geoLng});
+      jobMiles += await drivingMiles({lat:currentJob.geoLat, lng:currentJob.geoLng}, hb);
     }
-    if (totalJobMiles === 0) return null;
+    if (jobMiles === 0) return null;
 
-    // Total period miles = ALL jobs across the YTD fuel expense period
-    const allDates = [...new Set((jobs||[]).flatMap(j => {
-      const days = (j.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
-      return days.length > 0 ? days : (j.scheduledDate ? [j.scheduledDate] : []);
-    }).filter(d => d >= ytdStart && d <= ytdEnd))];
-
-    let totalPeriodMiles = 0;
-    for (const date of allDates) {
-      const legMiles = await calcDayMiles(date);
-      totalPeriodMiles += Object.values(legMiles).reduce((s,m)=>s+m,0);
+    // Total YTD miles = sum of round trips for ALL geocoded jobs this year
+    let totalMiles = 0;
+    const ytdJobs = (jobs||[]).filter(j =>
+      j.geoLat && j.geoLng && (
+        (j.scheduledDate >= ytdStart && j.scheduledDate <= ytdEnd) ||
+        (j.scheduleDays||[]).some(d => d.date >= ytdStart && d.date <= ytdEnd)
+      )
+    );
+    for (const j of ytdJobs) {
+      const dayCount = Math.max(1, (j.scheduleDays||[]).filter(d=>d.date).length);
+      const rt = await drivingMiles(hb, {lat:j.geoLat, lng:j.geoLng});
+      totalMiles += rt * 2 * dayCount;
     }
 
-    if (totalPeriodMiles === 0) return null;
-    return { jobMiles: totalJobMiles, periodMiles: totalPeriodMiles, pct: totalJobMiles/totalPeriodMiles };
+    if (totalMiles === 0) return null;
+    return { jobMiles, periodMiles: totalMiles, pct: jobMiles / totalMiles };
   };
   const [distFuel, setDistFuel] = useState(null);
   useEffect(() => {
