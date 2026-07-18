@@ -7982,22 +7982,23 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
 
     // Get real driving distance via OSRM
     const drivingMiles = async (a, b) => {
+      if (!a?.lat || !a?.lng || !b?.lat || !b?.lng) return 0;
       try {
         const url = `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;
         const res = await fetch(url);
         const data = await res.json();
         if (data.routes?.[0]?.distance) return data.routes[0].distance / 1609.34;
       } catch(e) {}
-      return haversine(a, b) * 1.5;
+      const h = haversine(a, b);
+      return isNaN(h) ? 0 : h * 1.5;
     };
 
     // This job's round-trip miles (home → job → home for each scheduled day)
-    let jobMiles = 0;
-    for (const date of jobDays) {
-      jobMiles += await drivingMiles(hb, {lat:currentJob.geoLat, lng:currentJob.geoLng});
-      jobMiles += await drivingMiles({lat:currentJob.geoLat, lng:currentJob.geoLng}, hb);
-    }
-    if (jobMiles === 0) return null;
+    if (!currentJob.geoLat || !currentJob.geoLng) return null;
+    // Calculate one-way distance once, reuse for all days
+    const oneWayMiles = await drivingMiles(hb, {lat:currentJob.geoLat, lng:currentJob.geoLng});
+    if (!oneWayMiles || oneWayMiles === 0) return null;
+    const jobMiles = oneWayMiles * 2 * jobDays.length; // round trip × number of days
 
     // Total YTD miles = sum of round trips for ALL geocoded jobs this year
     let totalMiles = 0;
@@ -8009,8 +8010,8 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     );
     for (const j of ytdJobs) {
       const dayCount = Math.max(1, (j.scheduleDays||[]).filter(d=>d.date).length);
-      const rt = await drivingMiles(hb, {lat:j.geoLat, lng:j.geoLng});
-      totalMiles += rt * 2 * dayCount;
+      const oneWay = await drivingMiles(hb, {lat:j.geoLat, lng:j.geoLng});
+      if (oneWay && oneWay > 0) totalMiles += oneWay * 2 * dayCount;
     }
 
     if (totalMiles === 0) return null;
