@@ -6327,7 +6327,7 @@ function calcJobFinancials(job, rates, laborEntries=[], offAppWorkers=[], teamUs
   const margin      = Number(job.margin||0);
   const discount    = Number(job.discount||0);
   const marginAmt   = subtotal*(margin/100);
-  const discountAmt = (subtotal+marginAmt)*(discount/100);
+  const discountAmt = (job.discountType||"pct")==="flat" ? Math.min(Number(job.discountFlat||0), subtotal+marginAmt) : (subtotal+marginAmt)*(discount/100);
   const calcTotal   = subtotal+marginAmt-discountAmt;
   const hasOverride = job.priceOverride!==undefined&&job.priceOverride!==null&&job.priceOverride!=="";
   const revenue     = hasOverride ? Number(job.priceOverride) : calcTotal;
@@ -7902,7 +7902,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const margin      = Number(currentJob.margin||0);
   const discount    = Number(currentJob.discount||0);
   const marginAmt   = subtotal*(margin/100);
-  const discountAmt = (subtotal+marginAmt)*(discount/100);
+  const discountAmt = (currentJob.discountType||"pct")==="flat" ? Math.min(Number(currentJob.discountFlat||0), subtotal+marginAmt) : (subtotal+marginAmt)*(discount/100);
   const calcTotal   = subtotal+marginAmt-discountAmt;
   const hasOverride = currentJob.priceOverride!==undefined&&currentJob.priceOverride!==null&&currentJob.priceOverride!=="";
   const revenue     = hasOverride ? Number(currentJob.priceOverride) : calcTotal;
@@ -7974,48 +7974,77 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   // For each day this job is scheduled, calculate the route legs using the
   // nearest-neighbor order of all geocoded jobs on that day. This job's share
   // of total period miles determines its share of actual fuel expenses.
-  const calcJobRouteMiles = () => {
+  const calcJobRouteMiles = async () => {
     const jobDays = (currentJob.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
     if (!currentJob.geoLat || !currentJob.geoLng || jobDays.length === 0) return null;
     const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng} : null;
     if (!hb) return null;
-    const ROAD_FACTOR = 1.25;
-    let totalJobMiles = 0;
-    let totalPeriodMiles = 0;
-    jobDays.forEach(date => {
-      // Get all geocoded jobs scheduled on this date
+
+    // Get driving distance between two points via OSRM (free, no key required)
+    const drivingMiles = async (a, b) => {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.routes?.[0]?.distance) return data.routes[0].distance / 1609.34; // meters → miles
+      } catch(e) {}
+      // Fallback to haversine × 1.5 if OSRM fails
+      return haversine(a, b) * 1.5;
+    };
+
+    // Calculate miles for a single day's route using real driving distances
+    const calcDayMiles = async (date) => {
       const dayJobs = (jobs||[]).filter(j =>
         (j.scheduledDate === date || (j.scheduleDays||[]).some(d=>d.date===date)) &&
         j.geoLat && j.geoLng
       );
-      if (dayJobs.length === 0) return;
-      // Run nearest-neighbor from homebase to get route order
+      if (dayJobs.length === 0) return {};
       const points = dayJobs.map(j=>({lat:j.geoLat, lng:j.geoLng, id:j.id}));
       const ordered = optimizeRoute(points, {lat:hb.lat, lng:hb.lng, id:"home"})
         .filter(p=>p.id!=="home");
-      // Calculate leg distances: home→j1→j2→...→home
       let prev = hb;
       const legMiles = {};
-      ordered.forEach((p,i) => {
-        const leg = haversine(prev, {lat:p.lat, lng:p.lng}) * ROAD_FACTOR;
-        const next = ordered[i+1] ? {lat:ordered[i+1].lat, lng:ordered[i+1].lng} : hb;
-        // Each job gets the leg to get there PLUS half the leg to the next stop
-        legMiles[p.id] = (legMiles[p.id]||0) + haversine(prev, {lat:p.lat, lng:p.lng}) * ROAD_FACTOR;
+      for (let i = 0; i < ordered.length; i++) {
+        const p = ordered[i];
+        const miles = await drivingMiles(prev, {lat:p.lat, lng:p.lng});
+        legMiles[p.id] = (legMiles[p.id]||0) + miles;
         if (!ordered[i+1]) {
           // Last job gets the return leg too
-          legMiles[p.id] += haversine({lat:p.lat, lng:p.lng}, hb) * ROAD_FACTOR;
+          legMiles[p.id] += await drivingMiles({lat:p.lat, lng:p.lng}, hb);
         }
         prev = {lat:p.lat, lng:p.lng};
-      });
-      // Sum up
-      const dayTotal = Object.values(legMiles).reduce((s,m)=>s+m,0);
-      totalPeriodMiles += dayTotal;
+      }
+      return legMiles;
+    };
+
+    // This job's miles (only on its scheduled days)
+    let totalJobMiles = 0;
+    for (const date of jobDays) {
+      const legMiles = await calcDayMiles(date);
       totalJobMiles += legMiles[currentJob.id]||0;
-    });
-    if (totalPeriodMiles === 0 || totalJobMiles === 0) return null;
+    }
+    if (totalJobMiles === 0) return null;
+
+    // Total period miles = ALL jobs across the YTD fuel expense period
+    const allDates = [...new Set((jobs||[]).flatMap(j => {
+      const days = (j.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
+      return days.length > 0 ? days : (j.scheduledDate ? [j.scheduledDate] : []);
+    }).filter(d => d >= ytdStart && d <= ytdEnd))];
+
+    let totalPeriodMiles = 0;
+    for (const date of allDates) {
+      const legMiles = await calcDayMiles(date);
+      totalPeriodMiles += Object.values(legMiles).reduce((s,m)=>s+m,0);
+    }
+
+    if (totalPeriodMiles === 0) return null;
     return { jobMiles: totalJobMiles, periodMiles: totalPeriodMiles, pct: totalJobMiles/totalPeriodMiles };
   };
-  const distFuel = (actualFuelExp > 0) ? calcJobRouteMiles() : null;
+  const [distFuel, setDistFuel] = useState(null);
+  useEffect(() => {
+    if (actualFuelExp <= 0) return;
+    calcJobRouteMiles().then(result => setDistFuel(result)).catch(() => setDistFuel(null));
+  }, [currentJob.id, actualFuelExp]);
   const actFuel = (() => {
     const fuelActRaw = actuals["fuel"];
     const hasManual = fuelActRaw!=null && fuelActRaw!=="";
@@ -11381,7 +11410,7 @@ function ExportView({ jobs, laborEntries, rates, setView, companySettings={} }) 
       const allRates = {...DEFAULT_RATES, ...(j.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
       const subtotal = (j.areas||[]).reduce((s,a)=>s+calcLineAmt(a,allRates),0);
       const marginAmt = subtotal*(Number(j.margin||0)/100);
-      const discountAmt = (subtotal+marginAmt)*(Number(j.discount||0)/100);
+      const discountAmt = (j.discountType||"pct")==="flat" ? Math.min(Number(j.discountFlat||0), subtotal+marginAmt) : (subtotal+marginAmt)*(Number(j.discount||0)/100);
       const calcTotal = subtotal+marginAmt-discountAmt;
       const hasOverride = j.priceOverride!==undefined && j.priceOverride!==null && j.priceOverride!=="";
       const revenue = hasOverride ? Number(j.priceOverride) : calcTotal;
