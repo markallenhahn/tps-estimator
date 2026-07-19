@@ -4545,9 +4545,8 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMat
     // Also create a corresponding COGS expense so it appears on the Expenses tab
     if (addExpense && costNum > 0) {
       const matLabel = MATERIAL_TYPES.find(m => m.key === category)?.label || category;
-      // Auto-link to job if a specific job is selected
-      const linkedJobId = (!tripUnallocated && tripJobIds?.length === 1) ? tripJobIds[0]
-        : (timing === "midjob" && tripJobIds?.length === 1) ? tripJobIds[0]
+      // Auto-link expense to job whenever a single job is selected anywhere in the form
+      const linkedJobId = (tripJobIds?.length === 1) ? tripJobIds[0]
         : (finalAppliesToJobIds?.length === 1) ? finalAppliesToJobIds[0] : null;
       addExpense({
         id: matId + 1,
