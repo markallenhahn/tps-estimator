@@ -4204,7 +4204,7 @@ const MATERIAL_TYPES = BUILTIN_MATERIAL_TYPES;
 const MATERIAL_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
 const materialStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
-function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole, updateJobById, addExpense }) {
+function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole, updateJobById, addExpense, vendors=[] }) {
   const canEdit = userRole === "owner" || userRole === "manager";
   const allMatTypes = getMaterialTypes(materialSettings);
 
@@ -4221,9 +4221,11 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const [supplier,    setSupplier]   = useState("");
   const [notes,        setNotes]      = useState("");
   const [date,        setDate]       = useState(new Date().toISOString().slice(0,10));
-  const [timing,      setTiming]     = useState("before"); // "before"|"between"|"after"
+  const [timing,      setTiming]     = useState("before"); // "before"|"between"|"after"|"midjob"|"offday"
   const [appliesToJobIds, setAppliesToJobIds] = useState([]); // for "between"
   const [midJobSplit, setMidJobSplit] = useState(null); // {jobId, pctBefore} or null
+  const [tripJobIds,  setTripJobIds]  = useState([]); // job(s) the supplier trip miles are allocated to
+  const [tripUnallocated, setTripUnallocated] = useState(true); // true = unallocated fuel bucket
   const [showSettings, setShowSettings] = useState(false);
   const todayStr = new Date().toISOString().slice(0,10);
   const in30 = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
@@ -4345,6 +4347,8 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
       timing,
       appliesToJobIds: timing === "between" ? finalAppliesToJobIds : null,
       midJobSplit: (timing === "between" && midJobSplit?.jobId) ? midJobSplit : null,
+      tripJobIds: tripUnallocated ? null : tripJobIds,
+      tripUnallocated,
       ...(basis && coverageNum ? { coverageRate: coverageNum, coverageBasis: basis } : {}),
     });
     // Also create a corresponding COGS expense so it appears on the Expenses tab
@@ -4373,7 +4377,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
       syncMaterialSettings(updated);
     }
     setQty(""); setCost(""); setUnitCost(""); setUnitCostManual(false); setSupplier(""); setNotes("");
-    setTiming("before"); setAppliesToJobIds([]); setMidJobSplit(null);
+    setTiming("before"); setAppliesToJobIds([]); setMidJobSplit(null); setTripJobIds([]); setTripUnallocated(true);
   };
 
   const coverageBasis = coverageBasisFor(category);
@@ -5066,11 +5070,22 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
             <input value={notes} onChange={e => setNotes(e.target.value)} style={S.input}/>
           </label>
 
+          {/* Vendor selector */}
+          {vendors && vendors.length > 0 && (
+            <label style={{...S.formLabel, marginBottom:10}}>Supplier
+              <select value={supplier} onChange={e => { setSupplier(e.target.value); }}
+                style={S.input}>
+                <option value="">— Select vendor or type above —</option>
+                {vendors.map(v => <option key={v.id} value={v.name}>{v.name}{v.address ? " · "+v.city : ""}</option>)}
+              </select>
+            </label>
+          )}
+
           {/* Timing */}
           <div style={{marginBottom:12}}>
             <div style={{...S.formLabel, marginBottom:6}}>When was this purchased?</div>
             <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
-              {[["before","Before day's jobs"],["between","Between jobs"],["after","After day's jobs"]].map(([key,label]) => (
+              {[["before","Before day's jobs"],["midjob","Mid-job pickup"],["between","Between jobs"],["after","After day's jobs"],["offday","Off day (no jobs)"]].map(([key,label]) => (
                 <button key={key} onClick={() => { setTiming(key); setAppliesToJobIds([]); setMidJobSplit(null); }}
                   style={{...S.btnSmall, padding:"5px 12px", fontSize:12,
                     background: timing===key ? C.accent : C.surface2,
@@ -5138,6 +5153,64 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               </div>
             );
           })()}
+
+          {/* Mid-job pickup: select which job */}
+          {timing === "midjob" && (() => {
+            const todayJobs = (jobs||[]).filter(j =>
+              j.scheduledDate === date || (j.scheduleDays||[]).some(d=>d.date===date)
+            );
+            return (
+              <div style={{marginBottom:12, padding:12, background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:12, fontWeight:700, marginBottom:8}}>Which job did you leave to pick up materials?</div>
+                <select value={tripJobIds[0]||""} onChange={e => setTripJobIds(e.target.value ? [e.target.value] : [])}
+                  style={{...S.input, width:"100%"}}>
+                  <option value="">— Select job —</option>
+                  {todayJobs.map(j => <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>)}
+                </select>
+              </div>
+            );
+          })()}
+
+          {/* Trip mile allocation modal */}
+          {(timing === "before" || timing === "after" || timing === "offday" || timing === "between") && (
+            <div style={{marginBottom:12, padding:12, background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:12, fontWeight:700, marginBottom:8}}>Allocate supplier trip miles to:</div>
+              <div style={{display:"flex", gap:8, marginBottom:8}}>
+                <button onClick={() => setTripUnallocated(true)}
+                  style={{...S.btnSmall, background: tripUnallocated ? C.accent : C.surface2,
+                    color: tripUnallocated ? "#000" : C.textMuted, border:`1px solid ${tripUnallocated ? C.accent : C.border}`}}>
+                  Unallocated fuel
+                </button>
+                <button onClick={() => setTripUnallocated(false)}
+                  style={{...S.btnSmall, background: !tripUnallocated ? C.accent : C.surface2,
+                    color: !tripUnallocated ? "#000" : C.textMuted, border:`1px solid ${!tripUnallocated ? C.accent : C.border}`}}>
+                  Specific job(s)
+                </button>
+              </div>
+              {!tripUnallocated && (() => {
+                const todayJobs = (jobs||[]).filter(j =>
+                  j.scheduledDate === date || (j.scheduleDays||[]).some(d=>d.date===date)
+                );
+                return (
+                  <div>
+                    <div style={{fontSize:11, color:C.textMuted, marginBottom:6}}>Select job(s) to charge this trip to:</div>
+                    {todayJobs.map(j => {
+                      const checked = tripJobIds.includes(String(j.id));
+                      return (
+                        <div key={j.id} style={{display:"flex", alignItems:"center", gap:8, marginBottom:4}}>
+                          <input type="checkbox" checked={checked}
+                            onChange={() => setTripJobIds(prev =>
+                              checked ? prev.filter(id=>id!==String(j.id)) : [...prev, String(j.id)]
+                            )}/>
+                          <span style={{fontSize:13}}>{j.clientName||"Unnamed"} · {j.address||""}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           <button style={S.btnPrimary} onClick={addEntry}>+ Add Purchase</button>
         </section>
@@ -7349,6 +7422,27 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
         )}
       </section>
 
+      {/* Unallocated Fuel */}
+      {periodFuel > 0 && (
+        <section style={S.section}>
+          <h2 style={S.h2}>Fuel Breakdown</h2>
+          <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${C.border}`, fontSize:13}}>
+            <span>Total Fuel Expenses</span>
+            <span style={{fontWeight:700}}>{fmtMoney(periodFuel)}</span>
+          </div>
+          <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${C.border}`, fontSize:13}}>
+            <span>Allocated to Jobs</span>
+            <span style={{fontWeight:700}}>{fmtMoney(ebitdaTotals.fuel||0)}</span>
+          </div>
+          <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", fontSize:13, fontWeight:700}}>
+            <span style={{color:C.textMuted}}>Unallocated (supplier trips, overhead driving)</span>
+            <span style={{color: (periodFuel-(ebitdaTotals.fuel||0))>0 ? C.accent : C.green}}>
+              {fmtMoney(Math.max(0, periodFuel-(ebitdaTotals.fuel||0)))}
+            </span>
+          </div>
+        </section>
+      )}
+
       {/* Per-job breakdown */}
       <section style={S.section}>
         <h2 style={S.h2}>Per-Job Breakdown ({ebitdaJobData.length} jobs)</h2>
@@ -7969,7 +8063,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
 }
 
 // ─── Costs View ───────────────────────────────────────────────────────────────
-function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, jobs=[], laborEntries=[], teamUsers=[], offAppWorkers=[], homeBase={} }) {
+function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, jobs=[], laborEntries=[], teamUsers=[], offAppWorkers=[], homeBase={}, vendors=[], materials=[] }) {
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
 
   const SEALCOAT_PRICE_PER_GAL = Number(reportSettings.sealcoatPricePerGal) || 4.33;
@@ -8083,7 +8177,29 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     // Fallback to haversine if OSRM fails
     if (!oneWayMiles) oneWayMiles = haversine({lat:hbLat,lng:hbLng}, {lat:geo.lat,lng:geo.lng}) * 1.4;
     if (!oneWayMiles) return null;
-    const jobMiles = oneWayMiles * 2 * jobDays.length;
+    let jobMiles = oneWayMiles * 2 * jobDays.length;
+
+    // Add supplier trip miles allocated to this specific job
+    const jobMatTrips = (materials||[]).filter(m =>
+      m.tripJobIds?.includes(String(currentJob.id)) && m.supplier
+    );
+    for (const m of jobMatTrips) {
+      const vendor = (vendors||[]).find(v => v.name === m.supplier);
+      if (!vendor?.address) continue;
+      const vGeo = await geocodeAddress(vendor.address, homeBase);
+      if (!vGeo) continue;
+      const toSupplier = haversine({lat:hbLat,lng:hbLng},{lat:vGeo.lat,lng:vGeo.lng}) * roadFactor;
+      const supplierToJob = haversine({lat:vGeo.lat,lng:vGeo.lng},{lat:geo.lat,lng:geo.lng}) * roadFactor;
+      if (m.timing === "before") {
+        jobMiles += toSupplier + (supplierToJob - oneWayMiles);
+      } else if (m.timing === "midjob" || m.timing === "between") {
+        jobMiles += haversine({lat:geo.lat,lng:geo.lng},{lat:vGeo.lat,lng:vGeo.lng}) * roadFactor * 2;
+      } else if (m.timing === "after") {
+        const jobToSupplier = haversine({lat:geo.lat,lng:geo.lng},{lat:vGeo.lat,lng:vGeo.lng}) * roadFactor;
+        const supplierToHome = haversine({lat:vGeo.lat,lng:vGeo.lng},{lat:hbLat,lng:hbLng}) * roadFactor;
+        jobMiles += (jobToSupplier + supplierToHome) - oneWayMiles;
+      }
+    }
 
     // Total YTD miles: haversine × same road factor for all geocoded YTD jobs
     // (consistent ratio is what matters — both numerator and denominator use same method)
@@ -10535,6 +10651,10 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
   const [newVendorName, setNewVendorName] = useState("");
   const [newVendorPhone, setNewVendorPhone] = useState("");
   const [newVendorEmail, setNewVendorEmail] = useState("");
+  const [newVendorStreet, setNewVendorStreet] = useState("");
+  const [newVendorCity, setNewVendorCity] = useState("");
+  const [newVendorState, setNewVendorState] = useState("");
+  const [newVendorZip, setNewVendorZip] = useState("");
   const [filterCat,   setFilterCat]   = useState("All");
   const [filterMethod,setFilterMethod]= useState("All");
   const [filterJob,   setFilterJob]   = useState("All");
@@ -10826,8 +10946,12 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
 
   const saveVendor = () => {
     if (!newVendorName.trim()) { alert("Vendor name is required."); return; }
-    addVendor({ id: Date.now(), name: newVendorName.trim(), phone: newVendorPhone.trim(), email: newVendorEmail.trim() });
+    const vendorAddr = [newVendorStreet.trim(), newVendorCity.trim(), newVendorState.trim(), newVendorZip.trim()].filter(Boolean).join(", ");
+    addVendor({ id: Date.now(), name: newVendorName.trim(), phone: newVendorPhone.trim(), email: newVendorEmail.trim(),
+      street: newVendorStreet.trim(), city: newVendorCity.trim(), state: newVendorState.trim(), zip: newVendorZip.trim(),
+      address: vendorAddr });
     setNewVendorName(""); setNewVendorPhone(""); setNewVendorEmail("");
+    setNewVendorStreet(""); setNewVendorCity(""); setNewVendorState(""); setNewVendorZip("");
   };
 
   // Filters
@@ -11222,6 +11346,14 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
               style={S.input} placeholder="Phone (optional)"/>
             <input value={newVendorEmail} onChange={e=>setNewVendorEmail(e.target.value)}
               style={{...S.input, gridColumn:"1/-1"}} placeholder="Email (optional)"/>
+            <input value={newVendorStreet} onChange={e=>setNewVendorStreet(e.target.value)}
+              style={{...S.input, gridColumn:"1/-1"}} placeholder="Street address (for fuel mileage calc)"/>
+            <input value={newVendorCity} onChange={e=>setNewVendorCity(e.target.value)}
+              style={S.input} placeholder="City"/>
+            <input value={newVendorState} onChange={e=>setNewVendorState(e.target.value)}
+              style={S.input} placeholder="State"/>
+            <input value={newVendorZip} onChange={e=>setNewVendorZip(e.target.value)}
+              style={S.input} placeholder="ZIP"/>
           </div>
           <button style={S.btnPrimary} onClick={saveVendor}>+ Add Vendor</button>
           <div style={{marginTop:12}}>
@@ -11231,6 +11363,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                 <div>
                   <div style={{fontWeight:600, fontSize:13}}>{v.name}</div>
                   {(v.phone||v.email) && <div style={{fontSize:11, color:C.textMuted}}>{[v.phone,v.email].filter(Boolean).join(" · ")}</div>}
+                  {v.address && <div style={{fontSize:11, color:C.textMuted}}>{v.address}</div>}
                 </div>
                 <button style={{...S.btnSmall, color:C.danger}} onClick={()=>{ if(confirm("Delete "+v.name+"?")) deleteVendor(v.id); }}>✕</button>
               </div>
@@ -16656,11 +16789,11 @@ function App() {
         }
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
-        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} reportSettings={reportSettings} jobs={jobs} laborEntries={laborEntries} teamUsers={teamUsers} offAppWorkers={offAppWorkers} homeBase={homeBase}/>}
+        {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} reportSettings={reportSettings} jobs={jobs} laborEntries={laborEntries} teamUsers={teamUsers} offAppWorkers={offAppWorkers} homeBase={homeBase} vendors={vendors} materials={materials}/>}
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
-        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById} addExpense={addExpense}/></div>}
+        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById} addExpense={addExpense} vendors={vendors}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings} reportSettings={reportSettings} offAppWorkers={offAppWorkers}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
