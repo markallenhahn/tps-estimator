@@ -8015,7 +8015,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     }
 
     if (totalMiles === 0) return null;
-    return { jobMiles, periodMiles: totalMiles, pct: jobMiles / totalMiles };
+    return { jobMiles, periodMiles: totalMiles, pct: jobMiles / totalMiles, dayCount: jobDays.length, oneWay: oneWayMiles };
   };
   const [distFuel, setDistFuel] = useState(null);
   useEffect(() => {
@@ -8181,7 +8181,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
             ? `Fuel (${distFuel.jobMiles.toFixed(1)} mi, ${(distFuel.pct*100).toFixed(1)}% of period)`
             : actualFuelExp > 0 ? "Fuel (actual, by rev share)" : `Fuel (${reportSettings.fuelPct||5}%)`;
           const fuelSub = distFuel
-            ? `${distFuel.jobMiles.toFixed(1)} mi ÷ ${distFuel.periodMiles.toFixed(1)} total mi × ${formatCurrency(actualFuelExp)} fuel expenses`
+            ? `${distFuel.jobMiles.toFixed(1)} mi [${distFuel.dayCount} day(s) × ${distFuel.oneWay?.toFixed(1)} mi × 2] ÷ ${distFuel.periodMiles.toFixed(1)} total mi × ${formatCurrency(actualFuelExp)} fuel expenses`
             : actualFuelExp > 0
             ? `${formatCurrency(actualFuelExp)} total × ${(revenueShare_*100).toFixed(1)}% rev share`
             : `${formatCurrency(revenue)} × ${reportSettings.fuelPct||5}%`;
