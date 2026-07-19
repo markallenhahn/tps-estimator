@@ -7980,11 +7980,11 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng} : null;
     if (!hb) return null;
 
-    // Get real driving distance via OSRM
+    // Get real driving distance via our proxy (avoids CSP issues)
     const drivingMiles = async (a, b) => {
       if (!a?.lat || !a?.lng || !b?.lat || !b?.lng) return 0;
       try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;
+        const url = `/api/public?action=osrm-route&from_lng=${a.lng}&from_lat=${a.lat}&to_lng=${b.lng}&to_lat=${b.lat}`;
         const res = await fetch(url);
         const data = await res.json();
         if (data.routes?.[0]?.distance) return data.routes[0].distance / 1609.34;

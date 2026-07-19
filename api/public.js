@@ -242,5 +242,20 @@ help@blacktopiq.com`;
     } catch(e) { return res.status(500).json({ error: e.message }); }
   }
 
+  // ── GET osrm-route — proxy to avoid CSP issues ────────────────────────────
+  if (action === "osrm-route") {
+    const { from_lng, from_lat, to_lng, to_lat } = req.query;
+    if (!from_lng || !from_lat || !to_lng || !to_lat)
+      return res.status(400).json({ error: "Missing coordinates" });
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${from_lng},${from_lat};${to_lng},${to_lat}?overview=false`;
+      const r = await fetch(url);
+      const data = await r.json();
+      return res.status(200).json(data);
+    } catch(e) { return res.status(500).json({ error: e.message }); }
+  }
+
   return res.status(400).json({ error: "Unknown action: " + action });
 }
+
+// No additional code needed - osrm proxy handled below
