@@ -7463,7 +7463,7 @@ function getFifoUnitCost(materialType, dateStr, materials) {
 }
 
 // ─── EBITDA Report ────────────────────────────────────────────────────────────
-function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=0, periodExpMaterials=0, periodExpCOGS=0, periodExpLabor=0, cogsBySubcat={}, overheadBySubcat={}, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
+function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=0, unallocatedFuelAmt=0, periodExpMaterials=0, periodExpCOGS=0, periodExpLabor=0, cogsBySubcat={}, overheadBySubcat={}, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
   const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
   const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
   const isDesktopLayout = useIsDesktop();
@@ -7639,12 +7639,12 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
           </div>
           <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${C.border}`, fontSize:13}}>
             <span>Allocated to Jobs</span>
-            <span style={{fontWeight:700}}>{fmtMoney(ebitdaTotals.fuel||0)}</span>
+            <span style={{fontWeight:700}}>{fmtMoney(Math.max(0, periodFuel - unallocatedFuelAmt))}</span>
           </div>
           <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", fontSize:13, fontWeight:700}}>
             <span style={{color:C.textMuted}}>Unallocated (supplier trips, overhead driving)</span>
-            <span style={{color: (periodFuel-(ebitdaTotals.fuel||0))>0 ? C.accent : C.green}}>
-              {fmtMoney(Math.max(0, periodFuel-(ebitdaTotals.fuel||0)))}
+            <span style={{color: unallocatedFuelAmt > 0 ? C.accent : C.green}}>
+              {fmtMoney(unallocatedFuelAmt)}
             </span>
           </div>
         </section>
@@ -7911,6 +7911,19 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
   const periodFuel = expenses
     .filter(e => catBuckets[e.category]==="cogs" && (e.subcategory==="Fuel"||e.subcategory==="fuel") && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to)
     .reduce((s,e)=>s+Number(e.amount||0),0);
+
+  // Unallocated fuel = fuel from material purchases marked tripUnallocated (supplier trips not tied to a job)
+  // We estimate the $ value proportionally: unallocated trip miles / total trip miles * periodFuel
+  // For now, flag materials with tripUnallocated:true in the period as contributing to unallocated
+  const unallocatedMaterialTrips = (materials||[]).filter(m =>
+    m.tripUnallocated !== false && m.date >= ebitdaDateRange.from && m.date <= ebitdaDateRange.to
+  ).length;
+  const totalMaterialTrips = (materials||[]).filter(m =>
+    m.date >= ebitdaDateRange.from && m.date <= ebitdaDateRange.to
+  ).length;
+  const unallocatedFuelAmt = totalMaterialTrips > 0
+    ? periodFuel * (unallocatedMaterialTrips / totalMaterialTrips)
+    : 0;
   // Materials COGS = total COGS minus fuel
   const periodExpMaterials = periodExpCOGS - periodFuel;
 
@@ -8248,6 +8261,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           ebitdaTotals={ebitdaTotals}
           periodOverhead={periodOverhead}
           periodFuel={periodFuel}
+          unallocatedFuelAmt={unallocatedFuelAmt}
           periodExpMaterials={periodExpMaterials}
           periodExpCOGS={periodExpCOGS}
           periodExpLabor={periodExpLabor}
