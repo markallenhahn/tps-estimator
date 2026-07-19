@@ -7978,21 +7978,32 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     const jobDays = (currentJob.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
     if (jobDays.length === 0) return null;
     const hbLat = homeBase?.lat, hbLng = homeBase?.lng;
+    console.log("FUEL DEBUG - homeBase:", {lat:hbLat, lng:hbLng, address:homeBase?.address});
     if (!hbLat || !hbLng) return null;
 
-    // Geocode job from its address string (same address the directions button uses)
+    // Geocode job fresh from its text address to avoid stale stored coords
     const addrStr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
     if (!addrStr) return null;
     const geo = await geocodeAddress(addrStr, homeBase);
+    console.log("FUEL DEBUG - job geocoded:", {addrStr, lat:geo?.lat, lng:geo?.lng});
     if (!geo) return null;
 
-    // Use haversine × road factor — same approach as Smart Routing
-    const ROAD_FACTOR = 1.4;
-    const oneWayMiles = haversine({lat:hbLat,lng:hbLng}, {lat:geo.lat,lng:geo.lng}) * ROAD_FACTOR;
-    if (!oneWayMiles || oneWayMiles === 0) return null;
+    // Get accurate one-way driving distance via OSRM proxy (one call only)
+    let oneWayMiles = 0;
+    try {
+      const osrmRes = await fetch(`/api/public?action=osrm-route&from_lat=${hbLat}&from_lng=${hbLng}&to_lat=${geo.lat}&to_lng=${geo.lng}`);
+      const osrmData = await osrmRes.json();
+      if (osrmData.routes?.[0]?.distance) oneWayMiles = osrmData.routes[0].distance / 1609.34;
+    } catch(e) {}
+    // Fallback to haversine if OSRM fails
+    if (!oneWayMiles) oneWayMiles = haversine({lat:hbLat,lng:hbLng}, {lat:geo.lat,lng:geo.lng}) * 1.4;
+    if (!oneWayMiles) return null;
     const jobMiles = oneWayMiles * 2 * jobDays.length;
 
-    // Total YTD miles: haversine × road factor for all geocoded YTD jobs
+    // Total YTD miles: haversine × same road factor for all geocoded YTD jobs
+    // (consistent ratio is what matters — both numerator and denominator use same method)
+    const jobHaversine = haversine({lat:hbLat,lng:hbLng}, {lat:geo.lat,lng:geo.lng});
+    const roadFactor = jobHaversine > 0 ? oneWayMiles / jobHaversine : 1.4;
     let totalMiles = 0;
     const ytdJobs = (jobs||[]).filter(j =>
       j.geoLat && j.geoLng && (
@@ -8003,7 +8014,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     ytdJobs.forEach(j => {
       const dayCount = Math.max(1, (j.scheduleDays||[]).filter(d=>d.date).length);
       const h = haversine({lat:hbLat,lng:hbLng}, {lat:j.geoLat,lng:j.geoLng});
-      if (!isNaN(h) && h > 0) totalMiles += h * ROAD_FACTOR * 2 * dayCount;
+      if (!isNaN(h) && h > 0) totalMiles += h * roadFactor * 2 * dayCount;
     });
 
     if (totalMiles === 0) return null;
@@ -8011,6 +8022,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   };
   const [distFuel, setDistFuel] = useState(null);
   useEffect(() => {
+    console.log("FUEL EFFECT - actualFuelExp:", actualFuelExp, "jobId:", currentJob.id);
     if (actualFuelExp <= 0) return;
     // Verify job geocoords match current address before calculating
     const addrStr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
