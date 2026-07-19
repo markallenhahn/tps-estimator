@@ -4204,7 +4204,113 @@ const MATERIAL_TYPES = BUILTIN_MATERIAL_TYPES;
 const MATERIAL_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
 const materialStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
-function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole, updateJobById, addExpense, vendors=[] }) {
+// ─── PurchaseEditModal — edit an existing material purchase ──────────────────
+function PurchaseEditModal({ purchase, onSave, onClose, jobs, vendors, MATERIAL_TYPES }) {
+  const [form, setForm] = useState({...purchase});
+  const set = (k, v) => setForm(p => ({...p, [k]: v}));
+  const todayJobs = (jobs||[]).filter(j =>
+    j.scheduledDate === form.date || (j.scheduleDays||[]).some(d=>d.date===form.date)
+  );
+
+  return createPortal(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto"}}>
+      <div style={{background:C.surface,borderRadius:12,padding:20,maxWidth:480,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h3 style={{fontSize:16,fontWeight:700}}>Edit Purchase</h3>
+          <button onClick={onClose} style={{...S.btnSmall,fontSize:18,padding:"2px 8px"}}>✕</button>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+          <label style={S.formLabel}>Date
+            <input type="date" value={form.date||""} onChange={e=>set("date",e.target.value)} style={S.input}/>
+          </label>
+          <label style={S.formLabel}>Qty
+            <input type="number" value={form.qty||""} onChange={e=>set("qty",e.target.value)} style={S.input}/>
+          </label>
+          <label style={S.formLabel}>Unit
+            <input value={form.unit||""} onChange={e=>set("unit",e.target.value)} style={S.input}/>
+          </label>
+          <label style={S.formLabel}>Total Cost $
+            <input type="number" value={form.cost||""} onChange={e=>set("cost",e.target.value)} style={S.input}/>
+          </label>
+          <label style={{...S.formLabel,gridColumn:"1/-1"}}>Supplier
+            <input value={form.supplier||""} onChange={e=>set("supplier",e.target.value)} style={S.input}
+              list="edit-vendor-list" placeholder="Supplier name"/>
+            <datalist id="edit-vendor-list">
+              {(vendors||[]).map(v=><option key={v.id} value={v.name}/>)}
+            </datalist>
+          </label>
+          <label style={{...S.formLabel,gridColumn:"1/-1"}}>Notes
+            <input value={form.notes||""} onChange={e=>set("notes",e.target.value)} style={S.input}/>
+          </label>
+        </div>
+
+        {/* Timing */}
+        <div style={{marginBottom:10}}>
+          <div style={{...S.formLabel,marginBottom:6}}>Timing</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {[["before","Before day's jobs"],["midjob","Mid-job pickup"],["between","Between jobs"],["after","After day's jobs"],["offday","Off day"]].map(([key,label])=>(
+              <button key={key} onClick={()=>set("timing",key)}
+                style={{...S.btnSmall,padding:"4px 10px",fontSize:11,
+                  background:form.timing===key?C.accent:C.surface2,
+                  color:form.timing===key?"#000":C.textMuted,
+                  border:`1px solid ${form.timing===key?C.accent:C.border}`}}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Trip allocation */}
+        <div style={{marginBottom:14}}>
+          <div style={{...S.formLabel,marginBottom:6}}>Supplier trip miles</div>
+          <div style={{display:"flex",gap:8,marginBottom:8}}>
+            <button onClick={()=>set("tripUnallocated",true)}
+              style={{...S.btnSmall,background:form.tripUnallocated!==false?C.accent:C.surface2,
+                color:form.tripUnallocated!==false?"#000":C.textMuted,
+                border:`1px solid ${form.tripUnallocated!==false?C.accent:C.border}`}}>
+              Unallocated
+            </button>
+            <button onClick={()=>set("tripUnallocated",false)}
+              style={{...S.btnSmall,background:form.tripUnallocated===false?C.accent:C.surface2,
+                color:form.tripUnallocated===false?"#000":C.textMuted,
+                border:`1px solid ${form.tripUnallocated===false?C.accent:C.border}`}}>
+              Specific job(s)
+            </button>
+          </div>
+          {form.tripUnallocated===false && todayJobs.length > 0 && (
+            <div>
+              {todayJobs.map(j=>{
+                const ids = form.tripJobIds||[];
+                const checked = ids.includes(String(j.id));
+                return (
+                  <div key={j.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                    <input type="checkbox" checked={checked} onChange={()=>
+                      set("tripJobIds",checked?ids.filter(id=>id!==String(j.id)):[...ids,String(j.id)])
+                    }/>
+                    <span style={{fontSize:12}}>{j.clientName||"Unnamed"} · {j.address||""}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={() => {
+            const qty = Number(form.qty||0);
+            const cost = Number(form.cost||0);
+            onSave({...form, qty, cost, unitCost: qty>0 ? cost/qty : 0});
+          }} style={{...S.btnPrimary,flex:1}}>Save Changes</button>
+          <button onClick={onClose} style={{...S.btnSecondary,flex:1}}>Cancel</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole, updateJobById, addExpense, vendors=[] }) {
   const canEdit = userRole === "owner" || userRole === "manager";
   const allMatTypes = getMaterialTypes(materialSettings);
 
@@ -4221,6 +4327,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
   const [supplier,    setSupplier]   = useState("");
   const [notes,        setNotes]      = useState("");
   const [date,        setDate]       = useState(new Date().toISOString().slice(0,10));
+  const [editingPurchase, setEditingPurchase] = useState(null);
   const [timing,      setTiming]     = useState("before"); // "before"|"between"|"after"|"midjob"|"offday"
   const [appliesToJobIds, setAppliesToJobIds] = useState([]); // for "between"
   const [midJobSplit, setMidJobSplit] = useState(null); // {jobId, pctBefore} or null
@@ -5477,6 +5584,9 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
               <div style={{display:"flex", alignItems:"center", gap:10}}>
                 <span style={{fontWeight:700, color:C.accent}}>{formatCurrency(m.cost)}</span>
                 {canEdit && (
+                  <button style={{...S.btnSmall,marginRight:4}} onClick={() => setEditingPurchase(m)}>Edit</button>
+                )}
+                {canEdit && (
                   <button style={S.btnSmallDanger} onClick={() => { if (confirm("Delete this purchase entry?")) deleteMaterial(m.id); }}><Icon name="Trash2" size={14} style={{verticalAlign:"middle"}}/></button>
                 )}
               </div>
@@ -5485,6 +5595,21 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, materialS
         })}
       </section>
       </>}
+
+      {/* Purchase edit modal */}
+      {editingPurchase && (
+        <PurchaseEditModal
+          purchase={editingPurchase}
+          jobs={jobs}
+          vendors={vendors}
+          MATERIAL_TYPES={MATERIAL_TYPES}
+          onSave={(updated) => {
+            if (updateMaterial) updateMaterial(updated);
+            setEditingPurchase(null);
+          }}
+          onClose={() => setEditingPurchase(null)}
+        />
+      )}
     </div>
   );
 }
@@ -16347,6 +16472,10 @@ function App() {
     setMaterials(prev => [entry, ...prev]);
     syncMaterial(entry);
   };
+  const updateMaterial = (entry) => {
+    setMaterials(prev => prev.map(m => m.id === entry.id ? entry : m));
+    syncMaterial(entry);
+  };
 
   const deleteMaterial = async (id) => {
     setMaterials(prev => prev.filter(m => m.id !== id));
@@ -16794,7 +16923,7 @@ function App() {
         {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
-        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById} addExpense={addExpense} vendors={vendors}/></div>}
+        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} updateMaterial={updateMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById} addExpense={addExpense} vendors={vendors}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings} reportSettings={reportSettings} offAppWorkers={offAppWorkers}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
