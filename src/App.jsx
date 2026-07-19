@@ -4204,6 +4204,90 @@ const MATERIAL_TYPES = BUILTIN_MATERIAL_TYPES;
 const MATERIAL_STATUS_OPTS = ["estimate","draft","pending_review","sent","signed","scheduled","completed","paid","lost"];
 const materialStatusLabel = (s) => s==="estimate" ? "Estimate" : s.charAt(0).toUpperCase()+s.slice(1);
 
+// ─── VendorSelector — unified supplier picker with inline add/edit ────────────
+function VendorSelector({ value, onChange, vendors=[], addVendor, updateVendor }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingVendor, setEditingVendor] = useState(null);
+  const [draft, setDraft] = useState({ name:"", street:"", city:"", state:"", zip:"", phone:"", email:"" });
+  const set = (k,v) => setDraft(p=>({...p,[k]:v}));
+
+  const selectedVendor = vendors.find(v => v.name === value);
+
+  const saveVendor = () => {
+    if (!draft.name.trim()) return;
+    const addr = [draft.street, draft.city, draft.state, draft.zip].filter(Boolean).join(", ");
+    const v = editingVendor
+      ? {...editingVendor, ...draft, address: addr}
+      : { id: Date.now(), ...draft, address: addr };
+    if (editingVendor && updateVendor) updateVendor(v);
+    else if (addVendor) addVendor(v);
+    onChange(draft.name.trim());
+    setShowAdd(false); setEditingVendor(null);
+    setDraft({ name:"", street:"", city:"", state:"", zip:"", phone:"", email:"" });
+  };
+
+  const startEdit = (v) => {
+    setDraft({ name:v.name||"", street:v.street||"", city:v.city||"", state:v.state||"", zip:v.zip||"", phone:v.phone||"", email:v.email||"" });
+    setEditingVendor(v);
+    setShowAdd(true);
+  };
+
+  return (
+    <div style={{marginBottom:12}}>
+      <div style={{...S.formLabel, marginBottom:4}}>Supplier</div>
+      <div style={{display:"flex", gap:6, marginBottom:6}}>
+        <select value={value||""} onChange={e => onChange(e.target.value)} style={{...S.input, flex:1}}>
+          <option value="">— Select supplier —</option>
+          {vendors.map(v => (
+            <option key={v.id} value={v.name}>
+              {v.name}{v.address ? " · "+v.city : ""}
+            </option>
+          ))}
+        </select>
+        {selectedVendor && (
+          <button onClick={() => startEdit(selectedVendor)} style={{...S.btnSmall, flexShrink:0}}>Edit</button>
+        )}
+        <button onClick={() => { setShowAdd(true); setEditingVendor(null); setDraft({name:"",street:"",city:"",state:"",zip:"",phone:"",email:""}); }}
+          style={{...S.btnSmall, flexShrink:0}}>+ New</button>
+      </div>
+
+      {selectedVendor && !selectedVendor.address && (
+        <div style={{fontSize:11, color:"#b45309", background:"#fef3c7", borderRadius:6, padding:"5px 10px", marginBottom:6}}>
+          ⚠️ No address on file for {selectedVendor.name} — supplier trip miles can't be calculated. <button onClick={() => startEdit(selectedVendor)} style={{background:"none",border:"none",color:C.accent,cursor:"pointer",fontSize:11,textDecoration:"underline",padding:0}}>Add address</button>
+        </div>
+      )}
+
+      {showAdd && (
+        <div style={{padding:12, background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`, marginTop:6}}>
+          <div style={{fontWeight:600, fontSize:13, marginBottom:10}}>
+            {editingVendor ? "Edit Supplier" : "Add New Supplier"}
+          </div>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+            <input value={draft.name} onChange={e=>set("name",e.target.value)}
+              placeholder="Supplier name *" style={{...S.input, gridColumn:"1/-1"}}/>
+            <input value={draft.street} onChange={e=>set("street",e.target.value)}
+              placeholder="Street address" style={{...S.input, gridColumn:"1/-1"}}/>
+            <input value={draft.city} onChange={e=>set("city",e.target.value)}
+              placeholder="City" style={S.input}/>
+            <input value={draft.state} onChange={e=>set("state",e.target.value)}
+              placeholder="State" style={S.input}/>
+            <input value={draft.zip} onChange={e=>set("zip",e.target.value)}
+              placeholder="ZIP" style={S.input}/>
+            <input value={draft.phone} onChange={e=>set("phone",e.target.value)}
+              placeholder="Phone (optional)" style={S.input}/>
+          </div>
+          <div style={{display:"flex", gap:8, marginTop:10}}>
+            <button onClick={saveVendor} style={{...S.btnPrimary, flex:1}}>
+              {editingVendor ? "Save Changes" : "Add Supplier"}
+            </button>
+            <button onClick={() => { setShowAdd(false); setEditingVendor(null); }} style={{...S.btnSecondary, flex:1}}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── PurchaseEditModal — edit an existing material purchase ──────────────────
 function PurchaseEditModal({ purchase, onSave, onClose, jobs, vendors, MATERIAL_TYPES }) {
   const [form, setForm] = useState({...purchase});
@@ -4310,7 +4394,7 @@ function PurchaseEditModal({ purchase, onSave, onClose, jobs, vendors, MATERIAL_
   );
 }
 
-function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole, updateJobById, addExpense, vendors=[] }) {
+function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMaterial, materialSettings, setMaterialSettings, syncMaterialSettings, stockChecks, addStockCheck, deleteStockCheck, userRole, updateJobById, addExpense, vendors=[], addVendor, updateVendor }) {
   const canEdit = userRole === "owner" || userRole === "manager";
   const allMatTypes = getMaterialTypes(materialSettings);
 
@@ -5163,9 +5247,6 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMat
                 )}
               </div>
             </label>
-            <label style={S.formLabel}>Supplier (optional)
-              <input value={supplier} onChange={e => setSupplier(e.target.value)} style={S.input}/>
-            </label>
           </div>
           {coverageBasis && qty && cost && coverage && !isNaN(Number(qty)) && !isNaN(Number(cost)) && !isNaN(Number(coverage)) && Number(coverage)>0 && Number(qty)>0 && (
             <p style={{fontSize:12, color:C.accent, margin:"0 0 10px", fontWeight:600}}>
@@ -5177,16 +5258,13 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMat
             <input value={notes} onChange={e => setNotes(e.target.value)} style={S.input}/>
           </label>
 
-          {/* Vendor selector */}
-          {vendors && vendors.length > 0 && (
-            <label style={{...S.formLabel, marginBottom:10}}>Supplier
-              <select value={supplier} onChange={e => { setSupplier(e.target.value); }}
-                style={S.input}>
-                <option value="">— Select vendor or type above —</option>
-                {vendors.map(v => <option key={v.id} value={v.name}>{v.name}{v.address ? " · "+v.city : ""}</option>)}
-              </select>
-            </label>
-          )}
+          {/* Unified supplier selector */}
+          <VendorSelector
+            value={supplier}
+            onChange={setSupplier}
+            vendors={vendors}
+            addVendor={addVendor}
+          />
 
           {/* Timing */}
           <div style={{marginBottom:12}}>
@@ -10769,7 +10847,7 @@ const EXPENSE_CATEGORY_MAP = {
 };
 const PAYMENT_METHODS = ["Company Card","Cash","Personal Card","Check","ACH/Transfer"];
 
-function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, jobs, userRole, currentTenantId, session, addMaterial, customSubcategories={} }) {
+function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, updateVendor, jobs, userRole, currentTenantId, session, addMaterial, customSubcategories={} }) {
   const isDesktop = useIsDesktop();
   const canEdit = userRole === "owner" || userRole === "manager";
   const [showForm,    setShowForm]    = useState(false);
@@ -11491,7 +11569,19 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                   {(v.phone||v.email) && <div style={{fontSize:11, color:C.textMuted}}>{[v.phone,v.email].filter(Boolean).join(" · ")}</div>}
                   {v.address && <div style={{fontSize:11, color:C.textMuted}}>{v.address}</div>}
                 </div>
-                <button style={{...S.btnSmall, color:C.danger}} onClick={()=>{ if(confirm("Delete "+v.name+"?")) deleteVendor(v.id); }}>✕</button>
+                <div style={{display:"flex", gap:6}}>
+                  <button style={S.btnSmall} onClick={()=>{
+                    const name = prompt("Vendor name:", v.name);
+                    if (!name) return;
+                    const street = prompt("Street address:", v.street||"");
+                    const city = prompt("City:", v.city||"");
+                    const state = prompt("State:", v.state||"");
+                    const zip = prompt("ZIP:", v.zip||"");
+                    const addr = [street,city,state,zip].filter(Boolean).join(", ");
+                    if (updateVendor) updateVendor({...v, name:name.trim(), street:street||v.street, city:city||v.city, state:state||v.state, zip:zip||v.zip, address:addr||v.address});
+                  }}>Edit</button>
+                  <button style={{...S.btnSmall, color:C.danger}} onClick={()=>{ if(confirm("Delete "+v.name+"?")) deleteVendor(v.id); }}>✕</button>
+                </div>
               </div>
             ))}
           </div>
@@ -16920,10 +17010,10 @@ function App() {
           canSeeMoney={hasRole(userRoles||[userRole], "owner") || hasRole(userRoles||[userRole], "manager") || hasRole(userRoles||[userRole], "crewlead")}
           companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {view==="costs"    && getAccessLevel(permissions,"costs",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"costs") && <CostsView   currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} expenses={expenses} reportSettings={reportSettings} jobs={jobs} laborEntries={laborEntries} teamUsers={teamUsers} offAppWorkers={offAppWorkers} homeBase={homeBase} vendors={vendors} materials={materials}/>}
-        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
+        {view==="expenses" && getAccessLevel(permissions,"expenses",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"expenses") && <ExpensesView expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} deleteExpense={deleteExpense} vendors={vendors} addVendor={addVendor} deleteVendor={deleteVendor} updateVendor={updateVendor} jobs={jobs} userRole={userRole} currentTenantId={currentTenantId} session={session} addMaterial={addMaterial} customSubcategories={reportSettings?.customSubcategories}/>}
         {view==="invoice"  && getAccessLevel(permissions,"invoice",userRoles)!=="hidden" && <InvoiceView  currentJob={currentJob} updateJob={updateJob} rates={{...DEFAULT_RATES, ...(currentJob?.rates||rates), other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}}} companySettings={companySettings} accessToken={session?.access_token} tenantId={currentTenantId}/>}
         {getAccessLevel(permissions,"labor",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"labor") && <div style={{display: view==="labor" ? "block" : "none"}}><LaborView   laborEntries={laborEntries} addLaborEntry={addLaborEntry} deleteLaborEntry={deleteLaborEntry} userRole={userRole} teamUsers={teamUsers} currentUserId={session?.user?.id} offAppWorkers={offAppWorkers} jobs={jobs}/></div>}
-        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} updateMaterial={updateMaterial} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById} addExpense={addExpense} vendors={vendors}/></div>}
+        {getAccessLevel(permissions,"materials",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"materials") && <div style={{display: view==="materials" ? "block" : "none"}}><MaterialsView jobs={jobs} materials={materials} addMaterial={addMaterial} deleteMaterial={deleteMaterial} updateMaterial={updateMaterial} addVendor={addVendor} updateVendor={updateVendor} materialSettings={materialSettings} setMaterialSettings={setMaterialSettings} syncMaterialSettings={syncMaterialSettings} stockChecks={stockChecks} addStockCheck={addStockCheck} deleteStockCheck={deleteStockCheck} userRole={userRole} updateJobById={updateJobById} addExpense={addExpense} vendors={vendors}/></div>}
         {getAccessLevel(permissions,"crm",userRoles)!=="hidden" && <div style={{display: view==="crm" ? "block" : "none"}}><CRMView jobs={jobs} rates={rates} customers={customers} addCustomer={addCustomer} updateCustomer={updateCustomer} updateJobById={updateJobById} crmLogs={crmLogs} addCrmLog={addCrmLog} deleteCrmLog={deleteCrmLog} setCurrentJob={setCurrentJob} setView={navigateTo} userRole={userRole}/></div>}
         {getAccessLevel(permissions,"reports",userRoles)!=="hidden" && planAllowsTab(currentTenant?.data,"reports") && <div style={{display: view==="reports" ? "block" : "none"}}><ReportsView  jobs={jobs} rates={rates} setCurrentJob={setCurrentJob} setView={navigateTo} companySettings={companySettings} laborEntries={laborEntries} expenses={expenses} teamUsers={teamUsers} materials={materials} materialSettings={materialSettings} reportSettings={reportSettings} offAppWorkers={offAppWorkers}/></div>}
         {view==="rates"    && getAccessLevel(permissions,"rates",userRoles)!=="hidden" && <RatesView   rates={rates} setRates={handleSetRates} currentJob={currentJob} updateJob={updateJob} setCurrentJob={setCurrentJob} currentTenant={currentTenant} onServicesChange={(services) => {
