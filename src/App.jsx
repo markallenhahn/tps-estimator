@@ -7980,33 +7980,19 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     const hbLat = homeBase?.lat, hbLng = homeBase?.lng;
     if (!hbLat || !hbLng) return null;
 
-    // Get job coords — use stored geoLat/geoLng, or geocode from address
-    let jobLat = currentJob.geoLat, jobLng = currentJob.geoLng;
-    if (!jobLat || !jobLng) {
-      const geo = await geocodeAddress(geocodeQueryOf(currentJob), homeBase);
-      if (!geo) return null;
-      jobLat = geo.lat; jobLng = geo.lng;
-    }
+    // Geocode job from its address string (same address the directions button uses)
+    const addrStr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
+    if (!addrStr) return null;
+    const geo = await geocodeAddress(addrStr, homeBase);
+    if (!geo) return null;
 
-    // Get driving distance via proxy using geocoords directly
-    const drivingMiles = async (fromLat, fromLng, toLat, toLng) => {
-      if (!fromLat || !fromLng || !toLat || !toLng) return 0;
-      try {
-        const url = `/api/public?action=osrm-route&from_lat=${fromLat}&from_lng=${fromLng}&to_lat=${toLat}&to_lng=${toLng}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.routes?.[0]?.distance) return data.routes[0].distance / 1609.34;
-      } catch(e) {}
-      const h = haversine({lat:fromLat,lng:fromLng}, {lat:toLat,lng:toLng});
-      return isNaN(h) ? 0 : h * 1.4;
-    };
-
-    // One-way distance home→job, reused for all days
-    const oneWayMiles = await drivingMiles(hbLat, hbLng, jobLat, jobLng);
+    // Use haversine × road factor — same approach as Smart Routing
+    const ROAD_FACTOR = 1.4;
+    const oneWayMiles = haversine({lat:hbLat,lng:hbLng}, {lat:geo.lat,lng:geo.lng}) * ROAD_FACTOR;
     if (!oneWayMiles || oneWayMiles === 0) return null;
     const jobMiles = oneWayMiles * 2 * jobDays.length;
 
-    // Total YTD miles = sum of round trips for ALL geocoded jobs this year
+    // Total YTD miles: haversine × road factor for all geocoded YTD jobs
     let totalMiles = 0;
     const ytdJobs = (jobs||[]).filter(j =>
       j.geoLat && j.geoLng && (
@@ -8014,11 +8000,11 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
         (j.scheduleDays||[]).some(d => d.date >= ytdStart && d.date <= ytdEnd)
       )
     );
-    for (const j of ytdJobs) {
+    ytdJobs.forEach(j => {
       const dayCount = Math.max(1, (j.scheduleDays||[]).filter(d=>d.date).length);
-      const oneWay = await drivingMiles(hbLat, hbLng, j.geoLat, j.geoLng);
-      if (oneWay && oneWay > 0) totalMiles += oneWay * 2 * dayCount;
-    }
+      const h = haversine({lat:hbLat,lng:hbLng}, {lat:j.geoLat,lng:j.geoLng});
+      if (!isNaN(h) && h > 0) totalMiles += h * ROAD_FACTOR * 2 * dayCount;
+    });
 
     if (totalMiles === 0) return null;
     return { jobMiles, periodMiles: totalMiles, pct: jobMiles / totalMiles, dayCount: jobDays.length, oneWay: oneWayMiles };
