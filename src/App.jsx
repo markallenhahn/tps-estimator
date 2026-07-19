@@ -7977,39 +7977,46 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const calcJobRouteMiles = async () => {
     const jobDays = (currentJob.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
     if (jobDays.length === 0) return null;
-    const homeAddr = [homeBase?.street||homeBase?.address, homeBase?.city, homeBase?.state, homeBase?.zip].filter(Boolean).join(", ");
-    const jobAddr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
-    if (!homeAddr || !jobAddr) return null;
+    const hbLat = homeBase?.lat, hbLng = homeBase?.lng;
+    if (!hbLat || !hbLng) return null;
 
-    // Get real driving distance via our proxy using addresses (same as directions button)
-    const drivingMiles = async (fromAddr, toAddr) => {
-      if (!fromAddr || !toAddr) return 0;
+    // Get job coords — use stored geoLat/geoLng, or geocode from address
+    let jobLat = currentJob.geoLat, jobLng = currentJob.geoLng;
+    if (!jobLat || !jobLng) {
+      const geo = await geocodeAddress(geocodeQueryOf(currentJob), homeBase);
+      if (!geo) return null;
+      jobLat = geo.lat; jobLng = geo.lng;
+    }
+
+    // Get driving distance via proxy using geocoords directly
+    const drivingMiles = async (fromLat, fromLng, toLat, toLng) => {
+      if (!fromLat || !fromLng || !toLat || !toLng) return 0;
       try {
-        const url = `/api/public?action=osrm-route&from=${encodeURIComponent(fromAddr)}&to=${encodeURIComponent(toAddr)}`;
+        const url = `/api/public?action=osrm-route&from_lat=${fromLat}&from_lng=${fromLng}&to_lat=${toLat}&to_lng=${toLng}`;
         const res = await fetch(url);
         const data = await res.json();
         if (data.routes?.[0]?.distance) return data.routes[0].distance / 1609.34;
       } catch(e) {}
-      return 0;
+      const h = haversine({lat:fromLat,lng:fromLng}, {lat:toLat,lng:toLng});
+      return isNaN(h) ? 0 : h * 1.4;
     };
 
-    // One-way distance, reused for all days
-    const oneWayMiles = await drivingMiles(homeAddr, jobAddr);
+    // One-way distance home→job, reused for all days
+    const oneWayMiles = await drivingMiles(hbLat, hbLng, jobLat, jobLng);
     if (!oneWayMiles || oneWayMiles === 0) return null;
     const jobMiles = oneWayMiles * 2 * jobDays.length;
 
-    // Total YTD miles = sum of round trips for ALL jobs with addresses this year
+    // Total YTD miles = sum of round trips for ALL geocoded jobs this year
     let totalMiles = 0;
-    const ytdJobs = (jobs||[]).filter(j => {
-      const addr = [j.address, j.city].filter(Boolean).join(", ");
-      if (!addr) return false;
-      return (j.scheduledDate >= ytdStart && j.scheduledDate <= ytdEnd) ||
-        (j.scheduleDays||[]).some(d => d.date >= ytdStart && d.date <= ytdEnd);
-    });
+    const ytdJobs = (jobs||[]).filter(j =>
+      j.geoLat && j.geoLng && (
+        (j.scheduledDate >= ytdStart && j.scheduledDate <= ytdEnd) ||
+        (j.scheduleDays||[]).some(d => d.date >= ytdStart && d.date <= ytdEnd)
+      )
+    );
     for (const j of ytdJobs) {
-      const jAddr = [j.address, j.city, j.state, j.zip].filter(Boolean).join(", ");
       const dayCount = Math.max(1, (j.scheduleDays||[]).filter(d=>d.date).length);
-      const oneWay = await drivingMiles(homeAddr, jAddr);
+      const oneWay = await drivingMiles(hbLat, hbLng, j.geoLat, j.geoLng);
       if (oneWay && oneWay > 0) totalMiles += oneWay * 2 * dayCount;
     }
 
