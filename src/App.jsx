@@ -1017,6 +1017,44 @@ function RatesView({ rates, setRates, currentJob, updateJob, setCurrentJob, curr
 }
 
 // ─── Home Base View (admin only) ───────────────────────────────────────────────
+// ─── HomeBaseMap — draggable pin to set exact location ───────────────────────
+function HomeBaseMap({ lat, lng, onMove }) {
+  const mapElRef = useRef(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+
+  useEffect(() => {
+    if (!mapElRef.current) return;
+    if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+    const map = L.map(mapElRef.current).setView([lat, lng], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 19
+    }).addTo(map);
+    const icon = L.divIcon({
+      html: '<div style="width:24px;height:24px;background:#f59e0b;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>',
+      iconSize: [24, 24], iconAnchor: [12, 12], className: ""
+    });
+    const marker = L.marker([lat, lng], { draggable: true, icon }).addTo(map);
+    marker.on("dragend", (e) => {
+      const { lat: newLat, lng: newLng } = e.target.getLatLng();
+      onMove(Number(newLat.toFixed(7)), Number(newLng.toFixed(7)));
+    });
+    mapRef.current = map;
+    markerRef.current = marker;
+    return () => { map.remove(); mapRef.current = null; };
+  }, []);
+
+  // Update marker position when lat/lng inputs change
+  useEffect(() => {
+    if (markerRef.current && lat && lng) {
+      markerRef.current.setLatLng([lat, lng]);
+      mapRef.current?.setView([lat, lng], mapRef.current.getZoom());
+    }
+  }, [lat, lng]);
+
+  return <div ref={mapElRef} style={{height:260, borderRadius:8, overflow:"hidden", marginBottom:4}}/>;
+}
+
 function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
   const [street,     setStreet]     = useState(homeBase?.street || "");
   const [city,       setCity]       = useState(homeBase?.city   || "");
@@ -1095,9 +1133,14 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
         {showManual && (
           <div style={{marginTop:8, padding:12, background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
             <p style={{fontSize:12, color:C.textMuted, marginBottom:10}}>
-              Right-click your location in <a href="https://maps.google.com" target="_blank" rel="noopener noreferrer" style={{color:C.accent}}>Google Maps</a> → tap the coordinates shown → they'll copy to clipboard. Paste latitude and longitude below.
+              Drag the pin to your exact location. The coordinates update automatically.
             </p>
-            <div style={{display:"flex", gap:8}}>
+            <HomeBaseMap
+              lat={manualLat ? Number(manualLat) : 40.98}
+              lng={manualLng ? Number(manualLng) : -75.25}
+              onMove={(lat, lng) => { setManualLat(String(lat)); setManualLng(String(lng)); }}
+            />
+            <div style={{display:"flex", gap:8, marginTop:8}}>
               <label style={{...S.formLabel, flex:1}}>Latitude
                 <input type="number" step="any" value={manualLat} onChange={e => setManualLat(e.target.value)}
                   placeholder="e.g. 40.9812" style={S.input}/>
