@@ -4238,7 +4238,7 @@ function VendorSelector({ value, onChange, vendors=[], addVendor, updateVendor }
       <div style={{display:"flex", gap:6, marginBottom:6}}>
         <select value={value||""} onChange={e => onChange(e.target.value)} style={{...S.input, flex:1}}>
           <option value="">— Select supplier —</option>
-          {vendors.map(v => (
+          {[...vendors].sort((a,b)=>(a.name||"" ).localeCompare(b.name||"" )).map(v => (
             <option key={v.id} value={v.name}>
               {v.name}{v.category ? " ["+v.category+"]" : ""}{v.address ? " · "+v.city : ""}
             </option>
@@ -4545,6 +4545,9 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMat
     // Also create a corresponding COGS expense so it appears on the Expenses tab
     if (addExpense && costNum > 0) {
       const matLabel = MATERIAL_TYPES.find(m => m.key === category)?.label || category;
+      // Auto-link to job if exactly one job is selected (e.g. asphalt mid-job pickup)
+      const linkedJobId = (!tripUnallocated && tripJobIds?.length === 1) ? tripJobIds[0]
+        : (finalAppliesToJobIds?.length === 1) ? finalAppliesToJobIds[0] : null;
       addExpense({
         id: matId + 1,
         date,
@@ -4555,6 +4558,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMat
         notes: notes.trim() ? (matLabel + " — " + notes.trim()) : matLabel,
         paymentMethod: "",
         fromMaterialId: matId,
+        ...(linkedJobId ? { jobId: linkedJobId } : {}),
       });
     }
     // Keep this category's "active" coverage rate in sync with whatever was
@@ -8361,7 +8365,9 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   // of total period miles determines its share of actual fuel expenses.
   const calcJobRouteMiles = async () => {
     const jobDays = (currentJob.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
-    if (jobDays.length === 0) return null;
+    // Fall back to scheduledDate if no scheduleDays
+    const effectiveDays = jobDays.length > 0 ? jobDays : (currentJob.scheduledDate ? [currentJob.scheduledDate] : []);
+    if (effectiveDays.length === 0) return null;
     const hbLat = homeBase?.lat, hbLng = homeBase?.lng;
     if (!hbLat || !hbLng) return null;
 
@@ -8381,7 +8387,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     // Fallback to haversine if OSRM fails
     if (!oneWayMiles) oneWayMiles = haversine({lat:hbLat,lng:hbLng}, {lat:geo.lat,lng:geo.lng}) * 1.4;
     if (!oneWayMiles) return null;
-    let jobMiles = oneWayMiles * 2 * jobDays.length;
+    let jobMiles = oneWayMiles * 2 * effectiveDays.length;
 
     // Add supplier trip miles allocated to this specific job
     const jobMatTrips = (materials||[]).filter(m =>
@@ -8423,7 +8429,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     });
 
     if (totalMiles === 0) return null;
-    return { jobMiles, periodMiles: totalMiles, pct: jobMiles / totalMiles, dayCount: jobDays.length, oneWay: oneWayMiles };
+    return { jobMiles, periodMiles: totalMiles, pct: jobMiles / totalMiles, dayCount: effectiveDays.length, oneWay: oneWayMiles };
   };
   const [distFuel, setDistFuel] = useState(null);
   useEffect(() => {
@@ -11612,7 +11618,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                   }}
                   style={{...S.input, flex:1}}>
                   <option value="">— Select vendor or type below —</option>
-                  {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  {[...vendors].sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
               </div>
               <input value={form.vendorName} onChange={e=>setF({vendorName:e.target.value, vendorId:""})}
