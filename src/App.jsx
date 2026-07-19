@@ -16529,6 +16529,10 @@ function App() {
     setVendors(prev => [v, ...prev]);
     syncVendor(v);
   };
+  const updateVendor = (v) => {
+    setVendors(prev => prev.map(x => x.id === v.id ? v : x));
+    syncVendor(v);
+  };
   const deleteVendor = async (id) => {
     setVendors(prev => prev.filter(v => v.id !== id));
     try { await tFetch("vendors?id=eq."+id, { method: "DELETE" }); } catch(e) {}
