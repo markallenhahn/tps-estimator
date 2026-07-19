@@ -7912,17 +7912,15 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     .filter(e => catBuckets[e.category]==="cogs" && (e.subcategory==="Fuel"||e.subcategory==="fuel") && e.date >= ebitdaDateRange.from && e.date <= ebitdaDateRange.to)
     .reduce((s,e)=>s+Number(e.amount||0),0);
 
-  // Unallocated fuel = fuel from material purchases marked tripUnallocated (supplier trips not tied to a job)
-  // We estimate the $ value proportionally: unallocated trip miles / total trip miles * periodFuel
-  // For now, flag materials with tripUnallocated:true in the period as contributing to unallocated
-  const unallocatedMaterialTrips = (materials||[]).filter(m =>
-    m.tripUnallocated !== false && m.date >= ebitdaDateRange.from && m.date <= ebitdaDateRange.to
-  ).length;
-  const totalMaterialTrips = (materials||[]).filter(m =>
+  // Unallocated fuel = purchases marked tripUnallocated:true (supplier trips not tied to any job)
+  // Allocated fuel = purchases where tripUnallocated is false (explicitly linked to job(s))
+  const periodMaterials = (materials||[]).filter(m =>
     m.date >= ebitdaDateRange.from && m.date <= ebitdaDateRange.to
-  ).length;
-  const unallocatedFuelAmt = totalMaterialTrips > 0
-    ? periodFuel * (unallocatedMaterialTrips / totalMaterialTrips)
+  );
+  const allocatedTrips = periodMaterials.filter(m => m.tripUnallocated === false).length;
+  const totalTrips = periodMaterials.length;
+  const unallocatedFuelAmt = totalTrips > 0
+    ? periodFuel * ((totalTrips - allocatedTrips) / totalTrips)
     : 0;
   // Materials COGS = total COGS minus fuel
   const periodExpMaterials = periodExpCOGS - periodFuel;
