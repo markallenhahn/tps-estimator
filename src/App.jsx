@@ -7813,8 +7813,9 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
     acc.jobLabor      += d.jobLabor;
     acc.overheadAlloc += d.overheadAlloc;
     acc.ebitda        += d.ebitda;
+    acc.fuel          += (d.fuelAlloc||0);
     return acc;
-  }, {revenue:0, cogs:0, grossProfit:0, jobLabor:0, overheadAlloc:0, ebitda:0});
+  }, {revenue:0, cogs:0, grossProfit:0, jobLabor:0, overheadAlloc:0, ebitda:0, fuel:0});
 
   // Per-service-type aggregation
   const serviceTypeTotals = {};
