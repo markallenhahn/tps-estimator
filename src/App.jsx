@@ -4240,7 +4240,7 @@ function VendorSelector({ value, onChange, vendors=[], addVendor, updateVendor }
           <option value="">— Select supplier —</option>
           {vendors.map(v => (
             <option key={v.id} value={v.name}>
-              {v.name}{v.address ? " · "+v.city : ""}
+              {v.name}{v.category ? " ["+v.category+"]" : ""}{v.address ? " · "+v.city : ""}
             </option>
           ))}
         </select>
@@ -10847,6 +10847,144 @@ const EXPENSE_CATEGORY_MAP = {
 };
 const PAYMENT_METHODS = ["Company Card","Cash","Personal Card","Check","ACH/Transfer"];
 
+// ─── VendorsManager — vendor list with filter/sort/category ─────────────────
+const DEFAULT_VENDOR_CATEGORIES = ["Asphalt Supplier","Sealcoat Supplier","Crack Fill Supplier","Equipment & Parts","Fuel","Office & Software","Other"];
+
+function VendorsManager({ vendors=[], addVendor, updateVendor, deleteVendor }) {
+  const [filterCat, setFilterCat] = useState("All");
+  const [sortField, setSortField] = useState("name");
+  const [search, setSearch] = useState("");
+  const [editingId, setEditingId] = useState(null); // null | "new" | id
+  const [draft, setDraft] = useState({});
+  const [customCategories, setCustomCategories] = useState([]);
+  const [newCatInput, setNewCatInput] = useState("");
+  const set = (k,v) => setDraft(p=>({...p,[k]:v}));
+
+  const allCategories = [...DEFAULT_VENDOR_CATEGORIES, ...customCategories];
+
+  const startNew = () => {
+    setDraft({ name:"", category:"", street:"", city:"", state:"", zip:"", phone:"", email:"" });
+    setEditingId("new");
+  };
+  const startEdit = (v) => { setDraft({...v}); setEditingId(v.id); };
+  const cancel = () => { setEditingId(null); setDraft({}); };
+
+  const save = () => {
+    if (!draft.name?.trim()) return;
+    const addr = [draft.street, draft.city, draft.state, draft.zip].filter(Boolean).join(", ");
+    const v = {...draft, name: draft.name.trim(), address: addr};
+    if (editingId === "new") addVendor({...v, id: Date.now()});
+    else updateVendor(v);
+    cancel();
+  };
+
+  const addCustomCategory = () => {
+    const cat = newCatInput.trim();
+    if (!cat || allCategories.includes(cat)) return;
+    setCustomCategories(prev => [...prev, cat]);
+    setNewCatInput("");
+  };
+
+  const filtered = vendors
+    .filter(v =>
+      (filterCat === "All" || v.category === filterCat) &&
+      (!search || v.name.toLowerCase().includes(search.toLowerCase()) ||
+        (v.address||"").toLowerCase().includes(search.toLowerCase()))
+    )
+    .sort((a,b) => {
+      if (sortField === "name") return (a.name||"").localeCompare(b.name||"");
+      if (sortField === "category") return (a.category||"").localeCompare(b.category||"");
+      return 0;
+    });
+
+  const form = (
+    <div style={{background:C.surface2, borderRadius:10, padding:14, marginBottom:12, border:`1px solid ${C.border}`}}>
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8}}>
+        <input value={draft.name||""} onChange={e=>set("name",e.target.value)}
+          placeholder="Vendor name *" style={{...S.input, gridColumn:"1/-1"}}/>
+        <select value={draft.category||""} onChange={e=>set("category",e.target.value)} style={S.input}>
+          <option value="">— Category —</option>
+          {allCategories.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+        <input value={draft.phone||""} onChange={e=>set("phone",e.target.value)}
+          placeholder="Phone" style={S.input}/>
+        <input value={draft.email||""} onChange={e=>set("email",e.target.value)}
+          placeholder="Email" style={{...S.input, gridColumn:"1/-1"}}/>
+        <input value={draft.street||""} onChange={e=>set("street",e.target.value)}
+          placeholder="Street address" style={{...S.input, gridColumn:"1/-1"}}/>
+        <input value={draft.city||""} onChange={e=>set("city",e.target.value)} placeholder="City" style={S.input}/>
+        <input value={draft.state||""} onChange={e=>set("state",e.target.value)} placeholder="State" style={S.input}/>
+        <input value={draft.zip||""} onChange={e=>set("zip",e.target.value)} placeholder="ZIP" style={S.input}/>
+      </div>
+      <div style={{display:"flex", gap:8}}>
+        <button onClick={save} style={S.btnPrimary}>{editingId==="new"?"Add Vendor":"Save Changes"}</button>
+        <button onClick={cancel} style={S.btnSecondary}>Cancel</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Filter + sort bar */}
+      <div style={{display:"flex", gap:8, marginBottom:10, flexWrap:"wrap"}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="Search vendors..." style={{...S.input, flex:2, minWidth:140}}/>
+        <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{...S.input, flex:1, minWidth:120}}>
+          <option value="All">All Categories</option>
+          {allCategories.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={sortField} onChange={e=>setSortField(e.target.value)} style={{...S.input, flex:1, minWidth:100}}>
+          <option value="name">Sort: Name</option>
+          <option value="category">Sort: Category</option>
+        </select>
+      </div>
+
+      {/* Add custom category */}
+      <div style={{display:"flex", gap:6, marginBottom:10}}>
+        <input value={newCatInput} onChange={e=>setNewCatInput(e.target.value)}
+          placeholder="Add custom category..." style={{...S.input, flex:1}}
+          onKeyDown={e=>e.key==="Enter"&&addCustomCategory()}/>
+        <button onClick={addCustomCategory} style={S.btnSecondary}>+ Category</button>
+      </div>
+
+      {editingId === "new" && form}
+
+      {filtered.length === 0 && editingId !== "new" && (
+        <p style={{fontSize:13, color:C.textMuted}}>No vendors found.</p>
+      )}
+
+      {filtered.map(v => (
+        <div key={v.id}>
+          {editingId === v.id ? form : (
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"10px 0", borderBottom:`1px solid ${C.border}`}}>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontWeight:600, fontSize:13}}>{v.name}
+                  {v.category && <span style={{fontSize:11, color:C.textMuted, marginLeft:6,
+                    background:C.surface2, borderRadius:4, padding:"1px 6px", border:`1px solid ${C.border}`}}>
+                    {v.category}
+                  </span>}
+                </div>
+                {(v.phone||v.email) && <div style={{fontSize:11, color:C.textMuted}}>{[v.phone,v.email].filter(Boolean).join(" · ")}</div>}
+                {v.address && <div style={{fontSize:11, color:C.textMuted}}>{v.address}</div>}
+              </div>
+              <div style={{display:"flex", gap:6, flexShrink:0}}>
+                <button style={S.btnSmall} onClick={()=>startEdit(v)}>Edit</button>
+                <button style={{...S.btnSmall, color:C.danger}}
+                  onClick={()=>{ if(confirm("Delete "+v.name+"?")) deleteVendor(v.id); }}>✕</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {editingId !== "new" && (
+        <button onClick={startNew} style={{...S.btnSecondary, marginTop:12}}>+ Add Vendor</button>
+      )}
+    </div>
+  );
+}
+
 function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vendors, addVendor, deleteVendor, updateVendor, jobs, userRole, currentTenantId, session, addMaterial, customSubcategories={} }) {
   const isDesktop = useIsDesktop();
   const canEdit = userRole === "owner" || userRole === "manager";
@@ -11543,48 +11681,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
       {showVendors && canEdit && (
         <section style={S.section}>
           <h2 style={S.h2}>Vendors</h2>
-          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10}}>
-            <input value={newVendorName} onChange={e=>setNewVendorName(e.target.value)}
-              style={S.input} placeholder="Vendor name *"/>
-            <input value={newVendorPhone} onChange={e=>setNewVendorPhone(e.target.value)}
-              style={S.input} placeholder="Phone (optional)"/>
-            <input value={newVendorEmail} onChange={e=>setNewVendorEmail(e.target.value)}
-              style={{...S.input, gridColumn:"1/-1"}} placeholder="Email (optional)"/>
-            <input value={newVendorStreet} onChange={e=>setNewVendorStreet(e.target.value)}
-              style={{...S.input, gridColumn:"1/-1"}} placeholder="Street address (for fuel mileage calc)"/>
-            <input value={newVendorCity} onChange={e=>setNewVendorCity(e.target.value)}
-              style={S.input} placeholder="City"/>
-            <input value={newVendorState} onChange={e=>setNewVendorState(e.target.value)}
-              style={S.input} placeholder="State"/>
-            <input value={newVendorZip} onChange={e=>setNewVendorZip(e.target.value)}
-              style={S.input} placeholder="ZIP"/>
-          </div>
-          <button style={S.btnPrimary} onClick={saveVendor}>+ Add Vendor</button>
-          <div style={{marginTop:12}}>
-            {vendors.length === 0 && <p style={{fontSize:13, color:C.textMuted}}>No vendors yet.</p>}
-            {vendors.map(v => (
-              <div key={v.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${C.border}`}}>
-                <div>
-                  <div style={{fontWeight:600, fontSize:13}}>{v.name}</div>
-                  {(v.phone||v.email) && <div style={{fontSize:11, color:C.textMuted}}>{[v.phone,v.email].filter(Boolean).join(" · ")}</div>}
-                  {v.address && <div style={{fontSize:11, color:C.textMuted}}>{v.address}</div>}
-                </div>
-                <div style={{display:"flex", gap:6}}>
-                  <button style={S.btnSmall} onClick={()=>{
-                    const name = prompt("Vendor name:", v.name);
-                    if (!name) return;
-                    const street = prompt("Street address:", v.street||"");
-                    const city = prompt("City:", v.city||"");
-                    const state = prompt("State:", v.state||"");
-                    const zip = prompt("ZIP:", v.zip||"");
-                    const addr = [street,city,state,zip].filter(Boolean).join(", ");
-                    if (updateVendor) updateVendor({...v, name:name.trim(), street:street||v.street, city:city||v.city, state:state||v.state, zip:zip||v.zip, address:addr||v.address});
-                  }}>Edit</button>
-                  <button style={{...S.btnSmall, color:C.danger}} onClick={()=>{ if(confirm("Delete "+v.name+"?")) deleteVendor(v.id); }}>✕</button>
-                </div>
-              </div>
-            ))}
-          </div>
+          <VendorsManager vendors={vendors} addVendor={addVendor} updateVendor={updateVendor} deleteVendor={deleteVendor}/>
         </section>
       )}
 
