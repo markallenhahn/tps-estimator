@@ -4321,7 +4321,7 @@ function PurchaseEditModal({ purchase, onSave, onClose, jobs, vendors, MATERIAL_
             <input value={form.supplier||""} onChange={e=>set("supplier",e.target.value)} style={S.input}
               list="edit-vendor-list" placeholder="Supplier name"/>
             <datalist id="edit-vendor-list">
-              {(vendors||[]).map(v=><option key={v.id} value={v.name}/>)}
+              {[...(vendors||[])].sort((a,b)=>(a.name||"").localeCompare(b.name||"" )).map(v=><option key={v.id} value={v.name}/>)}
             </datalist>
           </label>
           <label style={{...S.formLabel,gridColumn:"1/-1"}}>Notes
@@ -5328,7 +5328,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMat
                     <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
                       <select value={midJobSplit.jobId} onChange={e => setMidJobSplit(p=>({...p, jobId:e.target.value}))}
                         style={{...S.input, flex:2}}>
-                        {todayJobs.map(j => <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>)}
+                        {[...todayJobs].sort((a,b)=>(a.clientName||"").localeCompare(b.clientName||"" )).map(j => <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>)}
                       </select>
                       <div style={{display:"flex", alignItems:"center", gap:4, flex:1}}>
                         <input type="number" min="0" max="100" value={midJobSplit.pctBefore}
@@ -5354,7 +5354,7 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMat
                 <select value={tripJobIds[0]||""} onChange={e => setTripJobIds(e.target.value ? [e.target.value] : [])}
                   style={{...S.input, width:"100%"}}>
                   <option value="">— Select job —</option>
-                  {todayJobs.map(j => <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>)}
+                  {[...todayJobs].sort((a,b)=>(a.clientName||"").localeCompare(b.clientName||"" )).map(j => <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||""}</option>)}
                 </select>
               </div>
             );
@@ -11663,7 +11663,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
             <label style={{...S.formLabel, gridColumn:"1/-1"}}>Link to Job (optional)
               <select value={form.jobId} onChange={e=>setF({jobId:e.target.value})} style={S.input}>
                 <option value="">— Not tied to a specific job —</option>
-                {[...jobs].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(j=>(
+                {[...jobs].sort((a,b)=>(a.clientName||"").localeCompare(b.clientName||"" )).map(j=>(
                   <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No address"} {j.date?"· "+j.date:""}</option>
                 ))}
               </select>
@@ -11743,7 +11743,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
           <select value={filterJob} onChange={e=>setFilterJob(e.target.value)} style={{...S.input, flex:1, minWidth:140}}>
             <option value="All">All Jobs</option>
             <option value="">Unlinked</option>
-            {jobs.map(j=><option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No addr"}</option>)}
+            {[...jobs].sort((a,b)=>(a.clientName||"").localeCompare(b.clientName||"" )).map(j=><option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No addr"}</option>)}
           </select>
         </div>
 
@@ -11888,7 +11888,7 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                   <div style={{marginBottom:8}}>
                     <select value={editForm.jobId||""} onChange={ev=>setEF("jobId",ev.target.value)} style={{...S.input, width:"100%"}}>
                       <option value="">— Not linked to a specific job —</option>
-                      {[...jobs].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(j=>(
+                      {[...jobs].sort((a,b)=>(a.clientName||"").localeCompare(b.clientName||"" )).map(j=>(
                         <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No address"} {j.date?"· "+j.date:""}</option>
                       ))}
                     </select>
