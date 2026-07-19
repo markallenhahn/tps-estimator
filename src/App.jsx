@@ -4545,8 +4545,9 @@ function MaterialsView({ jobs, materials, addMaterial, deleteMaterial, updateMat
     // Also create a corresponding COGS expense so it appears on the Expenses tab
     if (addExpense && costNum > 0) {
       const matLabel = MATERIAL_TYPES.find(m => m.key === category)?.label || category;
-      // Auto-link to job if exactly one job is selected (e.g. asphalt mid-job pickup)
+      // Auto-link to job if a specific job is selected
       const linkedJobId = (!tripUnallocated && tripJobIds?.length === 1) ? tripJobIds[0]
+        : (timing === "midjob" && tripJobIds?.length === 1) ? tripJobIds[0]
         : (finalAppliesToJobIds?.length === 1) ? finalAppliesToJobIds[0] : null;
       addExpense({
         id: matId + 1,
@@ -11884,6 +11885,14 @@ function ExpensesView({ expenses, addExpense, updateExpense, deleteExpense, vend
                     </select>
                     <input value={editForm.notes||""} onChange={ev=>setEF("notes",ev.target.value)}
                       placeholder="Notes" style={{...S.input, flex:2, minWidth:140}}/>
+                  </div>
+                  <div style={{marginBottom:8}}>
+                    <select value={editForm.jobId||""} onChange={ev=>setEF("jobId",ev.target.value)} style={{...S.input, width:"100%"}}>
+                      <option value="">— Not linked to a specific job —</option>
+                      {[...jobs].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(j=>(
+                        <option key={j.id} value={j.id}>{j.clientName||"Unnamed"} · {j.address||"No address"} {j.date?"· "+j.date:""}</option>
+                      ))}
+                    </select>
                   </div>
                   <div style={{display:"flex", gap:8}}>
                     <button style={S.btnPrimary} onClick={()=>{
