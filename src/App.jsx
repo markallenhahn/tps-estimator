@@ -7993,10 +7993,6 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
       return 0;
     };
 
-    const homeAddr = homeBase?.address;
-    const jobAddr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
-    if (!homeAddr || !jobAddr) return null;
-
     // One-way distance, reused for all days
     const oneWayMiles = await drivingMiles(homeAddr, jobAddr);
     if (!oneWayMiles || oneWayMiles === 0) return null;
