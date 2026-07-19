@@ -1022,6 +1022,9 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
   const [city,       setCity]       = useState(homeBase?.city   || "");
   const [state_,     setState_]     = useState(homeBase?.state  || "PA");
   const [zip,        setZip]        = useState(homeBase?.zip    || "");
+  const [manualLat,  setManualLat]  = useState(homeBase?.lat ? String(homeBase.lat) : "");
+  const [manualLng,  setManualLng]  = useState(homeBase?.lng ? String(homeBase.lng) : "");
+  const [showManual, setShowManual] = useState(false);
   const [savingHome, setSavingHome] = useState(false);
   const [homeMsg,    setHomeMsg]    = useState("");
 
@@ -1030,11 +1033,22 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
     setSavingHome(true); setHomeMsg("");
     try {
       const fullAddr = [street.trim(), city.trim(), state_.trim(), zip.trim()].filter(Boolean).join(", ");
-      const geo = await geocodeAddress(fullAddr);
-      if (!geo) { setHomeMsg("⚠️ Could not find that address. Check spelling and try again."); setSavingHome(false); return; }
-      const data = { address: fullAddr, street: street.trim(), city: city.trim(), state: state_.trim(), zip: zip.trim(), lat: geo.lat, lng: geo.lng };
+      let lat, lng;
+      if (showManual && manualLat && manualLng) {
+        // Use manually entered coords
+        lat = Number(manualLat);
+        lng = Number(manualLng);
+        if (isNaN(lat) || isNaN(lng)) { setHomeMsg("⚠️ Invalid coordinates. Check lat/lng values."); setSavingHome(false); return; }
+      } else {
+        const geo = await geocodeAddress(fullAddr);
+        if (!geo) { setHomeMsg("⚠️ Could not find that address. Use 'Set coordinates manually' below."); setSavingHome(false); return; }
+        lat = geo.lat; lng = geo.lng;
+      }
+      const data = { address: fullAddr, street: street.trim(), city: city.trim(), state: state_.trim(), zip: zip.trim(), lat, lng };
       setHomeBase(data);
       await syncHomeBase(data);
+      setManualLat(String(lat));
+      setManualLng(String(lng));
       setHomeMsg("✅ Home base saved.");
     } catch(e) {
       setHomeMsg("⚠️ Something went wrong. Try again.");
@@ -1072,9 +1086,39 @@ function HomeBaseView({ homeBase, setHomeBase, syncHomeBase, setView }) {
               style={S.input} placeholder="18360" maxLength={10}/>
           </label>
         </div>
+
+        {/* Manual coordinate override */}
+        <button onClick={() => setShowManual(v => !v)}
+          style={{fontSize:12, color:C.accent, background:"none", border:"none", cursor:"pointer", padding:"8px 0", textDecoration:"underline"}}>
+          {showManual ? "▲ Hide" : "▼ Set coordinates manually"} (if address can't be found)
+        </button>
+        {showManual && (
+          <div style={{marginTop:8, padding:12, background:C.surface2, borderRadius:8, border:`1px solid ${C.border}`}}>
+            <p style={{fontSize:12, color:C.textMuted, marginBottom:10}}>
+              Right-click your location in <a href="https://maps.google.com" target="_blank" rel="noopener noreferrer" style={{color:C.accent}}>Google Maps</a> → tap the coordinates shown → they'll copy to clipboard. Paste latitude and longitude below.
+            </p>
+            <div style={{display:"flex", gap:8}}>
+              <label style={{...S.formLabel, flex:1}}>Latitude
+                <input type="number" step="any" value={manualLat} onChange={e => setManualLat(e.target.value)}
+                  placeholder="e.g. 40.9812" style={S.input}/>
+              </label>
+              <label style={{...S.formLabel, flex:1}}>Longitude
+                <input type="number" step="any" value={manualLng} onChange={e => setManualLng(e.target.value)}
+                  placeholder="e.g. -75.2634" style={S.input}/>
+              </label>
+            </div>
+            {homeBase?.lat && homeBase?.lng && (
+              <div style={{fontSize:11, color:C.textMuted, marginTop:6}}>
+                Current: {homeBase.lat.toFixed(6)}, {homeBase.lng.toFixed(6)}
+              </div>
+            )}
+          </div>
+        )}
+
         {homeBase?.address && (
-          <div style={{fontSize:11, color:C.textMuted, marginTop:6}}>
+          <div style={{fontSize:11, color:C.textMuted, marginTop:8}}>
             Currently saved: {homeBase.address}
+            {homeBase.lat && ` (${homeBase.lat.toFixed(5)}, ${homeBase.lng.toFixed(5)})`}
           </div>
         )}
         {homeMsg && <div style={{fontSize:12, color: homeMsg.startsWith("⚠️") ? C.danger : C.green, marginTop:8}}>{homeMsg}</div>}
@@ -7978,14 +8022,12 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
     const jobDays = (currentJob.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
     if (jobDays.length === 0) return null;
     const hbLat = homeBase?.lat, hbLng = homeBase?.lng;
-    console.log("FUEL DEBUG - homeBase:", {lat:hbLat, lng:hbLng, address:homeBase?.address});
     if (!hbLat || !hbLng) return null;
 
     // Geocode job fresh from its text address to avoid stale stored coords
     const addrStr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
     if (!addrStr) return null;
     const geo = await geocodeAddress(addrStr, homeBase);
-    console.log("FUEL DEBUG - job geocoded:", {addrStr, lat:geo?.lat, lng:geo?.lng});
     if (!geo) return null;
 
     // Get accurate one-way driving distance via OSRM proxy (one call only)
@@ -8022,7 +8064,6 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   };
   const [distFuel, setDistFuel] = useState(null);
   useEffect(() => {
-    console.log("FUEL EFFECT - actualFuelExp:", actualFuelExp, "jobId:", currentJob.id);
     if (actualFuelExp <= 0) return;
     // Verify job geocoords match current address before calculating
     const addrStr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
