@@ -242,13 +242,23 @@ help@blacktopiq.com`;
     } catch(e) { return res.status(500).json({ error: e.message }); }
   }
 
-  // ── GET osrm-route — proxy to avoid CSP issues ────────────────────────────
+  // ── GET osrm-route — geocode addresses then get driving distance ──────────
   if (action === "osrm-route") {
-    const { from_lng, from_lat, to_lng, to_lat } = req.query;
-    if (!from_lng || !from_lat || !to_lng || !to_lat)
-      return res.status(400).json({ error: "Missing coordinates" });
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: "Missing addresses" });
     try {
-      const url = `https://router.project-osrm.org/route/v1/driving/${from_lng},${from_lat};${to_lng},${to_lat}?overview=false`;
+      // Geocode both addresses using Nominatim
+      const geocode = async (addr) => {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1`, {
+          headers: { "User-Agent": "BlacktopIQ/1.0" }
+        });
+        const d = await r.json();
+        if (d[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+        return null;
+      };
+      const [fromCoords, toCoords] = await Promise.all([geocode(from), geocode(to)]);
+      if (!fromCoords || !toCoords) return res.status(400).json({ error: "Could not geocode addresses" });
+      const url = `https://router.project-osrm.org/route/v1/driving/${fromCoords.lng},${fromCoords.lat};${toCoords.lng},${toCoords.lat}?overview=false`;
       const r = await fetch(url);
       const data = await r.json();
       return res.status(200).json(data);

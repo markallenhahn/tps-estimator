@@ -7976,41 +7976,44 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   // of total period miles determines its share of actual fuel expenses.
   const calcJobRouteMiles = async () => {
     const jobDays = (currentJob.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
-    if (!currentJob.geoLat || !currentJob.geoLng || jobDays.length === 0) return null;
-    const hb = homeBase?.lat && homeBase?.lng ? {lat:homeBase.lat, lng:homeBase.lng} : null;
-    if (!hb) return null;
+    if (jobDays.length === 0) return null;
+    const homeAddr = homeBase?.address;
+    const jobAddr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
+    if (!homeAddr || !jobAddr) return null;
 
-    // Get real driving distance via our proxy (avoids CSP issues)
-    const drivingMiles = async (a, b) => {
-      if (!a?.lat || !a?.lng || !b?.lat || !b?.lng) return 0;
+    // Get real driving distance via our proxy using addresses (same as directions button)
+    const drivingMiles = async (fromAddr, toAddr) => {
+      if (!fromAddr || !toAddr) return 0;
       try {
-        const url = `/api/public?action=osrm-route&from_lng=${a.lng}&from_lat=${a.lat}&to_lng=${b.lng}&to_lat=${b.lat}`;
+        const url = `/api/public?action=osrm-route&from=${encodeURIComponent(fromAddr)}&to=${encodeURIComponent(toAddr)}`;
         const res = await fetch(url);
         const data = await res.json();
         if (data.routes?.[0]?.distance) return data.routes[0].distance / 1609.34;
       } catch(e) {}
-      const h = haversine(a, b);
-      return isNaN(h) ? 0 : h * 1.5;
+      return 0;
     };
 
-    // This job's round-trip miles (home → job → home for each scheduled day)
-    if (!currentJob.geoLat || !currentJob.geoLng) return null;
-    // Calculate one-way distance once, reuse for all days
-    const oneWayMiles = await drivingMiles(hb, {lat:currentJob.geoLat, lng:currentJob.geoLng});
-    if (!oneWayMiles || oneWayMiles === 0) return null;
-    const jobMiles = oneWayMiles * 2 * jobDays.length; // round trip × number of days
+    const homeAddr = homeBase?.address;
+    const jobAddr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
+    if (!homeAddr || !jobAddr) return null;
 
-    // Total YTD miles = sum of round trips for ALL geocoded jobs this year
+    // One-way distance, reused for all days
+    const oneWayMiles = await drivingMiles(homeAddr, jobAddr);
+    if (!oneWayMiles || oneWayMiles === 0) return null;
+    const jobMiles = oneWayMiles * 2 * jobDays.length;
+
+    // Total YTD miles = sum of round trips for ALL jobs with addresses this year
     let totalMiles = 0;
-    const ytdJobs = (jobs||[]).filter(j =>
-      j.geoLat && j.geoLng && (
-        (j.scheduledDate >= ytdStart && j.scheduledDate <= ytdEnd) ||
-        (j.scheduleDays||[]).some(d => d.date >= ytdStart && d.date <= ytdEnd)
-      )
-    );
+    const ytdJobs = (jobs||[]).filter(j => {
+      const addr = [j.address, j.city].filter(Boolean).join(", ");
+      if (!addr) return false;
+      return (j.scheduledDate >= ytdStart && j.scheduledDate <= ytdEnd) ||
+        (j.scheduleDays||[]).some(d => d.date >= ytdStart && d.date <= ytdEnd);
+    });
     for (const j of ytdJobs) {
+      const jAddr = [j.address, j.city, j.state, j.zip].filter(Boolean).join(", ");
       const dayCount = Math.max(1, (j.scheduleDays||[]).filter(d=>d.date).length);
-      const oneWay = await drivingMiles(hb, {lat:j.geoLat, lng:j.geoLng});
+      const oneWay = await drivingMiles(homeAddr, jAddr);
       if (oneWay && oneWay > 0) totalMiles += oneWay * 2 * dayCount;
     }
 
@@ -8020,7 +8023,23 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const [distFuel, setDistFuel] = useState(null);
   useEffect(() => {
     if (actualFuelExp <= 0) return;
-    calcJobRouteMiles().then(result => setDistFuel(result)).catch(() => setDistFuel(null));
+    // Verify job geocoords match current address before calculating
+    const addrStr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
+    const coordsValid = currentJob.geoLat && currentJob.geoLng &&
+      (!currentJob.geoAddr || currentJob.geoAddr === addrStr);
+    if (!coordsValid && addrStr) {
+      // Re-geocode then calculate
+      geocodeAddress(geocodeQueryOf(currentJob), homeBase).then(geo => {
+        if (geo) {
+          const updated = {...currentJob, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr};
+          updateJob(j => ({...j, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr}));
+          calcJobRouteMiles(geo.lat, geo.lng).then(r => setDistFuel(r)).catch(() => setDistFuel(null));
+        }
+      });
+    } else {
+      calcJobRouteMiles(currentJob.geoLat, currentJob.geoLng)
+        .then(result => setDistFuel(result)).catch(() => setDistFuel(null));
+    }
   }, [currentJob.id, actualFuelExp]);
   const actFuel = (() => {
     const fuelActRaw = actuals["fuel"];
