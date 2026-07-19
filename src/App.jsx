@@ -7977,7 +7977,7 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const calcJobRouteMiles = async () => {
     const jobDays = (currentJob.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
     if (jobDays.length === 0) return null;
-    const homeAddr = homeBase?.address;
+    const homeAddr = [homeBase?.street||homeBase?.address, homeBase?.city, homeBase?.state, homeBase?.zip].filter(Boolean).join(", ");
     const jobAddr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
     if (!homeAddr || !jobAddr) return null;
 
