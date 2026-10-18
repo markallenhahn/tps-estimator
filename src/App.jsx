@@ -2894,6 +2894,7 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
   doc.setFillColor(...HDRBLK);
   // Deposit row if applicable
   const depositAmt = Number(job.depositAmt||0);
+  let displayTotal = total;
   if (depositAmt > 0 && !isPaid) {
     doc.setFillColor(...LGRAY);
     doc.rect(ML, y, usable, 22, "F");
@@ -2901,7 +2902,7 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
     doc.text("Deposit Received", ML+10, y+14);
     doc.text("-" + formatCurrency(depositAmt), PW-MR-6, y+14, {align:"right"});
     y += 22;
-    total = Math.max(0, total - depositAmt);
+    displayTotal = Math.max(0, total - depositAmt);
   }
 
   doc.rect(ML, y, usable, totalBarH, "F");
@@ -2910,7 +2911,7 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
   doc.setFontSize(12); doc.setFont("helvetica","bold");
   doc.setTextColor(...(isPaid ? GREEN : GOLD));
   doc.text(isPaid ? "TOTAL PAID" : (depositAmt > 0 ? "BALANCE DUE" : "TOTAL DUE"), ML+10, y+20);
-  doc.text(formatCurrency(total), PW-MR-6, y+20, {align:"right"});
+  doc.text(formatCurrency(displayTotal), PW-MR-6, y+20, {align:"right"});
   y += totalBarH + 16;
 
   if (isPaid) {
