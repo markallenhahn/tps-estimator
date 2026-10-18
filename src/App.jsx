@@ -2802,7 +2802,7 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
   const allRates = {...DEFAULT_RATES, ...rates, other:{label:"Other",unit:"flat",rate:0,rateLabel:"flat $"}};
   const subtotal = (job.areas||[]).reduce((s,a) => s + calcLineAmt(a, allRates), 0);
   const discount = Number(job.discount||0);
-  const discountAmt = (currentJob.discountType||"pct")==="flat" ? Math.min(Number(currentJob.discountFlat||0), subtotal) : subtotal * (discount/100);
+  const discountAmt = (job.discountType||"pct")==="flat" ? Math.min(Number(job.discountFlat||0), subtotal) : subtotal * (discount/100);
   const total = job.priceOverride !== undefined && job.priceOverride !== null && job.priceOverride !== ""
     ? Number(job.priceOverride)
     : subtotal - discountAmt;
@@ -2885,19 +2885,31 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
 
   if (discount > 0) {
     doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.setTextColor(220,38,38);
-    doc.text(((currentJob.discountType||"pct")==="flat" ? "Discount " + formatCurrency(currentJob.discountFlat||0) : "Discount (" + discount + "%)"), ML+10, y+12);
+    doc.text(((job.discountType||"pct")==="flat" ? "Discount " + formatCurrency(job.discountFlat||0) : "Discount (" + discount + "%)"), ML+10, y+12);
     doc.text("-" + formatCurrency(discountAmt), PW-MR-6, y+12, {align:"right"});
     y += 18;
   } else { y += 8; }
 
   const totalBarH = 30;
   doc.setFillColor(...HDRBLK);
+  // Deposit row if applicable
+  const depositAmt = Number(job.depositAmt||0);
+  if (depositAmt > 0 && !isPaid) {
+    doc.setFillColor(...LGRAY);
+    doc.rect(ML, y, usable, 22, "F");
+    doc.setFontSize(10); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+    doc.text("Deposit Received", ML+10, y+14);
+    doc.text("-" + formatCurrency(depositAmt), PW-MR-6, y+14, {align:"right"});
+    y += 22;
+    total = Math.max(0, total - depositAmt);
+  }
+
   doc.rect(ML, y, usable, totalBarH, "F");
   doc.setDrawColor(...(isPaid ? GREEN : GOLD)); doc.setLineWidth(1);
   doc.line(ML, y, ML+usable, y);
   doc.setFontSize(12); doc.setFont("helvetica","bold");
   doc.setTextColor(...(isPaid ? GREEN : GOLD));
-  doc.text(isPaid ? "TOTAL PAID" : "TOTAL DUE", ML+10, y+20);
+  doc.text(isPaid ? "TOTAL PAID" : (depositAmt > 0 ? "BALANCE DUE" : "TOTAL DUE"), ML+10, y+20);
   doc.text(formatCurrency(total), PW-MR-6, y+20, {align:"right"});
   y += totalBarH + 16;
 
@@ -2950,6 +2962,7 @@ function InvoiceView({ currentJob, updateJob, rates, companySettings={}, accessT
   const [textError,       setTextError]        = useState("");
   const [invoiceNum,  setInvoiceNum]  = useState("");
   const [paymentDate,   setPaymentDate]   = useState(currentJob?.paymentDate   ? new Date(currentJob.paymentDate+"T12:00:00").toLocaleDateString() : new Date().toLocaleDateString());
+  const [depositAmt,    setDepositAmt]    = useState(currentJob?.depositAmt != null ? String(currentJob.depositAmt) : "");
   const [paymentMethod, setPaymentMethod] = useState(currentJob?.paymentMethod || "Check");
 
   if (!currentJob) return <div className="tps-page" style={S.page}><p style={S.noJob}>Select or create a job first.</p></div>;
@@ -3072,7 +3085,7 @@ ${email}`:""}`;
     if (!skipSave) setPdfLoading(true);
     try {
       const doc = await generateInvoicePDFDoc({
-        job: currentJob,
+        job: {...currentJob, depositAmt: depositAmt ? Number(depositAmt) : (currentJob.depositAmt||0)},
         companySettings,
         rates,
         isPaid,
@@ -3159,6 +3172,20 @@ ${email}`:""}`;
               </select>
             </label>
           )}
+        </div>
+          <label style={{...S.formLabel, gridColumn:"1/-1"}}>Deposit Received (optional)
+            <div style={{display:"flex", alignItems:"center", gap:6}}>
+              <span style={{fontSize:14, color:C.textMuted}}>$</span>
+              <input type="number" value={depositAmt} min="0"
+                onChange={e => { setDepositAmt(e.target.value); updateJob(j => ({...j, depositAmt: e.target.value ? Number(e.target.value) : null})); }}
+                placeholder="0.00" style={{...S.input, flex:1}}/>
+              {depositAmt && Number(depositAmt) > 0 && (
+                <span style={{fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>
+                  Balance due: {formatCurrency(Math.max(0, (currentJob.priceOverride || (()=>{ const s=(currentJob.areas||[]).reduce((sum,a)=>sum+calcLineAmt(a,rates),0); return s - s*(Number(currentJob.discount||0)/100); })()) - Number(depositAmt)))}
+                </span>
+              )}
+            </div>
+          </label>
         </div>
         {currentJob.invoiceSentDate && (
           <p style={{fontSize:11, color:C.textMuted, marginTop:8, marginBottom:0}}>
@@ -7463,7 +7490,7 @@ function getFifoUnitCost(materialType, dateStr, materials) {
 }
 
 // ─── EBITDA Report ────────────────────────────────────────────────────────────
-function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=0, unallocatedFuelAmt=0, periodExpMaterials=0, periodExpCOGS=0, periodExpLabor=0, cogsBySubcat={}, overheadBySubcat={}, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
+function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=0, unallocatedFuelAmt=0, materials=[], periodExpMaterials=0, periodExpCOGS=0, periodExpLabor=0, cogsBySubcat={}, overheadBySubcat={}, yearOverhead, periodRevenue, yearRevenue, ebitdaRange, setEbitdaRange, ebitdaFrom, setEbitdaFrom, ebitdaTo, setEbitdaTo, ebitdaDateRange, ebitdaStatuses=[], setEbitdaStatuses, reportSettings={}, serviceTypeTotals={}, setCurrentJob, setView }) {
   const fmtPct = (n) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
   const fmtMoney = (n) => isNaN(n) ? "—" : formatCurrency(n);
   const isDesktopLayout = useIsDesktop();
@@ -7629,26 +7656,87 @@ function EbitdaReport({ ebitdaJobData, ebitdaTotals, periodOverhead, periodFuel=
         )}
       </section>
 
-      {/* Unallocated Fuel */}
-      {periodFuel > 0 && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Fuel Breakdown</h2>
-          <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${C.border}`, fontSize:13}}>
-            <span>Total Fuel Expenses</span>
-            <span style={{fontWeight:700}}>{fmtMoney(periodFuel)}</span>
-          </div>
-          <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${C.border}`, fontSize:13}}>
-            <span>Allocated to Jobs</span>
-            <span style={{fontWeight:700}}>{fmtMoney(Math.max(0, periodFuel - unallocatedFuelAmt))}</span>
-          </div>
-          <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", fontSize:13, fontWeight:700}}>
-            <span style={{color:C.textMuted}}>Unallocated (supplier trips, overhead driving)</span>
-            <span style={{color: unallocatedFuelAmt > 0 ? C.accent : C.green}}>
-              {fmtMoney(unallocatedFuelAmt)}
-            </span>
-          </div>
-        </section>
-      )}
+      {/* Fuel Breakdown */}
+      {periodFuel > 0 && (() => {
+        const allocatedJobs = ebitdaJobData.filter(d => d.job?.costs?.fuelPct > 0);
+        const allocatedAmt = allocatedJobs.reduce((s,d) => s + (d.job.costs.fuelPct * periodFuel), 0);
+        const unallocAmt = Math.max(0, periodFuel - allocatedAmt);
+        return (
+          <section style={S.section}>
+            <h2 style={S.h2}>Fuel Breakdown</h2>
+            <div style={{display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${C.border}`, fontSize:13, fontWeight:700}}>
+              <span>Total Fuel Expenses</span>
+              <span>{fmtMoney(periodFuel)}</span>
+            </div>
+
+            {/* Allocated to Jobs — expandable */}
+            <details style={{borderBottom:`1px solid ${C.border}`}}>
+              <summary style={{display:"flex", justifyContent:"space-between", padding:"10px 0", cursor:"pointer", listStyle:"none", fontSize:13, fontWeight:600}}>
+                <span>Allocated to Jobs ({allocatedJobs.length})</span>
+                <span>{fmtMoney(allocatedAmt)}</span>
+              </summary>
+              <div style={{paddingLeft:12, paddingBottom:8}}>
+                {allocatedJobs.sort((a,b)=>(b.job.costs?.fuelMiles||0)-(a.job.costs?.fuelMiles||0)).map(d => {
+                  const job = d.job;
+                  const miles = job.costs?.fuelMiles||0;
+                  const pct = job.costs?.fuelPct||0;
+                  const amt = pct * periodFuel;
+                  const days = Object.keys(job.costs?.fuelDays||{});
+                  return (
+                    <details key={job.id} style={{borderBottom:`1px solid ${C.border}`}}>
+                      <summary style={{display:"flex", justifyContent:"space-between", padding:"6px 0", cursor:"pointer", listStyle:"none", fontSize:12}}>
+                        <span style={{color:C.text}}>{job.clientName||"Unnamed"} · {job.address||""}</span>
+                        <span style={{color:C.accent, fontWeight:600}}>{miles.toFixed(1)} mi · {fmtMoney(amt)}</span>
+                      </summary>
+                      <div style={{paddingLeft:12, paddingBottom:6}}>
+                        {days.map(date => {
+                          const day = job.costs.fuelDays[date];
+                          return (
+                            <div key={date} style={{display:"flex", justifyContent:"space-between", fontSize:11, color:C.textMuted, padding:"3px 0"}}>
+                              <span>{date}</span>
+                              <span>{(day.miles||0).toFixed(1)} mi · {fmtMoney((day.miles||0)/(miles||1)*amt)}</span>
+                            </div>
+                          );
+                        })}
+                        <div style={{fontSize:11, color:C.textMuted, marginTop:2}}>
+                          {(pct*100).toFixed(2)}% of total YTD miles
+                        </div>
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            </details>
+
+            {/* Unallocated — expandable */}
+            <details>
+              <summary style={{display:"flex", justifyContent:"space-between", padding:"10px 0", cursor:"pointer", listStyle:"none", fontSize:13, fontWeight:600}}>
+                <span style={{color:C.textMuted}}>Unallocated (supplier trips, overhead)</span>
+                <span style={{color:C.accent}}>{fmtMoney(unallocAmt)}</span>
+              </summary>
+              <div style={{paddingLeft:12, paddingBottom:8}}>
+                {ebitdaJobData.length > 0 && (() => {
+                  // Show unallocated material trips in period
+                  const unallocMats = (materials||[]).filter(m =>
+                    m.tripUnallocated !== false &&
+                    m.date >= ebitdaDateRange.from && m.date <= ebitdaDateRange.to &&
+                    m.supplier && m.tripMiles > 0
+                  );
+                  if (!unallocMats.length) return (
+                    <p style={{fontSize:12, color:C.textMuted}}>No unallocated supplier trips logged yet.</p>
+                  );
+                  return unallocMats.map(m => (
+                    <div key={m.id} style={{display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:`1px solid ${C.border}`}}>
+                      <span>{m.supplier} · {m.date} · {m.timing||"before"}</span>
+                      <span style={{color:C.textMuted}}>{(m.tripMiles||0).toFixed(1)} mi</span>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </details>
+          </section>
+        );
+      })()}
 
       {/* Per-job breakdown */}
       <section style={S.section}>
@@ -8275,6 +8363,7 @@ function ReportsView({ jobs, rates, setCurrentJob, setView, companySettings={}, 
           ebitdaStatuses={ebitdaStatuses} setEbitdaStatuses={setEbitdaStatuses}
           reportSettings={reportSettings}
           serviceTypeTotals={serviceTypeTotals}
+          materials={materials}
           setCurrentJob={setCurrentJob} setView={setView}
         />
       )}
@@ -8446,24 +8535,29 @@ function CostsView({ currentJob, updateJob, rates, expenses, reportSettings={}, 
   const [distFuel, setDistFuel] = useState(null);
   useEffect(() => {
     if (actualFuelExp <= 0) return;
-    // Verify job geocoords match current address before calculating
+    // Use stored Shapley fuelPct if available (calculated by recalcFuelDay)
+    if (currentJob.costs?.fuelPct != null && currentJob.costs?.fuelMiles != null) {
+      const jobMiles = currentJob.costs.fuelMiles;
+      const pct = currentJob.costs.fuelPct;
+      const dayCount = Math.max(1, (currentJob.scheduleDays||[]).filter(d=>d.date).length || 1);
+      setDistFuel({ jobMiles, periodMiles: jobMiles/pct, pct, dayCount, oneWay: jobMiles/2/dayCount });
+      return;
+    }
+    // Fall back to on-the-fly calculation
     const addrStr = [currentJob.address, currentJob.city, currentJob.state, currentJob.zip].filter(Boolean).join(", ");
     const coordsValid = currentJob.geoLat && currentJob.geoLng &&
       (!currentJob.geoAddr || currentJob.geoAddr === addrStr);
     if (!coordsValid && addrStr) {
-      // Re-geocode then calculate
       geocodeAddress(geocodeQueryOf(currentJob), homeBase).then(geo => {
         if (geo) {
-          const updated = {...currentJob, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr};
           updateJob(j => ({...j, geoLat: geo.lat, geoLng: geo.lng, geoAddr: addrStr}));
-          calcJobRouteMiles(geo.lat, geo.lng).then(r => setDistFuel(r)).catch(() => setDistFuel(null));
+          calcJobRouteMiles().then(r => setDistFuel(r)).catch(() => setDistFuel(null));
         }
       });
     } else {
-      calcJobRouteMiles(currentJob.geoLat, currentJob.geoLng)
-        .then(result => setDistFuel(result)).catch(() => setDistFuel(null));
+      calcJobRouteMiles().then(result => setDistFuel(result)).catch(() => setDistFuel(null));
     }
-  }, [currentJob.id, actualFuelExp]);
+  }, [currentJob.id, actualFuelExp, currentJob.costs?.fuelPct]);
   const actFuel = (() => {
     const fuelActRaw = actuals["fuel"];
     const hasManual = fuelActRaw!=null && fuelActRaw!=="";
@@ -15907,6 +16001,203 @@ function addToStorage(item) {
 }
 
 
+
+// ─── Fuel Mileage Calculation System ─────────────────────────────────────────
+// Uses Shapley value allocation for fair per-job fuel cost distribution.
+// OSRM distances cached on job/material records to minimize API calls.
+
+// In-memory OSRM cache for the current session (key: "lat1,lng1→lat2,lng2")
+const _osrmCache = {};
+
+async function getOsrmMiles(fromLat, fromLng, toLat, toLng) {
+  if (!fromLat || !fromLng || !toLat || !toLng) return 0;
+  const key = `${fromLat.toFixed(5)},${fromLng.toFixed(5)}→${toLat.toFixed(5)},${toLng.toFixed(5)}`;
+  if (_osrmCache[key] !== undefined) return _osrmCache[key];
+  try {
+    const res = await fetch(`/api/public?action=osrm-route&from_lat=${fromLat}&from_lng=${fromLng}&to_lat=${toLat}&to_lng=${toLng}`);
+    const data = await res.json();
+    if (data.routes?.[0]?.distance) {
+      const miles = data.routes[0].distance / 1609.34;
+      _osrmCache[key] = miles;
+      return miles;
+    }
+  } catch(e) {}
+  // Fallback: haversine × 1.4
+  const h = haversine({lat:fromLat,lng:fromLng},{lat:toLat,lng:toLng});
+  const miles = isNaN(h) ? 0 : h * 1.4;
+  _osrmCache[key] = miles;
+  return miles;
+}
+
+// Get/cache geocoords for a job (uses stored geoLat/geoLng if address matches)
+async function getJobCoords(job, homeBase) {
+  const addrStr = [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
+  if (job.geoLat && job.geoLng && job.geoAddr === addrStr) {
+    return { lat: job.geoLat, lng: job.geoLng };
+  }
+  if (!addrStr) return null;
+  const geo = await geocodeAddress(addrStr, homeBase);
+  return geo || null;
+}
+
+// Get/cache geocoords for a vendor address
+const _vendorGeoCache = {};
+async function getVendorCoords(address, homeBase) {
+  if (!address) return null;
+  if (_vendorGeoCache[address]) return _vendorGeoCache[address];
+  const geo = await geocodeAddress(address, homeBase);
+  if (geo) _vendorGeoCache[address] = geo;
+  return geo || null;
+}
+
+// Calculate total route miles for a given ordered list of stops
+// stops: [{lat, lng, id, type}] — already in order, not including home at start/end
+async function calcRouteMiles(stops, homeLat, homeLng) {
+  if (!stops.length) return 0;
+  let total = 0;
+  let prev = {lat: homeLat, lng: homeLng};
+  for (const stop of stops) {
+    total += await getOsrmMiles(prev.lat, prev.lng, stop.lat, stop.lng);
+    prev = stop;
+  }
+  total += await getOsrmMiles(prev.lat, prev.lng, homeLat, homeLng);
+  return total;
+}
+
+// Build the ordered stop sequence for a day including supplier stops
+// Returns: { stops, jobStops, supplierStops }
+// Each stop: { lat, lng, id, type: "job"|"supplier", jobId?, material?, timing? }
+async function buildDaySequence(date, jobs, materials, vendors, homeBase) {
+  const hbLat = homeBase?.lat, hbLng = homeBase?.lng;
+  if (!hbLat || !hbLng) return null;
+
+  // Get jobs scheduled this day with coords
+  const dayJobs = [];
+  for (const j of jobs) {
+    const isThisDay = j.scheduledDate === date ||
+      (j.scheduleDays||[]).some(d=>d.date===date);
+    if (!isThisDay) continue;
+    const coords = await getJobCoords(j, homeBase);
+    if (!coords) continue;
+    dayJobs.push({...coords, id: j.id, type:"job", job: j});
+  }
+  if (!dayJobs.length) return null;
+
+  // Optimize job order using nearest-neighbor
+  const optimizedJobs = optimizeRoute(
+    dayJobs.map(j=>({lat:j.lat,lng:j.lng,id:j.id})),
+    {lat:hbLat,lng:hbLng,id:"home"}
+  ).filter(p=>p.id!=="home").map(p=>dayJobs.find(j=>j.id===p.id)).filter(Boolean);
+
+  // Get supplier stops for this day
+  const dayMaterials = (materials||[]).filter(m => m.date === date && m.supplier);
+  const supplierStops = [];
+  for (const m of dayMaterials) {
+    const vendor = (vendors||[]).find(v=>v.name===m.supplier);
+    if (!vendor?.address) continue;
+    const coords = await getVendorCoords(vendor.address, homeBase);
+    if (!coords) continue;
+    supplierStops.push({
+      ...coords, id:`sup_${m.id}`, type:"supplier", material:m,
+      timing: m.timing||"before",
+      allocated: m.tripUnallocated===false,
+      tripJobIds: m.tripJobIds||[]
+    });
+  }
+
+  // Build full sequence inserting supplier stops at correct positions
+  const beforeStops = supplierStops.filter(s=>s.timing==="before"||s.timing==="offday");
+  const afterStops  = supplierStops.filter(s=>s.timing==="after");
+  const midStops    = supplierStops.filter(s=>s.timing==="midjob"||s.timing==="between");
+
+  // Insert mid stops between the relevant jobs
+  const sequence = [...beforeStops];
+  for (let i=0;i<optimizedJobs.length;i++) {
+    sequence.push(optimizedJobs[i]);
+    // Insert any mid stops that come after this job
+    for (const s of midStops) {
+      const prevJobId = String(optimizedJobs[i].id);
+      const nextJobId = optimizedJobs[i+1] ? String(optimizedJobs[i+1].id) : null;
+      if (s.timing==="midjob" && s.tripJobIds.includes(prevJobId)) {
+        sequence.push(s);
+      } else if (s.timing==="between" && nextJobId &&
+        (s.appliesToJobIds||[]).length === 0 ||
+        (s.timing==="between" && nextJobId)) {
+        // Insert between this job and next
+        if (i === optimizedJobs.length-2 || optimizedJobs[i+1]) {
+          sequence.push(s);
+        }
+      }
+    }
+  }
+  sequence.push(...afterStops);
+
+  return { sequence, optimizedJobs, supplierStops, hbLat, hbLng };
+}
+
+// Shapley value allocation for jobs on a day
+// Returns: { [jobId]: shapleyMiles }
+async function calcShapleyMiles(dayResult) {
+  const { sequence, optimizedJobs, supplierStops, hbLat, hbLng } = dayResult;
+  if (!optimizedJobs.length) return {};
+
+  // Total miles for full route
+  const totalMiles = await calcRouteMiles(sequence, hbLat, hbLng);
+
+  // Marginal contribution of each job
+  const marginals = {};
+  for (const job of optimizedJobs) {
+    // Route without this job
+    const withoutSeq = sequence.filter(s => s.id !== job.id);
+    const milesWithout = await calcRouteMiles(withoutSeq, hbLat, hbLng);
+    marginals[job.id] = Math.max(0, totalMiles - milesWithout);
+  }
+
+  // Normalize so marginals sum to totalMiles
+  const marginalSum = Object.values(marginals).reduce((s,m)=>s+m,0);
+  const normalized = {};
+  if (marginalSum > 0) {
+    for (const [id, m] of Object.entries(marginals)) {
+      normalized[id] = (m / marginalSum) * totalMiles;
+    }
+  } else {
+    // Equal split if all marginals are 0
+    const share = totalMiles / optimizedJobs.length;
+    for (const job of optimizedJobs) normalized[job.id] = share;
+  }
+
+  return normalized;
+}
+
+// Calculate unallocated supplier miles for a day
+async function calcUnallocatedMiles(dayResult) {
+  const { sequence, hbLat, hbLng } = dayResult;
+  let unallocated = 0;
+
+  // Walk the sequence, identify unallocated supplier legs
+  let prev = {lat:hbLat, lng:hbLng};
+  for (let i=0;i<sequence.length;i++) {
+    const stop = sequence[i];
+    const legMiles = await getOsrmMiles(prev.lat, prev.lng, stop.lat, stop.lng);
+    if (stop.type === "supplier" && !stop.allocated) {
+      // Outbound leg to supplier is unallocated
+      unallocated += legMiles;
+      // Check if return leg is also unallocated (not mid-job for specific job)
+      const next = sequence[i+1];
+      if (next) {
+        const returnLeg = await getOsrmMiles(stop.lat, stop.lng, next.lat, next.lng);
+        if (!stop.allocated) unallocated += returnLeg;
+        // Skip next stop since we already accounted for it
+        prev = next;
+        i++;
+        continue;
+      }
+    }
+    prev = stop;
+  }
+  return unallocated;
+}
+
 function App() {
   const [view,          setViewRaw]      = useState("home");
   const [viewHistory,   setViewHistory]  = useState([]); // stack of previous views, for global Back button
@@ -16688,10 +16979,12 @@ function App() {
   const addMaterial = (entry) => {
     setMaterials(prev => [entry, ...prev]);
     syncMaterial(entry);
+    if (entry.date && entry.supplier) triggerFuelRecalcForDate(entry.date);
   };
   const updateMaterial = (entry) => {
     setMaterials(prev => prev.map(m => m.id === entry.id ? entry : m));
     syncMaterial(entry);
+    if (entry.date && entry.supplier) triggerFuelRecalcForDate(entry.date);
   };
 
   const deleteMaterial = async (id) => {
@@ -16847,7 +17140,89 @@ function App() {
       assignJobToNearestZone(job);
     }
     syncItem("jobs", job);
+    // Trigger fuel recalc for all scheduled dates of this job
+    const dates = (job.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
+    if (job.scheduledDate) dates.push(job.scheduledDate);
+    [...new Set(dates)].forEach(d => triggerFuelRecalcForDate(d));
   };
+
+
+  // ── Fuel Recalculation ────────────────────────────────────────────────────
+  const fuelRecalcTimerRef = useRef({});
+
+  // Level 1: Recalc Shapley miles for all jobs on a specific date
+  const recalcFuelDay = async (date) => {
+    if (!homeBase?.lat || !homeBase?.lng) return;
+    const dayResult = await buildDaySequence(date, jobs, materials, vendors, homeBase);
+    if (!dayResult) return;
+
+    const shapleyMiles = await calcShapleyMiles(dayResult);
+    const unallocMiles = await calcUnallocatedMiles(dayResult);
+
+    // Save fuelDays[date] on each job
+    for (const [jobId, miles] of Object.entries(shapleyMiles)) {
+      const job = jobs.find(j=>String(j.id)===String(jobId));
+      if (!job) continue;
+      const fuelDays = {...(job.costs?.fuelDays||{}), [date]: { miles, unallocMiles }};
+      const totalFuelMiles = Object.values(fuelDays).reduce((s,d)=>s+(d.miles||0),0);
+      const updatedJob = {...job, costs:{...(job.costs||{}), fuelDays, fuelMiles: totalFuelMiles}};
+      setJobs(prev => prev.map(j=>String(j.id)===String(jobId)?updatedJob:j));
+      syncItem("jobs", updatedJob);
+    }
+
+    // Save unallocated miles on material purchases for this day
+    const dayMaterials = (materials||[]).filter(m=>m.date===date&&m.tripUnallocated!==false);
+    // Distribute unallocated miles proportionally among unallocated supplier stops
+    const unallocStops = dayResult.supplierStops.filter(s=>!s.allocated);
+    if (unallocStops.length > 0) {
+      const milesPerStop = unallocMiles / unallocStops.length;
+      for (const stop of unallocStops) {
+        const mat = stop.material;
+        if (!mat) continue;
+        const updated = {...mat, tripMiles: milesPerStop};
+        setMaterials(prev=>prev.map(m=>m.id===mat.id?updated:m));
+        syncItem("materials", updated);
+      }
+    }
+
+    // Trigger Level 2
+    recalcFuelPct();
+  };
+
+  // Level 2: Recompute fuelPct for ALL YTD jobs (pure math, no API calls)
+  const recalcFuelPct = () => {
+    const ytdStart = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10);
+    const ytdEnd = new Date().toISOString().slice(0,10);
+    const ytdJobs = jobs.filter(j => {
+      const dates = (j.scheduleDays||[]).filter(d=>d.date).map(d=>d.date);
+      const mainDate = j.scheduledDate;
+      return dates.some(d=>d>=ytdStart&&d<=ytdEnd) || (mainDate>=ytdStart&&mainDate<=ytdEnd);
+    });
+    const grandTotal = ytdJobs.reduce((s,j)=>s+(j.costs?.fuelMiles||0),0);
+    if (!grandTotal) return;
+    for (const job of ytdJobs) {
+      const pct = (job.costs?.fuelMiles||0) / grandTotal;
+      if (Math.abs(pct-(job.costs?.fuelPct||0)) < 0.0001) continue; // skip if unchanged
+      const updated = {...job, costs:{...(job.costs||{}), fuelPct: pct}};
+      setJobs(prev=>prev.map(j=>String(j.id)===String(job.id)?updated:j));
+      syncItem("jobs", updated);
+    }
+  };
+
+  // Debounced trigger for a specific date
+  const triggerFuelRecalcForDate = (date) => {
+    if (!date) return;
+    if (fuelRecalcTimerRef.current[date]) clearTimeout(fuelRecalcTimerRef.current[date]);
+    fuelRecalcTimerRef.current[date] = setTimeout(() => {
+      recalcFuelDay(date);
+      delete fuelRecalcTimerRef.current[date];
+    }, 5000);
+  };
+
+  // Run Level 2 on app load and when fuel expenses change
+  useEffect(() => {
+    if (jobs.length > 0) recalcFuelPct();
+  }, []); // eslint-disable-line
 
   // ── Upsert rates ──
   const syncRates = async (r) => {
