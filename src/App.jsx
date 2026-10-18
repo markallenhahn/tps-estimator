@@ -3041,7 +3041,7 @@ ${email}`:""}`;
       const res = await fetch("/api/public?action=send-estimate-email", {
         method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+accessToken},
-        body: JSON.stringify({ toEmail:emailTo.trim(), toName:currentJob.clientName||"", subject, body, pdfBase64, pdfFilename:filename, fromName:CS_NAME||"BlacktopIQ", fromPhone:phone, fromEmail:email, ownerName:owner }),
+        body: JSON.stringify({ toEmail:emailTo.trim(), toName:currentJob.clientName||"", subject, pdfBase64, pdfFilename:filename, fromName:CS_NAME||"BlacktopIQ", fromPhone:phone, fromEmail:email, ownerName:owner }),
       });
       const data = await res.json();
       if (!res.ok) { setEmailError(data.error||"Failed to send."); setSendingEmail(false); return; }
