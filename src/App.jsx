@@ -3173,20 +3173,19 @@ ${email}`:""}`;
             </label>
           )}
         </div>
-          <label style={{...S.formLabel, gridColumn:"1/-1"}}>Deposit Received (optional)
-            <div style={{display:"flex", alignItems:"center", gap:6}}>
-              <span style={{fontSize:14, color:C.textMuted}}>$</span>
-              <input type="number" value={depositAmt} min="0"
-                onChange={e => { setDepositAmt(e.target.value); updateJob(j => ({...j, depositAmt: e.target.value ? Number(e.target.value) : null})); }}
-                placeholder="0.00" style={{...S.input, flex:1}}/>
-              {depositAmt && Number(depositAmt) > 0 && (
-                <span style={{fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>
-                  Balance due: {formatCurrency(Math.max(0, (currentJob.priceOverride || (()=>{ const s=(currentJob.areas||[]).reduce((sum,a)=>sum+calcLineAmt(a,rates),0); return s - s*(Number(currentJob.discount||0)/100); })()) - Number(depositAmt)))}
-                </span>
-              )}
-            </div>
-          </label>
-        </div>
+        <label style={{...S.formLabel, marginTop:10}}>Deposit Received (optional)
+          <div style={{display:"flex", alignItems:"center", gap:6}}>
+            <span style={{fontSize:14, color:C.textMuted}}>$</span>
+            <input type="number" value={depositAmt} min="0"
+              onChange={e => { setDepositAmt(e.target.value); updateJob(j => ({...j, depositAmt: e.target.value ? Number(e.target.value) : null})); }}
+              placeholder="0.00" style={{...S.input, flex:1}}/>
+            {depositAmt && Number(depositAmt) > 0 && (
+              <span style={{fontSize:12, color:C.textMuted, whiteSpace:"nowrap"}}>
+                Balance due: {formatCurrency(Math.max(0, (currentJob.priceOverride || (()=>{ const s=(currentJob.areas||[]).reduce((sum,a)=>sum+calcLineAmt(a,rates),0); return s - s*(Number(currentJob.discount||0)/100); })()) - Number(depositAmt)))}
+              </span>
+            )}
+          </div>
+        </label>
         {currentJob.invoiceSentDate && (
           <p style={{fontSize:11, color:C.textMuted, marginTop:8, marginBottom:0}}>
             📅 Invoice marked sent on {new Date(currentJob.invoiceSentDate+"T12:00:00").toLocaleDateString()}
