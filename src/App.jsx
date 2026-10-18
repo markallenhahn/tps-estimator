@@ -2924,8 +2924,16 @@ async function generateInvoicePDFDoc({ job, companySettings={}, rates={}, isPaid
   }
 
   y += 8;
+  const CS_INVOICE_TERMS  = companySettings?.invoiceTerms  || "";
+  const CS_INVOICE_FOOTER = companySettings?.invoiceFooter || ("Please make checks payable to \"" + CS_NAME + "\".");
+  if (!isPaid && CS_INVOICE_TERMS) {
+    doc.setFontSize(8); doc.setFont("helvetica","normal"); doc.setTextColor(...DGRAY);
+    const termsWrapped = doc.splitTextToSize(CS_INVOICE_TERMS, usable);
+    termsWrapped.forEach(l => { doc.text(l, ML, y); y += 10; });
+    y += 4;
+  }
   if (!isPaid) {
-    const closingLines = ["Please make checks payable to \"" + CS_NAME + "\".", "", "Thank you for your business!"];
+    const closingLines = [CS_INVOICE_FOOTER, "", "Thank you for your business!"];
     doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...BLACK);
     closingLines.forEach(line => {
       if (line === "") { y += 5; return; }
@@ -14527,6 +14535,8 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
   const [logoUrl,  setLogoUrl]  = useState(cs.logoUrl||"");
   const [logoName, setLogoName] = useState("");
   const [legalTerms,   setLegalTerms]   = useState(cs.legalTerms||"");
+  const [invoiceTerms,  setInvoiceTerms]  = useState(cs.invoiceTerms||"");
+  const [invoiceFooter, setInvoiceFooter] = useState(cs.invoiceFooter||'Please make checks payable to the company. Thank you for your business!');
   const [depositTerms, setDepositTerms] = useState(cs.depositTerms||"A 25% deposit is required to schedule work. Balance due upon completion.");
   const [googleReviewUrl, setGoogleReviewUrl] = useState(cs.googleReviewUrl||"");
   const [accentColor, setAccentColor] = useState(cs.accentColor || DEFAULT_ACCENT);
@@ -14551,6 +14561,8 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       setState_(companySettings.state || "PA");
       setZip(companySettings.zip || "");
       setLegalTerms(companySettings.legalTerms || "");
+      setInvoiceTerms(companySettings.invoiceTerms || "");
+      setInvoiceFooter(companySettings.invoiceFooter || 'Please make checks payable to the company. Thank you for your business!');
       setDepositTerms(companySettings.depositTerms || "A 25% deposit is required to schedule work. Balance due upon completion.");
       setGoogleReviewUrl(companySettings.googleReviewUrl || "");
       setAccentColor(companySettings.accentColor || DEFAULT_ACCENT);
@@ -14616,7 +14628,7 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
       street:street.trim(), city:city.trim(), state:state_.trim(), zip:zip.trim(),
       logoUrl: finalLogoUrl,
       logoB64: finalLogoB64,
-      legalTerms:legalTerms.trim(), depositTerms:depositTerms.trim(),
+      legalTerms:legalTerms.trim(), depositTerms:depositTerms.trim(), invoiceTerms:invoiceTerms.trim(), invoiceFooter:invoiceFooter.trim(),
       googleReviewUrl: googleReviewUrl.trim(),
       accentColor, headerColor,
     };
@@ -14762,6 +14774,20 @@ function CompanySettingsView({ setView, companySettings, syncCompanySettings }) 
         <label style={{...S.formLabel,marginTop:12}}>Deposit / Scheduling Terms
           <textarea value={depositTerms} onChange={e=>setDepositTerms(e.target.value)}
             style={{...S.input,height:60,resize:"vertical",fontFamily:"inherit",fontSize:12}}/>
+        </label>
+      </section>
+      <section style={S.section}>
+        <h2 style={S.h2}>Invoice Language</h2>
+        <p style={{fontSize:12,color:C.textMuted,marginBottom:8}}>Customize the text that appears on invoice PDFs.</p>
+        <label style={S.formLabel}>Invoice Terms / Notes (optional)
+          <textarea value={invoiceTerms} onChange={e=>setInvoiceTerms(e.target.value)}
+            style={{...S.input,height:80,resize:"vertical",fontFamily:"inherit",fontSize:12}}
+            placeholder="e.g. Payment due within 30 days. A 1.5% monthly finance charge will be applied to overdue balances."/>
+        </label>
+        <label style={{...S.formLabel,marginTop:12}}>Invoice Footer / Closing Message
+          <textarea value={invoiceFooter} onChange={e=>setInvoiceFooter(e.target.value)}
+            style={{...S.input,height:60,resize:"vertical",fontFamily:"inherit",fontSize:12}}
+            placeholder="Please make checks payable to the company. Thank you for your business!"/>
         </label>
       </section>
       {message && <div style={{fontSize:13,color:message.startsWith("⚠️")?C.danger:C.green,padding:"0 16px 12px"}}>{message}</div>}
@@ -15328,6 +15354,8 @@ function CompanySetupWizard({ tenant, tFetch, onComplete, userId, accessToken })
         logoB64: logoDataUrl ? logoDataUrl.split(",")[1] : "",
         legalTerms: "",
         depositTerms: "A 25% deposit is required to schedule work. Balance due upon completion.",
+        invoiceTerms: "",
+        invoiceFooter: "",
         street: address.trim(), city: addrCity.trim(), state: addrState.trim(), zip: addrZip.trim(),
         website: "",
       };
